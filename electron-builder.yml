@@ -1,0 +1,40 @@
+appId: fr.karamon.launcher
+productName: Karamon Launcher
+
+publish:
+  provider: github
+  owner: vskstudio
+  repo: Karamon-launcher
+  releaseType: release
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.ico
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: assets/icon.png
+  category: public.app-category.games
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+
+files:
+  - "dist/**/*"
+  - "assets/**/*"
+  - "node_modules/**/*"
+  - "!node_modules/.cache/**"
+  - "!**/*.java"
+  - "!.claude/**"
+
+extraResources:
+  - from: assets/
+    to: assets/
+    filter: ["**/*"]

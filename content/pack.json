@@ -1,0 +1,17 @@
+{
+  "id": "karamon-client",
+  "version": "0.4.0",
+  "minecraft": "1.21.1",
+  "loader": "fabric",
+  "loaderVersion": "0.18.4",
+  "clientDisabledJarPrefixes": ["c2me-fabric"],
+  "baseModpack": {
+    "platform": "curseforge",
+    "slug": "cobbleverse-cobblemon",
+    "fileId": 8488030,
+    "url": "https://www.curseforge.com/minecraft/modpacks/cobbleverse-cobblemon/files/8488030",
+    "name": "COBBLEVERSE 1.7.42"
+  },
+  "cdnBaseUrl": "https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/",
+  "notes": "Base: Cobbleverse (Sodium, Lithium, FerriteCore, Entity Culling, ImmediatelyFast, ModernFix, Iris, Krypton, C2ME). Extras in mods/required.json (LuckPerms, Simple Voice Chat, Karamon custom mods, Sodium Extra, CobbleBoost, server perf: CobblemonOptimizer, Spark, CobbleLagClear)."
+}

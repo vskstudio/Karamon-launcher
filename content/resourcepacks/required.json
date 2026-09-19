@@ -1,0 +1,14 @@
+[
+  {
+    "id": "karamon-ui",
+    "name": "Karamon UI",
+    "file": "Karamon UI",
+    "source": {
+      "type": "local",
+      "path": "content/resourcepacks/karamon-ui"
+    },
+    "side": "client",
+    "required": true,
+    "extract": true
+  }
+]

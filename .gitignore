@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+
+# Runtime user config (root-level only — don't ignore src/main/features/config/)
+/config/
+
+# Claude AI session files
+.claude/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+
+# Java (old build artifacts)
+*.class
+*.jar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pack build cache (binaries stay on GitHub Releases)
+content/.cache/
+content/dist/

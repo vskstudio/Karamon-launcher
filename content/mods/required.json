@@ -1,0 +1,167 @@
+[
+  {
+    "id": "luckperms",
+    "name": "LuckPerms",
+    "file": "LuckPerms-Fabric-5.4.140.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "luckperms",
+      "version": "l47d4ZWk"
+    },
+    "side": "server",
+    "required": true
+  },
+  {
+    "id": "karamon",
+    "name": "Karamon",
+    "file": "karamon-1.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "local://mod/karamon/build/libs/karamon-1.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "lootbox",
+    "name": "Karamon Lootbox",
+    "file": "lootbox-1.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "local://mod/lootbox/build/libs/lootbox-1.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "multiworld",
+    "name": "Multiworld",
+    "file": "Multiworld-Fabric-bundle.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "multiworld",
+      "version": "18yokD8a"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "icommon",
+    "name": "iCommon",
+    "file": "iCommon-Fabric-bundle.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "icommon",
+      "version": "7UUgrDDA"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "terralith",
+    "name": "Terralith",
+    "file": "Terralith_1.21.x_v2.5.8.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "terralith",
+      "version": "MuJMtPGQ"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "karamon-cosmetica",
+    "name": "Karamon Cosmetica",
+    "file": "karamon-cosmetica-1.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "local://mod/karamon-cosmetica/build/libs/karamon-cosmetica-1.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "bluemap",
+    "name": "BlueMap",
+    "file": "bluemap-5.7-fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "bluemap",
+      "version": "Dr2hvJBc"
+    },
+    "side": "server",
+    "required": true
+  },
+  {
+    "id": "simple-voice-chat",
+    "name": "Simple Voice Chat",
+    "file": "voicechat-fabric-1.21.1-2.6.23.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "simple-voice-chat",
+      "version": "IuO0uiwO"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "cobblemonoptimizer",
+    "name": "CobblemonOptimizer",
+    "file": "CobbleOptimizer-4.8.0.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "cobblemonoptimizer",
+      "version": "D78ayY4V"
+    },
+    "side": "server",
+    "required": true
+  },
+  {
+    "id": "spark",
+    "name": "Spark",
+    "file": "spark-1.10.109-fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "spark",
+      "version": "cALUj9l1"
+    },
+    "side": "server",
+    "required": true
+  },
+  {
+    "id": "cobblelagclear",
+    "name": "CobbleLagClear",
+    "file": "cobblelagclear-0.1.0.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "cobblelagclear",
+      "version": "gd5eJWa5"
+    },
+    "side": "server",
+    "required": true
+  },
+  {
+    "id": "sodium-extra",
+    "name": "Sodium Extra",
+    "file": "sodium-extra-fabric-0.9.3+mc1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "sodium-extra",
+      "version": "M9kVcb0e"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobbleboost",
+    "name": "CobbleBoost",
+    "file": "cobbleboost-1.2.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "cobbleboost",
+      "version": "L8shWg16"
+    },
+    "side": "client",
+    "required": true
+  }
+]
