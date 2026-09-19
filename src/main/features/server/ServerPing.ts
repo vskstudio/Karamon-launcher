@@ -90,10 +90,11 @@ export class ServerPing {
     const { value: pktLen, pos: pktStart } = VarInt.read(buf, 0);
     if (buf.length < pktStart + pktLen) throw new Error('Incomplete packet');
 
-    const pkt = buf.slice(pktStart, pktStart + pktLen);
+    const pkt = buf.subarray(pktStart, pktStart + pktLen);
     const { pos: idEnd } = VarInt.read(pkt, 0);
     const { value: strLen, pos: strStart } = VarInt.read(pkt, idEnd);
-    const json = pkt.slice(strStart, strStart + strLen).toString('utf8');
+    if (strLen < 0 || strStart + strLen > pkt.length) throw new Error('Incomplete status string');
+    const json = pkt.subarray(strStart, strStart + strLen).toString('utf8');
     const data = JSON.parse(json) as MinecraftStatusJson;
 
     const description = data.description;

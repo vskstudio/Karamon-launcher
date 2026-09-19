@@ -17,23 +17,29 @@ export class AccountChip {
     this.root.style.display = '';
     this.root.classList.add('signed-in');
     this.root.title = `${profile.name} — cliquer pour se déconnecter`;
-    const avatarUrl = `https://crafatar.com/avatars/${profile.id}?size=48&overlay`;
-    this.root.innerHTML = `
-      <span class="chip-avatar">
-        <img src="${avatarUrl}" alt="" onerror="this.style.display='none'" />
-      </span>
-      <span class="chip-label">${AccountChip.escape(profile.name)}</span>`;
+    this.root.replaceChildren(
+      AccountChip.avatar(profile.id),
+      AccountChip.label(profile.name),
+    );
   }
 
-  private static escape(s: string): string {
-    return s.replace(/[&<>"']/g, (c) => {
-      switch (c) {
-        case '&': return '&amp;';
-        case '<': return '&lt;';
-        case '>': return '&gt;';
-        case '"': return '&quot;';
-        default: return '&#39;';
-      }
+  private static avatar(profileId: string): HTMLElement {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'chip-avatar';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = `https://crafatar.com/avatars/${encodeURIComponent(profileId)}?size=48&overlay`;
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
     });
+    wrapper.appendChild(img);
+    return wrapper;
+  }
+
+  private static label(name: string): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'chip-label';
+    span.textContent = name;
+    return span;
   }
 }

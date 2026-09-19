@@ -205,6 +205,10 @@ export class KaramonRenderer {
           status.textContent = `À jour (v${result.currentVersion}).`;
           btn.textContent = idleLabel;
           break;
+        case 'downloading':
+          status.textContent = `Mise à jour ${result.version} en cours de téléchargement...`;
+          btn.textContent = idleLabel;
+          break;
         case 'downloaded':
           status.textContent = `Mise à jour ${result.version} prête.`;
           btn.textContent = 'Installer maintenant';

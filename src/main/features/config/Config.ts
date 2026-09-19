@@ -2,6 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import type { AppConfig, AppConfigUpdate } from '../../../ipc/contract';
 
+const MAX_TEXT_LENGTH = 4096;
+const MIN_MEMORY_MB = 512;
+const MAX_MEMORY_MB = 1024 * 1024;
+const MAX_PORT = 65535;
+
 const DEFAULTS: AppConfig = Object.freeze({
   mcGameDir: '',
   minecraftLauncherPath: '',
@@ -52,22 +57,49 @@ export class Config {
     this.save();
   }
 
-  private static merge(base: AppConfig, updates: AppConfigUpdate): AppConfig {
+  private static merge(base: AppConfig, raw: AppConfigUpdate): AppConfig {
+    const updates: AppConfigUpdate = raw && typeof raw === 'object' ? raw : {};
     return {
-      ...base,
-      ...updates,
-      server: { ...base.server, ...(updates.server ?? {}) },
+      mcGameDir: Config.text(updates.mcGameDir, base.mcGameDir),
+      minecraftLauncherPath: Config.text(updates.minecraftLauncherPath, base.minecraftLauncherPath),
+      memoryMb: Config.number(updates.memoryMb, base.memoryMb),
+      javaPath: Config.text(updates.javaPath, base.javaPath),
+      jvmArgs: Config.text(updates.jvmArgs, base.jvmArgs),
+      closeLauncherOnGameStart: Config.boolean(
+        updates.closeLauncherOnGameStart,
+        base.closeLauncherOnGameStart,
+      ),
+      theme: updates.theme === 'red' || updates.theme === 'gold' ? updates.theme : base.theme,
+      server: {
+        host: Config.text(updates.server?.host, base.server.host),
+        port: Config.number(updates.server?.port, base.server.port),
+      },
     };
   }
 
+  private static text(value: unknown, fallback: string): string {
+    return typeof value === 'string' ? value.slice(0, MAX_TEXT_LENGTH) : fallback;
+  }
+
+  private static number(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  }
+
+  private static boolean(value: unknown, fallback: boolean): boolean {
+    return typeof value === 'boolean' ? value : fallback;
+  }
+
   private static normalize(data: AppConfig): AppConfig {
-    const host = typeof data.server.host === 'string' ? data.server.host.trim() : '';
-    const port = Number(data.server.port);
+    const host = data.server.host.trim();
+    const port = Math.trunc(data.server.port);
+    const memoryMb = Math.trunc(data.memoryMb);
     return {
       ...data,
+      memoryMb:
+        memoryMb >= MIN_MEMORY_MB && memoryMb <= MAX_MEMORY_MB ? memoryMb : DEFAULTS.memoryMb,
       server: {
         host: host || DEFAULTS.server.host,
-        port: Number.isFinite(port) && port > 0 ? port : DEFAULTS.server.port,
+        port: port > 0 && port <= MAX_PORT ? port : DEFAULTS.server.port,
       },
     };
   }

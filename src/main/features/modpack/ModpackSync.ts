@@ -2,9 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import AdmZip from 'adm-zip';
+import { extractZipToDir, readEntryData, resolveInside } from '../../shared/ZipExtract';
 import type { HttpClient } from '../../shared/HttpClient';
-import { githubAssetFreshness } from '../../shared/GitHubPack';
+import { githubAssetFreshness, packAssetUrl } from '../../shared/GitHubPack';
 import { OptionsWriter } from '../minecraft/OptionsWriter';
+import { applyKaramonBranding } from '../minecraft/BrandingWriter';
+import { parseClientOptions, type ClientOptions } from '../../shared/ClientOptions';
+import { installOverrides } from './OverridesInstaller';
 
 const CACHE_FILE = '.karamon-sync-cache.json';
 const MODS_ZIP_NAME = 'mods.zip';
@@ -13,6 +17,11 @@ const RESOURCE_PACKS_MANIFEST = 'resourcepacks-manifest.json';
 const RESOURCE_PACKS_PATH_PREFIX = 'resourcepacks/';
 const SHADER_PACKS_MANIFEST = 'shaderpacks-manifest.json';
 const SHADER_PACKS_PATH_PREFIX = 'shaderpacks/';
+// Cobbleverse instance overrides (config/, datapacks/) that Prism gets from the pack
+// import. Published as one zip + manifest; absent manifest = nothing to install.
+const OVERRIDES_MANIFEST = 'overrides-manifest.json';
+const OVERRIDES_ZIP_TMP = '.karamon-overrides.zip';
+const CLIENT_OPTIONS_NAME = 'client-options.json';
 const PARALLEL_DOWNLOADS = 8;
 const ZIP_DOWNLOAD_TIMEOUT_MS = 1200000;
 
@@ -31,6 +40,13 @@ interface OptionalManifest {
   entries: ManifestEntry[];
 }
 
+interface OverridesManifest {
+  present: boolean;
+  key: string;
+  name: string;
+  size: number;
+}
+
 interface SyncDirs {
   mods: string;
   resourcepacks: string;
@@ -44,6 +60,7 @@ interface CacheData {
   resourcePackFolders?: string[];
   shaderPacksKey?: string;
   shaderPackFolders?: string[];
+  overridesKey?: string;
   syncedAt?: number;
 }
 
@@ -51,17 +68,25 @@ export interface ModpackSyncOptions {
   http: HttpClient;
   optionsWriterFactory: (dir: string) => OptionsWriter;
   disabledJarPrefixes?: string[];
+  fallbackClientOptions?: ClientOptions | null;
 }
 
 export class ModpackSync {
   private readonly http: HttpClient;
   private readonly optionsWriterFactory: (dir: string) => OptionsWriter;
   private readonly disabledJarPrefixes: string[];
+  private readonly fallbackClientOptions: ClientOptions | null;
 
-  constructor({ http, optionsWriterFactory, disabledJarPrefixes }: ModpackSyncOptions) {
+  constructor({
+    http,
+    optionsWriterFactory,
+    disabledJarPrefixes,
+    fallbackClientOptions,
+  }: ModpackSyncOptions) {
     this.http = http;
     this.optionsWriterFactory = optionsWriterFactory;
     this.disabledJarPrefixes = (disabledJarPrefixes ?? []).map((prefix) => prefix.toLowerCase());
+    this.fallbackClientOptions = fallbackClientOptions ?? null;
   }
 
   invalidateCache(gameDir: string): void {
@@ -107,15 +132,18 @@ export class ModpackSync {
     onStatus('Vérification du pack...');
     onProgress(0.02);
 
+    const githubKey = await githubAssetFreshness(this.http, zipUrl);
     let headers: Record<string, string | string[] | undefined> = {};
-    try {
-      headers = await this.http.head(zipUrl);
-    } catch {
-      /* GitHub refuse parfois HEAD; on bascule sur l'API releases */
+    if (!githubKey) {
+      try {
+        headers = await this.http.head(zipUrl);
+      } catch {
+        /* GitHub refuse parfois HEAD; on bascule sur la taille */
+      }
     }
     const etag =
+      githubKey ||
       ModpackSync.extractEtag(headers) ||
-      (await githubAssetFreshness(this.http, zipUrl)) ||
       ModpackSync.extractLengthKey(headers);
     if (!etag) {
       throw new Error('mods.zip indisponible (ETag/Last-Modified manquant)');
@@ -123,6 +151,8 @@ export class ModpackSync {
 
     const resourcePacks = await this.fetchOptionalManifest(base, RESOURCE_PACKS_MANIFEST);
     const shaderPacks = await this.fetchOptionalManifest(base, SHADER_PACKS_MANIFEST);
+    const overrides = await this.fetchOverridesManifest(base);
+    const clientOptions = await this.fetchClientOptions(base);
     const cache = this.readCache(gameDir);
 
     const modsUpToDate =
@@ -140,26 +170,25 @@ export class ModpackSync {
       shaderPacks,
       dirs.shaderpacks,
     );
+    const overridesUpToDate =
+      !overrides.present ||
+      (cache.overridesKey === overrides.key && ModpackSync.dirExists(path.join(gameDir, 'config')));
 
     const applyOptions = (): void => {
       const writer = this.optionsWriterFactory(gameDir);
-      for (const rp of resourcePacks.entries) {
-        try {
-          writer.ensureResourcePack(ModpackSync.optionsName(rp));
-        } catch {
-          /* non-fatal */
+      try {
+        writer.ensureDistantGeneration(true);
+        if (clientOptions) {
+          writer.forceResourcePacks(clientOptions.resourcePacks);
+          writer.ensureShader(clientOptions.shaderPack, clientOptions.enableShaders);
         }
-      }
-      for (const sp of shaderPacks.entries) {
-        try {
-          writer.ensureShader(ModpackSync.optionsName(sp));
-        } catch {
-          /* non-fatal */
-        }
+        applyKaramonBranding(gameDir);
+      } catch {
+        /* non-fatal */
       }
     };
 
-    if (modsUpToDate && resourcePacksUpToDate && shaderPacksUpToDate) {
+    if (modsUpToDate && resourcePacksUpToDate && shaderPacksUpToDate && overridesUpToDate) {
       applyOptions();
       onStatus('Pack déjà à jour, aucun téléchargement nécessaire.');
       onProgress(1);
@@ -220,11 +249,18 @@ export class ModpackSync {
         onStatus,
         onProgress,
         0.84,
-        0.13,
+        0.1,
       );
     } else {
-      onProgress(0.97);
+      onProgress(0.94);
     }
+
+    let overridesSummary = '';
+    if (overrides.present && !overridesUpToDate) {
+      const result = await this.syncOverrides(overrides, gameDir, base, onStatus, onProgress, 0.94, 0.04);
+      overridesSummary = `, ${result.written} fichier(s) de config`;
+    }
+    onProgress(0.98);
 
     applyOptions();
 
@@ -239,13 +275,56 @@ export class ModpackSync {
       shaderPackFolders: shaderPacks.present
         ? ModpackSync.extractedFolders(shaderPacks.entries)
         : cache.shaderPackFolders,
+      overridesKey: overrides.present ? overrides.key : cache.overridesKey,
       syncedAt: Date.now(),
     });
     onStatus(
       `Pack synchronisé: ${jarNames.length} mods, ` +
-        `${resourcePacks.entries.length} resource packs, ${shaderPacks.entries.length} shaders.`,
+        `${resourcePacks.entries.length} resource packs, ${shaderPacks.entries.length} shaders${overridesSummary}.`,
     );
     onProgress(1);
+  }
+
+  private async fetchOverridesManifest(baseUrl: string): Promise<OverridesManifest> {
+    try {
+      const text = await this.http.getText(baseUrl + OVERRIDES_MANIFEST);
+      const raw = JSON.parse(text) as { name?: unknown; size?: unknown };
+      if (typeof raw?.name !== 'string' || typeof raw?.size !== 'number' || raw.size <= 0) {
+        return { present: false, key: '', name: '', size: 0 };
+      }
+      return { present: true, key: ModpackSync.hashText(text), name: raw.name, size: raw.size };
+    } catch {
+      return { present: false, key: '', name: '', size: 0 };
+    }
+  }
+
+  private async syncOverrides(
+    manifest: OverridesManifest,
+    gameDir: string,
+    baseUrl: string,
+    onStatus: StatusEmitter,
+    onProgress: ProgressEmitter,
+    progressStart: number,
+    progressSpan: number,
+  ): Promise<{ written: number; kept: number }> {
+    onStatus('Téléchargement des configs du pack...');
+    const tmpZip = path.join(gameDir, OVERRIDES_ZIP_TMP);
+    try {
+      await this.http.download(packAssetUrl(baseUrl, manifest.name), tmpZip, {
+        label: manifest.name,
+        onProgress: (p) => onProgress(progressStart + progressSpan * p),
+      });
+      const actual = fs.statSync(tmpZip).size;
+      if (actual !== manifest.size) {
+        throw new Error(`${manifest.name}: taille ${actual} au lieu de ${manifest.size}`);
+      }
+      onStatus('Installation des configs du pack...');
+      const result = installOverrides(tmpZip, gameDir);
+      onStatus(`Configs du pack: ${result.written} écrit(s), ${result.kept} conservé(s).`);
+      return result;
+    } finally {
+      fs.rmSync(tmpZip, { force: true });
+    }
   }
 
   private ensureDirs(gameDir: string): SyncDirs {
@@ -271,7 +350,8 @@ export class ModpackSync {
   }
 
   private extractJars(zipPath: string, modsDir: string, onStatus: StatusEmitter): string[] {
-    const zip = new AdmZip(zipPath);
+    const zipBuffer = fs.readFileSync(zipPath);
+    const zip = new AdmZip(zipBuffer);
     const seen = new Set<string>();
     const jarNames: string[] = [];
     const disabledDir = path.join(modsDir, 'mods-disabled');
@@ -283,12 +363,12 @@ export class ModpackSync {
       seen.add(name.toLowerCase());
       if (this.isDisabledJar(name)) {
         fs.mkdirSync(disabledDir, { recursive: true });
-        fs.writeFileSync(ModpackSync.safeJoin(disabledDir, name), entry.getData());
+        fs.writeFileSync(ModpackSync.safeJoin(disabledDir, name), readEntryData(zipBuffer, entry));
         onStatus(`Mod client désactivé (Java 21): ${name}`);
         continue;
       }
       const target = ModpackSync.safeJoin(modsDir, name);
-      fs.writeFileSync(target, entry.getData());
+      fs.writeFileSync(target, readEntryData(zipBuffer, entry));
       jarNames.push(name);
     }
     if (jarNames.length === 0) {
@@ -300,6 +380,15 @@ export class ModpackSync {
   private isDisabledJar(name: string): boolean {
     const lower = name.toLowerCase();
     return this.disabledJarPrefixes.some((prefix) => lower.startsWith(prefix));
+  }
+
+  private async fetchClientOptions(baseUrl: string): Promise<ClientOptions | null> {
+    try {
+      const text = await this.http.getText(baseUrl + CLIENT_OPTIONS_NAME);
+      return parseClientOptions(JSON.parse(text)) ?? this.fallbackClientOptions;
+    } catch {
+      return this.fallbackClientOptions;
+    }
   }
 
   private async fetchOptionalManifest(baseUrl: string, manifestName: string): Promise<OptionalManifest> {
@@ -338,10 +427,6 @@ export class ModpackSync {
 
   private static folderNameFor(zipName: string): string {
     return zipName.replace(/\.zip$/i, '');
-  }
-
-  private static optionsName(entry: ManifestEntry): string {
-    return entry.extract ? ModpackSync.folderNameFor(entry.name) : entry.name;
   }
 
   private static extractedFolders(entries: ManifestEntry[]): string[] {
@@ -492,7 +577,7 @@ export class ModpackSync {
   ): Promise<void> {
     const target = ModpackSync.safeJoin(destDir, entry.name);
     if (ModpackSync.fileMatchesSize(target, entry.size)) return;
-    const url = baseUrl + urlPrefix + encodeURIComponent(entry.name);
+    const url = packAssetUrl(baseUrl, entry.name, urlPrefix);
     await this.http.download(url, target, { label: entry.name });
     onStatus(`+ ${entry.name}`);
   }
@@ -508,54 +593,19 @@ export class ModpackSync {
     const folderName = ModpackSync.folderNameFor(entry.name);
     const folderPath = ModpackSync.safeJoin(destDir, folderName);
     if (!forceReExtract && ModpackSync.dirExists(folderPath)) return;
-    const url = baseUrl + urlPrefix + encodeURIComponent(entry.name);
-    const tmpZip = path.join(
+    const url = packAssetUrl(baseUrl, entry.name, urlPrefix);
+    const tmpZip = ModpackSync.safeJoin(
       destDir,
-      `.karamon-extract-${process.pid}-${Date.now()}-${folderName}.zip`,
+      `.karamon-extract-${process.pid}-${Date.now()}-${path.basename(folderName)}.zip`,
     );
     try {
       await this.http.download(url, tmpZip, { label: entry.name });
       fs.rmSync(folderPath, { recursive: true, force: true });
-      ModpackSync.extractZipToDir(tmpZip, folderPath);
+      extractZipToDir(tmpZip, folderPath, { stripCommonTopLevelFolder: true });
       onStatus(`+ ${folderName}/`);
     } finally {
       fs.rmSync(tmpZip, { force: true });
     }
-  }
-
-  private static extractZipToDir(zipPath: string, destDir: string): void {
-    const zip = new AdmZip(zipPath);
-    const entries = zip.getEntries();
-    const stripPrefix = ModpackSync.commonTopLevelPrefix(entries);
-    fs.mkdirSync(destDir, { recursive: true });
-    const root = path.resolve(destDir);
-    for (const entry of entries) {
-      const relName = stripPrefix ? entry.entryName.slice(stripPrefix.length) : entry.entryName;
-      if (!relName) continue;
-      const target = path.resolve(root, relName);
-      if (target !== root && !target.startsWith(root + path.sep)) {
-        throw new Error(`Path traversal refusé dans l'archive: ${entry.entryName}`);
-      }
-      if (entry.isDirectory) {
-        fs.mkdirSync(target, { recursive: true });
-        continue;
-      }
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, entry.getData());
-    }
-  }
-
-  private static commonTopLevelPrefix(entries: { entryName: string }[]): string {
-    let prefix: string | null = null;
-    for (const entry of entries) {
-      const name = entry.entryName;
-      const slash = name.indexOf('/');
-      if (slash === -1) return '';
-      const top = name.slice(0, slash + 1);
-      if (prefix === null) prefix = top;
-      else if (prefix !== top) return '';
-    }
-    return prefix ?? '';
   }
 
   private cleanupOrphanedFolders(
@@ -569,7 +619,12 @@ export class ModpackSync {
     const keepLc = new Set(currentFolders.map((n) => n.toLowerCase()));
     for (const folderName of previousFolders) {
       if (keepLc.has(folderName.toLowerCase())) continue;
-      const folderPath = path.join(dir, folderName);
+      let folderPath: string;
+      try {
+        folderPath = ModpackSync.safeJoin(dir, folderName);
+      } catch {
+        continue;
+      }
       if (!ModpackSync.dirExists(folderPath)) continue;
       try {
         fs.rmSync(folderPath, { recursive: true, force: true });
@@ -613,11 +668,6 @@ export class ModpackSync {
   }
 
   private static safeJoin(rootDir: string, relPath: string): string {
-    const root = path.resolve(rootDir);
-    const dest = path.resolve(root, relPath);
-    if (dest !== root && !dest.startsWith(root + path.sep)) {
-      throw new Error(`Nom de fichier refusé (path traversal): ${relPath}`);
-    }
-    return dest;
+    return resolveInside(rootDir, relPath);
   }
 }

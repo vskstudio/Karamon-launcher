@@ -1,7 +1,6 @@
 import fs from 'fs';
-import path from 'path';
-import AdmZip from 'adm-zip';
 import type { HttpClient } from '../../shared/HttpClient';
+import { extractZipToDir, resolveInside } from '../../shared/ZipExtract';
 import { RuleEvaluator } from './RuleEvaluator';
 import type { MojangLibrary, MojangArtifact } from './VersionResolver';
 
@@ -21,7 +20,7 @@ export class LibraryDownloader {
       if (lib.natives) continue;
       const artifactPath = LibraryDownloader.artifactPath(lib);
       if (!artifactPath) continue;
-      const abs = path.join(librariesDir, artifactPath);
+      const abs = resolveInside(librariesDir, artifactPath, lib.name);
       if (seen.has(abs)) continue;
       seen.add(abs);
       paths.push(abs);
@@ -43,13 +42,17 @@ export class LibraryDownloader {
       if (main?.path && main.url) {
         tasks.push({
           artifact: main,
-          dest: path.join(librariesDir, main.path),
+          dest: resolveInside(librariesDir, main.path, lib.name),
           label: lib.name,
         });
       } else if (lib.url && !lib.natives) {
         const derived = LibraryDownloader.deriveFromName(lib.name, lib.url);
         if (derived) {
-          tasks.push({ artifact: derived.artifact, dest: path.join(librariesDir, derived.relPath), label: lib.name });
+          tasks.push({
+            artifact: derived.artifact,
+            dest: resolveInside(librariesDir, derived.relPath, lib.name),
+            label: lib.name,
+          });
         }
       }
       const nativeKey = lib.natives?.[ctx.osName];
@@ -58,7 +61,7 @@ export class LibraryDownloader {
         if (classifier.path) {
           tasks.push({
             artifact: classifier,
-            dest: path.join(librariesDir, classifier.path),
+            dest: resolveInside(librariesDir, classifier.path, lib.name),
             label: `${lib.name} (natives)`,
           });
         }
@@ -68,17 +71,29 @@ export class LibraryDownloader {
     let done = 0;
     for (const task of tasks) {
       onProgress?.(done / tasks.length, task.label);
-      if (!task.artifact.sha1 && fs.existsSync(task.dest)) {
+      const cached = fs.existsSync(task.dest);
+      if (!task.artifact.sha1 && cached) {
         done++;
         continue;
       }
+      const expectedSha1 = task.artifact.sha1 || (await this.fetchSidecarSha1(task.artifact.url));
       await this.http.download(task.artifact.url, task.dest, {
-        expectedSha1: task.artifact.sha1,
+        expectedSha1,
         label: task.label,
       });
       done++;
     }
     onProgress?.(1, 'Librairies prêtes');
+  }
+
+  private async fetchSidecarSha1(url: string): Promise<string> {
+    try {
+      const text = await this.http.getText(`${url}.sha1`);
+      const match = text.trim().match(/^[0-9a-f]{40}/i);
+      return match ? match[0] : '';
+    } catch {
+      return '';
+    }
   }
 
   async extractNatives(
@@ -94,22 +109,10 @@ export class LibraryDownloader {
       if (!nativeKey) continue;
       const classifier = lib.downloads?.classifiers?.[nativeKey];
       if (!classifier?.path) continue;
-      const jarPath = path.join(librariesDir, classifier.path);
+      const jarPath = resolveInside(librariesDir, classifier.path, lib.name);
       if (!fs.existsSync(jarPath)) continue;
       const exclude = lib.extract?.exclude ?? ['META-INF/'];
-      LibraryDownloader.extractJar(jarPath, nativesDir, exclude);
-    }
-  }
-
-  private static extractJar(jarPath: string, dest: string, exclude: string[]): void {
-    const zip = new AdmZip(jarPath);
-    for (const entry of zip.getEntries()) {
-      if (entry.isDirectory) continue;
-      const name = entry.entryName;
-      if (exclude.some((e) => name.startsWith(e))) continue;
-      const out = path.join(dest, name);
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      fs.writeFileSync(out, entry.getData());
+      extractZipToDir(jarPath, nativesDir, { exclude });
     }
   }
 

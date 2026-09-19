@@ -15,17 +15,18 @@ Le tag `pack-latest` est un alias du dernier `pack-vX.Y.Z`. Il n'est jamais marq
 | Fichier | Rôle |
 |---------|------|
 | `pack.json` | Meta pack (MC, Fabric, CDN, jars client à désactiver) |
+| `client-options.json` | Ordre forcé des resource packs + shader Iris |
 | `mods/required.json` | Mods obligatoires |
 | `mods/optional.json` | Mods optionnels |
 | `resourcepacks/required.json` | Resource packs obligatoires |
-| `shaderpacks/optional.json` | Shader packs proposés (pas requis pour rejoindre) |
+| `shaderpacks/optional.json` | Shader packs proposés |
 
 ## Publier
 
 Le zip se construit depuis KaramonV2 (`node scripts/build-content-pack.mjs`), puis:
 
 ```bash
-./scripts/publish-pack.sh 0.5.3 content/dist/downloads/mods.zip content/dist/downloads/*.json
+node scripts/publish-pack-assets.mjs
 ```
 
 Le script crée `pack-vX.Y.Z` et met à jour `pack-latest` (les deux avec `--latest=false`).

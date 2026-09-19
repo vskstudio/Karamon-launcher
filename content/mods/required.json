@@ -81,6 +81,17 @@
     "required": true
   },
   {
+    "id": "karamon-admin",
+    "name": "Karamon Admin",
+    "file": "karamon-admin-1.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "local://mod/karamon-admin/build/libs/karamon-admin-1.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
     "id": "bluemap",
     "name": "BlueMap",
     "file": "bluemap-5.7-fabric.jar",
@@ -162,6 +173,42 @@
       "version": "L8shWg16"
     },
     "side": "client",
+    "required": true
+  },
+  {
+    "id": "distant-horizons",
+    "name": "Distant Horizons",
+    "file": "DistantHorizons-3.3.0-1.21.1-fabric-neoforge.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "distanthorizons",
+      "version": "EtH8QtMq"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "continuity",
+    "name": "Continuity",
+    "file": "continuity-3.0.0+1.21.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "continuity",
+      "version": "kSPJ4hQv"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "immersive-furniture",
+    "name": "Immersive Furniture",
+    "file": "immersive_furniture-fabric-0.3.3+1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "immersive-furniture",
+      "version": "kCFeaaoC"
+    },
+    "side": "both",
     "required": true
   }
 ]

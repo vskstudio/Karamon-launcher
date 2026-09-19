@@ -1,8 +1,185 @@
 [
   {
+    "id": "comforts-modernized",
+    "name": "Comforts Modernized",
+    "file": "Comforts Modernized - V1.1.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Comforts Modernized - V1.1.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobblemon-classic-grass",
+    "name": "Cobblemon Classic Grass Pack",
+    "file": "Cobblemon Classic Grass Pack v1.0 MC1.21.1.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Cobblemon Classic Grass Pack v1.0 MC1.21.1.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobblemon-3d-poke-rods",
+    "name": "Cobblemon 3D Poké Rods",
+    "file": "Cobblemon 3D Poké Rods 1.0.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Cobblemon 3D Poké Rods 1.0.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobblemon-interface",
+    "name": "Cobblemon Interface",
+    "file": "Cobblemon Interface v1.6.0.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Cobblemon Interface v1.6.0.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobblemon-interface-modded",
+    "name": "Cobblemon Interface Modded",
+    "file": "Cobblemon Interface Modded v1.9.4.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Cobblemon Interface Modded v1.9.4.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "fully-hisuian-starters",
+    "name": "Fully Hisuian Starters",
+    "file": "Fully Hisuian Starters 1.1.1.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Fully Hisuian Starters 1.1.1.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobbleverse-ccc",
+    "name": "COBBLEVERSE CCC",
+    "file": "COBBLEVERSE-CCC.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/COBBLEVERSE-CCC.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "curseforge-rp",
+    "name": "CurseForge RP",
+    "file": "CurseForge RP.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/CurseForge RP.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "fresh-animations",
+    "name": "Fresh Animations",
+    "file": "FreshAnimations_v1.10.4.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/FreshAnimations_v1.10.4.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "fresh-moves",
+    "name": "Fresh Moves",
+    "file": "-1.21.2 Fresh Moves v3.1 (With Animated Eyes).zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/-1.21.2 Fresh Moves v3.1 (With Animated Eyes).zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "icon-fresh",
+    "name": "Icon Fresh",
+    "file": "Icon Fresh 0.4.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/Icon Fresh 0.4.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "e19-cobblemon-minimap-icons",
+    "name": "E19 Cobblemon Minimap Icons",
+    "file": "E19 Cobblemon Minimap Icons.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/E19 Cobblemon Minimap Icons.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobbleverse-soundtrack",
+    "name": "COBBLEVERSE Soundtrack",
+    "file": "COBBLEVERSE Soundtrack.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/COBBLEVERSE Soundtrack.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobbleverse-rctmod-rp",
+    "name": "COBBLEVERSE RCTmod RP",
+    "file": "COBBLEVERSE RCTmod RP.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/COBBLEVERSE RCTmod RP.zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "cobbleverse-rp-cf",
+    "name": "COBBLEVERSE RP [CF]",
+    "file": "COBBLEVERSE RP [CF].zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/resourcepacks/COBBLEVERSE RP [CF].zip"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "bushy-leaves",
+    "name": "Bushy Leaves",
+    "file": "bushy-leaves-1-6-5.zip",
+    "source": {
+      "type": "modrinth",
+      "project": "bushy-leaves",
+      "version": "Nx48HzUJ"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
     "id": "karamon-ui",
     "name": "Karamon UI",
-    "file": "Karamon UI",
+    "file": "Karamon UI.zip",
     "source": {
       "type": "local",
       "path": "content/resourcepacks/karamon-ui"

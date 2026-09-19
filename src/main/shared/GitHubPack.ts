@@ -24,6 +24,25 @@ const LATEST_DOWNLOAD =
   /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/latest\/download\/([^/?#]+)/i;
 const TAGGED_DOWNLOAD =
   /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\/([^/?#]+)/i;
+const GITHUB_RELEASE_DOWNLOAD_BASE =
+  /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/(?:latest\/download|download\/[^/]+)\/?$/i;
+
+export function githubReleaseAssetName(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[()[\]]/g, '')
+    .replace(/\s+/g, '.');
+}
+
+export function packAssetUrl(baseUrl: string, name: string, folderPrefix = ''): string {
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const prefix = folderPrefix && !folderPrefix.endsWith('/') ? `${folderPrefix}/` : folderPrefix;
+  const github = GITHUB_RELEASE_DOWNLOAD_BASE.test(base);
+  const encoded = encodeURIComponent(github ? githubReleaseAssetName(name) : name);
+  if (github) return base + encoded;
+  return base + prefix + encoded;
+}
 
 export function parseGitHubDownloadUrl(url: string): GitHubDownloadRef | null {
   const latest = url.match(LATEST_DOWNLOAD);

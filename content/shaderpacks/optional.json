@@ -1,1 +1,59 @@
-[]
+[
+  {
+    "id": "cobbleverse-shaders",
+    "name": "COBBLEVERSE - Shaders",
+    "file": "COBBLEVERSE - Shaders.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/shaderpacks/COBBLEVERSE - Shaders"
+    },
+    "side": "client",
+    "required": false,
+    "extract": true
+  },
+  {
+    "id": "cobbleverse-shaders-txt",
+    "name": "COBBLEVERSE - Shaders settings",
+    "file": "COBBLEVERSE - Shaders.txt",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/shaderpacks/COBBLEVERSE - Shaders.txt"
+    },
+    "side": "client",
+    "required": false
+  },
+  {
+    "id": "cobbleverse-shaders-hq",
+    "name": "COBBLEVERSE - Shaders (High Quality)",
+    "file": "COBBLEVERSE - Shaders (High Quality).zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/shaderpacks/COBBLEVERSE - Shaders (High Quality)"
+    },
+    "side": "client",
+    "required": false,
+    "extract": true
+  },
+  {
+    "id": "cobbleverse-shaders-hq-txt",
+    "name": "COBBLEVERSE - Shaders (High Quality) settings",
+    "file": "COBBLEVERSE - Shaders (High Quality).txt",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/shaderpacks/COBBLEVERSE - Shaders (High Quality).txt"
+    },
+    "side": "client",
+    "required": false
+  },
+  {
+    "id": "complementary-unbound",
+    "name": "Complementary Unbound",
+    "file": "ComplementaryUnbound_r5.8.1.zip",
+    "source": {
+      "type": "local",
+      "path": "client/Karamon/shaderpacks/ComplementaryUnbound_r5.8.1.zip"
+    },
+    "side": "client",
+    "required": false
+  }
+]

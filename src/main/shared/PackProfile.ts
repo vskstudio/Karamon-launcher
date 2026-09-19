@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { loadClientOptions, type ClientOptions } from './ClientOptions';
 
 export interface PackProfile {
   minecraft: string;
@@ -9,6 +10,7 @@ export interface PackProfile {
   publicServerHost: string;
   statusFallbackHost: string;
   clientDisabledJarPrefixes: string[];
+  clientOptions: ClientOptions | null;
 }
 
 const DEFAULTS: PackProfile = {
@@ -19,6 +21,7 @@ const DEFAULTS: PackProfile = {
   publicServerHost: 'karamon.fr',
   statusFallbackHost: 'play.karamon.fr',
   clientDisabledJarPrefixes: ['c2me-fabric'],
+  clientOptions: null,
 };
 
 interface PackJson {
@@ -47,12 +50,13 @@ export function loadPackProfile(distDir: string): PackProfile {
         cdnBaseUrl:
           typeof raw.cdnBaseUrl === 'string' && raw.cdnBaseUrl ? raw.cdnBaseUrl : DEFAULTS.cdnBaseUrl,
         clientDisabledJarPrefixes: parsePrefixes(raw.clientDisabledJarPrefixes),
+        clientOptions: loadClientOptions(path.dirname(file)),
       };
     } catch {
       /* try next candidate */
     }
   }
-  return { ...DEFAULTS };
+  return { ...DEFAULTS, clientOptions: loadClientOptions(distDir) };
 }
 
 function parsePrefixes(value: unknown): string[] {

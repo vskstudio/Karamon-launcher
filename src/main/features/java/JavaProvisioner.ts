@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import AdmZip from 'adm-zip';
 import type { HttpClient } from '../../shared/HttpClient';
 import type { Paths } from '../../shared/Paths';
+import { extractZipToDir } from '../../shared/ZipExtract';
 import { JavaDetector } from './JavaDetector';
 
 const execFileP = promisify(execFile);
@@ -12,6 +12,7 @@ const execFileP = promisify(execFile);
 const REQUIRED_MAJOR = 21;
 const RUNTIME_DIR_NAME = 'jre-21';
 const ADOPTIUM_DOWNLOAD_TIMEOUT_MS = 600000;
+const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
 interface AdoptiumPackage {
   link: string;
@@ -89,13 +90,19 @@ export class JavaProvisioner {
     const versionLabel = asset.version.semver ?? asset.version.openjdk_version ?? 'inconnu';
     onStatus(`Téléchargement de Java 21 (${versionLabel}, ~45 Mo)...`);
 
+    const checksum = asset.binary.package.checksum;
+    if (!SHA256_HEX.test(checksum ?? '')) {
+      throw new Error("Adoptium n'a pas fourni de somme de contrôle SHA256 : téléchargement refusé.");
+    }
+
     const cacheDir = this.paths.cacheDir;
     fs.mkdirSync(cacheDir, { recursive: true });
-    const tmpZip = path.join(cacheDir, asset.binary.package.name);
+    const tmpZip = path.join(cacheDir, path.basename(asset.binary.package.name));
 
     await this.http.download(asset.binary.package.link, tmpZip, {
       label: 'Java 21',
       timeoutMs: ADOPTIUM_DOWNLOAD_TIMEOUT_MS,
+      expectedSha256: checksum,
       onProgress,
     });
 
@@ -121,7 +128,7 @@ export class JavaProvisioner {
       fs.rmSync(root, { recursive: true, force: true });
     }
     fs.mkdirSync(root, { recursive: true });
-    new AdmZip(zipPath).extractAllTo(root, true);
+    extractZipToDir(zipPath, root);
   }
 
   private runtimeRoot(): string {
@@ -164,10 +171,7 @@ export class JavaProvisioner {
 
   private static pickZipAsset(assets: AdoptiumAsset[] | null | undefined): AdoptiumAsset | null {
     if (!Array.isArray(assets) || assets.length === 0) return null;
-    return (
-      assets.find((a) => a.binary.package.name?.toLowerCase().endsWith('.zip')) ??
-      assets[0]
-    );
+    return assets.find((a) => a.binary.package.name?.toLowerCase().endsWith('.zip')) ?? null;
   }
 
   static parseMajor(version: string): number {

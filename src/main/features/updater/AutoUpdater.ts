@@ -43,6 +43,7 @@ export class AutoUpdater {
 
     return new Promise<UpdateCheckResult>((resolve) => {
       const cleanup = (): void => {
+        autoUpdater.removeListener('update-available', onAvailable);
         autoUpdater.removeListener('update-not-available', onNotAvail);
         autoUpdater.removeListener('update-downloaded', onDownloaded);
         autoUpdater.removeListener('error', onError);
@@ -50,6 +51,10 @@ export class AutoUpdater {
       const onNotAvail = (): void => {
         cleanup();
         resolve({ status: 'no-update', currentVersion: app.getVersion() });
+      };
+      const onAvailable = (info: ElectronUpdateInfo): void => {
+        cleanup();
+        resolve({ status: 'downloading', version: info.version });
       };
       const onDownloaded = (info: ElectronUpdateInfo): void => {
         cleanup();
@@ -61,6 +66,7 @@ export class AutoUpdater {
         resolve({ status: 'error', error: e.message });
       };
 
+      autoUpdater.once('update-available', onAvailable);
       autoUpdater.once('update-not-available', onNotAvail);
       autoUpdater.once('update-downloaded', onDownloaded);
       autoUpdater.once('error', onError);

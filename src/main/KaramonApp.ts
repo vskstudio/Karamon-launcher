@@ -83,6 +83,7 @@ export class KaramonApp {
       http: this.http,
       optionsWriterFactory: (dir) => new OptionsWriter(dir),
       disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
+      fallbackClientOptions: this.pack.clientOptions,
     });
     this.gameLauncher = new GameLauncher({
       paths: this.paths,
@@ -114,7 +115,7 @@ export class KaramonApp {
 
   start(): void {
     app.whenReady().then(() => {
-      Screenshots.registerProtocol();
+      Screenshots.registerProtocol(() => Screenshots.dirFor(this.currentInstanceDir()));
       this.registerIpc();
       this.window.create();
       this.updater.start();
@@ -130,6 +131,10 @@ export class KaramonApp {
       this.stats.endSession();
       void this.discord.destroy();
     });
+  }
+
+  private currentInstanceDir(): string {
+    return this.minecraft.instanceDir(this.config.get());
   }
 
   private statusEmitter() {
@@ -169,23 +174,23 @@ export class KaramonApp {
     ipcMain.handle(Channels.statsGet, () => this.stats.read());
     ipcMain.handle(Channels.statsReset, () => this.stats.reset());
     ipcMain.handle(Channels.screenshotsList, () =>
-      this.screenshots.list(this.minecraft.instanceDir(this.config.get())),
+      this.screenshots.list(this.currentInstanceDir()),
     );
     ipcMain.handle(Channels.screenshotsDelete, (_e, name: string) =>
-      this.screenshots.delete(this.minecraft.instanceDir(this.config.get()), name),
+      this.screenshots.delete(this.currentInstanceDir(), name),
     );
     ipcMain.handle(Channels.shellOpenExternal, (_e, url: string) => this.openExternal(url));
     ipcMain.handle(Channels.crashesList, () =>
-      this.crashes.list(this.minecraft.instanceDir(this.config.get())),
+      this.crashes.list(this.currentInstanceDir()),
     );
     ipcMain.handle(Channels.crashesRead, (_e, name: string) =>
-      this.crashes.read(this.minecraft.instanceDir(this.config.get()), name),
+      this.crashes.read(this.currentInstanceDir(), name),
     );
     ipcMain.handle(Channels.crashesDelete, (_e, name: string) =>
-      this.crashes.delete(this.minecraft.instanceDir(this.config.get()), name),
+      this.crashes.delete(this.currentInstanceDir(), name),
     );
     ipcMain.handle(Channels.backupCreate, () =>
-      this.backup.create(this.minecraft.instanceDir(this.config.get())),
+      this.backup.create(this.currentInstanceDir()),
     );
     ipcMain.handle(Channels.backupList, () => this.backup.list());
     ipcMain.handle(Channels.backupDelete, (_e, name: string) => this.backup.delete(name));
@@ -414,10 +419,12 @@ export class KaramonApp {
     const result = win
       ? await dialog.showSaveDialog(win, opts)
       : await dialog.showSaveDialog(opts);
-    if (!result.canceled && result.filePath) {
+    if (result.canceled || !result.filePath) return { ok: false };
+    try {
       fs.writeFileSync(result.filePath, text, 'utf8');
       return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
     }
-    return { ok: false };
   }
 }

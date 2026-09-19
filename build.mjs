@@ -60,6 +60,12 @@ async function copyStatic() {
   } catch {
     console.warn('build: content/pack.json introuvable, défauts Cobbleverse V2.');
   }
+  const clientOptions = path.resolve('content', 'client-options.json');
+  try {
+    await copyFile(clientOptions, path.join(outDir, 'client-options.json'));
+  } catch {
+    console.warn('build: content/client-options.json introuvable, ordre resource packs non forcé.');
+  }
 }
 
 async function clean() {

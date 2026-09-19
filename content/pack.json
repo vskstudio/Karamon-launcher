@@ -1,6 +1,6 @@
 {
   "id": "karamon-client",
-  "version": "0.4.0",
+  "version": "0.5.2",
   "minecraft": "1.21.1",
   "loader": "fabric",
   "loaderVersion": "0.18.4",
@@ -13,5 +13,5 @@
     "name": "COBBLEVERSE 1.7.42"
   },
   "cdnBaseUrl": "https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/",
-  "notes": "Base: Cobbleverse (Sodium, Lithium, FerriteCore, Entity Culling, ImmediatelyFast, ModernFix, Iris, Krypton, C2ME). Extras in mods/required.json (LuckPerms, Simple Voice Chat, Karamon custom mods, Sodium Extra, CobbleBoost, server perf: CobblemonOptimizer, Spark, CobbleLagClear)."
+  "notes": "Pack 0.5.2: nouveau mod Karamon Admin (touche J, /admin). Logo Karamon a la bonne taille, nouveau fond de menu. Configs du pack (overrides.zip) synchronisees par le launcher 2.0.5+."
 }

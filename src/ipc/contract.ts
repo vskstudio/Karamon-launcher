@@ -42,7 +42,7 @@ export type PingResult =
     }
   | { online: false };
 
-export type ExportLogsResult = { ok: boolean };
+export type ExportLogsResult = { ok: boolean; error?: string };
 
 export interface GameState {
   running: boolean;
@@ -54,6 +54,7 @@ export interface UpdateInfo {
 
 export type UpdateCheckResult =
   | { status: 'no-update'; currentVersion: string }
+  | { status: 'downloading'; version: string }
   | { status: 'downloaded'; version: string }
   | { status: 'error'; error: string }
   | { status: 'unsupported' };

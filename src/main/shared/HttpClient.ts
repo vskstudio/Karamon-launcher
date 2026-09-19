@@ -7,7 +7,7 @@ import type { IncomingHttpHeaders } from 'http';
 const REDIRECT_STATUS = new Set([301, 302, 307, 308]);
 const MAX_REDIRECTS = 10;
 const DEFAULT_HEADERS = {
-  'User-Agent': 'KaramonLauncher/2.0.1',
+  'User-Agent': 'KaramonLauncher/2.0.5',
   Accept: '*/*',
 };
 
@@ -18,6 +18,7 @@ export interface HttpResponse {
 
 export interface DownloadOptions {
   expectedSha1?: string;
+  expectedSha256?: string;
   label?: string;
   onProgress?: (fraction: number) => void;
   timeoutMs?: number;
@@ -46,9 +47,26 @@ export class HttpClient {
   }
 
   static sha1File(filePath: string): string {
-    const hash = crypto.createHash('sha1');
+    return HttpClient.hashFile(filePath, 'sha1');
+  }
+
+  static sha256File(filePath: string): string {
+    return HttpClient.hashFile(filePath, 'sha256');
+  }
+
+  private static hashFile(filePath: string, algorithm: string): string {
+    const hash = crypto.createHash(algorithm);
     hash.update(fs.readFileSync(filePath));
     return hash.digest('hex');
+  }
+
+  private static verifyDigest(filePath: string, expected: string, algorithm: 'sha1' | 'sha256', label: string): void {
+    const actual = HttpClient.hashFile(filePath, algorithm);
+    if (actual.toLowerCase() === expected.toLowerCase()) return;
+    fs.rmSync(filePath, { force: true });
+    throw new Error(
+      `${algorithm.toUpperCase()} mismatch for ${label}: expected ${expected}, got ${actual}`,
+    );
   }
 
   get(url: string, { timeoutMs = 30000 }: { timeoutMs?: number } = {}): Promise<HttpResponse> {
@@ -133,6 +151,7 @@ export class HttpClient {
   async download(url: string, dest: string, opts: DownloadOptions = {}): Promise<void> {
     const {
       expectedSha1 = '',
+      expectedSha256 = '',
       label = '',
       onProgress,
       timeoutMs = 60000,
@@ -143,6 +162,10 @@ export class HttpClient {
     if (expectedSha1 && fs.existsSync(dest)) {
       const cached = HttpClient.sha1File(dest).toLowerCase();
       if (cached === expectedSha1.toLowerCase()) return;
+    }
+    if (expectedSha256 && fs.existsSync(dest)) {
+      const cached = HttpClient.sha256File(dest).toLowerCase();
+      if (cached === expectedSha256.toLowerCase()) return;
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -265,12 +288,10 @@ export class HttpClient {
     });
 
     if (expectedSha1) {
-      const actual = HttpClient.sha1File(dest);
-      if (actual.toLowerCase() !== expectedSha1.toLowerCase()) {
-        throw new Error(
-          `SHA1 mismatch for ${label || dest}: expected ${expectedSha1}, got ${actual}`,
-        );
-      }
+      HttpClient.verifyDigest(dest, expectedSha1, 'sha1', label || dest);
+    }
+    if (expectedSha256) {
+      HttpClient.verifyDigest(dest, expectedSha256, 'sha256', label || dest);
     }
   }
 }
