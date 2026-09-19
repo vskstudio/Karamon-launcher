@@ -59,18 +59,3 @@ test('ensureShader overwrites the Iris pack name', () => {
   assert.match(text, /^enableShaders=true$/m);
   fs.rmSync(dir, { recursive: true, force: true });
 });
-
-test('ensureDistantGeneration forces Distant Generation on', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-dh-'));
-  fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, 'config', 'DistantHorizons.toml'),
-    '[common.worldGenerator]\nenableDistantGeneration = false\n',
-    'utf8',
-  );
-  new OptionsWriter(dir).ensureDistantGeneration(true);
-  const text = fs.readFileSync(path.join(dir, 'config', 'DistantHorizons.toml'), 'utf8');
-  assert.match(text, /^enableDistantGeneration = true$/m);
-  assert.match(text, /^enableServerGeneration = true$/m);
-  fs.rmSync(dir, { recursive: true, force: true });
-});

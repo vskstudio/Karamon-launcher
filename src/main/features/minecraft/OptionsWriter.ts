@@ -84,25 +84,6 @@ export class OptionsWriter {
     }
   }
 
-  ensureDistantGeneration(enabled = true): void {
-    const file = path.join(this.mcDir, 'config', 'DistantHorizons.toml');
-    const value = enabled ? 'true' : 'false';
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    let content = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-    content = this.setTomlAssignment(content, 'enableDistantGeneration', value);
-    content = this.setTomlAssignment(content, 'enableServerGeneration', 'true');
-    if (!content.endsWith('\n')) content += '\n';
-    fs.writeFileSync(file, content, 'utf8');
-  }
-
-  private setTomlAssignment(content: string, key: string, value: string): string {
-    const re = new RegExp(`^(\\s*${key}\\s*=\\s*).*$`, 'm');
-    if (re.test(content)) return content.replace(re, `$1${value}`);
-    const trimmed = content.replace(/\s+$/, '');
-    const prefix = trimmed.length > 0 ? `${trimmed}\n` : '';
-    return `${prefix}${key} = ${value}\n`;
-  }
-
   private upsertLine(
     filePath: string,
     line: string,

@@ -177,7 +177,6 @@ export class ModpackSync {
     const applyOptions = (): void => {
       const writer = this.optionsWriterFactory(gameDir);
       try {
-        writer.ensureDistantGeneration(true);
         if (clientOptions) {
           writer.forceResourcePacks(clientOptions.resourcePacks);
           writer.ensureShader(clientOptions.shaderPack, clientOptions.enableShaders);

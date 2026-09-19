@@ -176,13 +176,24 @@
     "required": true
   },
   {
-    "id": "distant-horizons",
-    "name": "Distant Horizons",
-    "file": "DistantHorizons-3.3.0-1.21.1-fabric-neoforge.jar",
+    "id": "voxy",
+    "name": "Voxy",
+    "file": "voxy-0.2.15-beta+mc1.21.1.jar",
+    "source": {
+      "type": "url",
+      "url": "local://.cache/voxy/voxy-0.2.15-beta+mc1.21.1.jar"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "voxy-server-side",
+    "name": "Voxy Server",
+    "file": "voxy-server-side-0.14.0-fabric.jar",
     "source": {
       "type": "modrinth",
-      "project": "distanthorizons",
-      "version": "EtH8QtMq"
+      "project": "voxy-server-side",
+      "version": "DUkHCSzM"
     },
     "side": "both",
     "required": true
