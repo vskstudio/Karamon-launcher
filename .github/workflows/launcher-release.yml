@@ -1,0 +1,90 @@
+name: Launcher Release
+
+on:
+  push:
+    tags:
+      - 'launcher-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows
+            script: build:dist
+          - os: macos-latest
+            artifact: macos
+            script: build:dist:mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Align package version with tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#launcher-v}"
+          npm version "$TAG" --no-git-tag-version --allow-same-version
+
+      - name: Build installer
+        run: npm run ${{ matrix.script }} -- --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.artifact }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.yml
+            dist/*.blockmap
+            dist/checksums.txt
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: launcher-*
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${GITHUB_REF_NAME#launcher-v}"
+          {
+            echo "Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1)."
+            echo
+            echo "## Windows"
+            echo "Installe \`Karamon Launcher Setup ${VER}.exe\`, connecte-toi avec Microsoft, mets a jour les mods, puis JOUER."
+            echo
+            echo "## macOS"
+            echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signee: clic droit, Ouvrir."
+            echo
+            echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis le tag \`pack-latest\` de ce repo."
+          } > release-notes.md
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Karamon Launcher ${VER}" \
+            --latest \
+            --notes-file release-notes.md
