@@ -485,40 +485,62 @@ export class ModpackSync {
     }
 
     let jarNames: string[] = cache.jarNames ?? [];
-    if (!modsUpToDate) {
-      onStatus('Téléchargement de mods.zip...');
-      const zipPath = path.join(gameDir, MODS_ZIP_TMP);
-      try {
-        await this.http.download(baseUrl + MODS_ZIP_NAME, zipPath, {
-          label: MODS_ZIP_NAME,
-          timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
-          onProgress: (p) => onProgress(0.05 + p * 0.55),
-        });
-        onStatus('Extraction des mods...');
-        onProgress(0.62);
-        jarNames = this.extractJars(zipPath, dirs.mods, onStatus);
-      } finally {
-        fs.rmSync(zipPath, { force: true });
-      }
-      this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
-    }
-    onProgress(0.68);
-
     let installed = snapshot;
     let clientOptions = this.loadStoredClientOptions(gameDir);
     let overridesSummary = '';
-    if (!assetsUpToDate) {
-      const result = await this.downloadAndInstallAssets(
-        baseUrl,
-        gameDir,
-        dirs,
-        cache,
-        onStatus,
-        onProgress,
-      );
-      installed = result.snapshot;
-      clientOptions = result.clientOptions ?? clientOptions;
-      overridesSummary = result.overridesSummary;
+    const modsZipPath = path.join(gameDir, MODS_ZIP_TMP);
+    const assetsZipPath = path.join(gameDir, ASSETS_ZIP_TMP);
+    let modsP = modsUpToDate ? 1 : 0;
+    let assetsP = assetsUpToDate ? 1 : 0;
+    const reportDownloads = (): void => {
+      onProgress(0.05 + modsP * 0.4 + assetsP * 0.28);
+    };
+    try {
+      const jobs: Promise<void>[] = [];
+      if (!modsUpToDate) {
+        jobs.push(
+          this.http.download(baseUrl + MODS_ZIP_NAME, modsZipPath, {
+            label: MODS_ZIP_NAME,
+            timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
+            onProgress: (p) => {
+              modsP = p;
+              reportDownloads();
+            },
+          }),
+        );
+      }
+      if (!assetsUpToDate) {
+        jobs.push(
+          this.http.download(baseUrl + ASSETS_ZIP_NAME, assetsZipPath, {
+            label: ASSETS_ZIP_NAME,
+            timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
+            onProgress: (p) => {
+              assetsP = p;
+              reportDownloads();
+            },
+          }),
+        );
+      }
+      if (jobs.length === 2) onStatus('Téléchargement de mods.zip et assets.zip...');
+      else if (!modsUpToDate) onStatus('Téléchargement de mods.zip...');
+      else onStatus('Téléchargement de assets.zip...');
+      await Promise.all(jobs);
+
+      if (!modsUpToDate) {
+        onStatus('Extraction des mods...');
+        onProgress(0.75);
+        jarNames = this.extractJars(modsZipPath, dirs.mods, onStatus);
+        this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
+      }
+      if (!assetsUpToDate) {
+        const result = this.installAssetsFromZip(assetsZipPath, gameDir, dirs, cache, onStatus);
+        installed = result.snapshot;
+        clientOptions = result.clientOptions ?? clientOptions;
+        overridesSummary = result.overridesSummary;
+      }
+    } finally {
+      fs.rmSync(modsZipPath, { force: true });
+      fs.rmSync(assetsZipPath, { force: true });
     }
     onProgress(0.98);
     applyOptions(clientOptions);
@@ -552,25 +574,16 @@ export class ModpackSync {
     return true;
   }
 
-  private async downloadAndInstallAssets(
-    baseUrl: string,
+  private installAssetsFromZip(
+    zipPath: string,
     gameDir: string,
     dirs: SyncDirs,
     cache: CacheData,
     onStatus: StatusEmitter,
-    onProgress: ProgressEmitter,
-  ): Promise<{ snapshot: AssetsSnapshot; clientOptions: ClientOptions | null; overridesSummary: string }> {
-    onStatus('Téléchargement de assets.zip...');
-    const zipPath = path.join(gameDir, ASSETS_ZIP_TMP);
+  ): { snapshot: AssetsSnapshot; clientOptions: ClientOptions | null; overridesSummary: string } {
     const extractDir = path.join(gameDir, ASSETS_EXTRACT_DIR);
     try {
-      await this.http.download(baseUrl + ASSETS_ZIP_NAME, zipPath, {
-        label: ASSETS_ZIP_NAME,
-        timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
-        onProgress: (p) => onProgress(0.68 + p * 0.2),
-      });
       onStatus('Extraction des assets...');
-      onProgress(0.89);
       fs.rmSync(extractDir, { recursive: true, force: true });
       extractZipToDir(zipPath, extractDir, { stripCommonTopLevelFolder: true });
 
@@ -624,7 +637,6 @@ export class ModpackSync {
         overridesSummary,
       };
     } finally {
-      fs.rmSync(zipPath, { force: true });
       fs.rmSync(extractDir, { recursive: true, force: true });
     }
   }
