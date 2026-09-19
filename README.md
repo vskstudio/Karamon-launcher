@@ -3,7 +3,7 @@
   <br/><br/>
   <p>Launcher et pack client pour le serveur <strong>karamon.fr</strong></p>
 
-  ![Version](https://img.shields.io/badge/version-2.0.6-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-2.0.7-blue?style=flat-square)
   ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-green?style=flat-square)
   ![Fabric](https://img.shields.io/badge/Fabric-0.18.4-orange?style=flat-square)
   ![Pack](https://img.shields.io/badge/pack-Cobbleverse%201.7.42-purple?style=flat-square)
@@ -11,7 +11,7 @@
 
 ---
 
-Repo public unique: installeur du launcher **et** `mods.zip` (resource packs, shaders).
+Repo public unique: installeur du launcher **et** le pack client (`mods.zip` + `assets.zip`).
 
 ## Téléchargement
 
@@ -40,7 +40,7 @@ Java 21 est détecté ou installé automatiquement. Le pack se synchronise depui
 |---|---|
 | `launcher-vX.Y.Z` | Installeur Windows / macOS. Marqué **Latest** pour l'auto-update. |
 | `pack-vX.Y.Z` | Historique du pack client. |
-| `pack-latest` | Alias du pack courant. Le launcher télécharge ici (`mods.zip`, manifests). |
+| `pack-latest` | Alias du pack courant. Le launcher télécharge ici (`mods.zip` + `assets.zip`). |
 
 `/releases/latest` reste le launcher. Le pack n'utilise pas ce raccourci, pour ne pas casser l'updater.
 
@@ -65,8 +65,8 @@ npm run build:dist:mac    # macOS
 Publier le launcher:
 
 ```bash
-git tag launcher-v2.0.6
-git push origin launcher-v2.0.6
+git tag launcher-v2.0.7
+git push origin launcher-v2.0.7
 ```
 
 Publier le pack (après `node scripts/build-content-pack.mjs` côté serveur KaramonV2):

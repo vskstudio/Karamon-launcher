@@ -2,17 +2,20 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import AdmZip from 'adm-zip';
-import { extractZipToDir, readEntryData, resolveInside } from '../../shared/ZipExtract';
-import type { HttpClient } from '../../shared/HttpClient';
-import { githubAssetFreshness, packAssetUrl } from '../../shared/GitHubPack';
-import { OptionsWriter } from '../minecraft/OptionsWriter';
-import { applyKaramonBranding } from '../minecraft/BrandingWriter';
-import { parseClientOptions, type ClientOptions } from '../../shared/ClientOptions';
-import { installOverrides } from './OverridesInstaller';
+import { extractZipToDir, readEntryData, resolveInside } from '../../shared/ZipExtract.ts';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import { githubAssetFreshness, packAssetUrl } from '../../shared/GitHubPack.ts';
+import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
+import { applyKaramonBranding } from '../minecraft/BrandingWriter.ts';
+import { parseClientOptions, type ClientOptions } from '../../shared/ClientOptions.ts';
+import { installOverrides } from './OverridesInstaller.ts';
 
 const CACHE_FILE = '.karamon-sync-cache.json';
 const MODS_ZIP_NAME = 'mods.zip';
 const MODS_ZIP_TMP = '.karamon-mods.zip';
+const ASSETS_ZIP_NAME = 'assets.zip';
+const ASSETS_ZIP_TMP = '.karamon-assets.zip';
+const ASSETS_EXTRACT_DIR = '.karamon-assets';
 const RESOURCE_PACKS_MANIFEST = 'resourcepacks-manifest.json';
 const RESOURCE_PACKS_PATH_PREFIX = 'resourcepacks/';
 const SHADER_PACKS_MANIFEST = 'shaderpacks-manifest.json';
@@ -22,6 +25,7 @@ const SHADER_PACKS_PATH_PREFIX = 'shaderpacks/';
 const OVERRIDES_MANIFEST = 'overrides-manifest.json';
 const OVERRIDES_ZIP_TMP = '.karamon-overrides.zip';
 const CLIENT_OPTIONS_NAME = 'client-options.json';
+const CLIENT_OPTIONS_CACHE = '.karamon-client-options.json';
 const PARALLEL_DOWNLOADS = 8;
 const ZIP_DOWNLOAD_TIMEOUT_MS = 1200000;
 
@@ -53,9 +57,18 @@ interface SyncDirs {
   shaderpacks: string;
 }
 
+interface AssetsSnapshot {
+  resourcePacks: ManifestEntry[];
+  shaderPacks: ManifestEntry[];
+  overridesPresent: boolean;
+  overridesKey: string;
+}
+
 interface CacheData {
   modsEtag?: string;
   jarNames?: string[];
+  assetsKey?: string;
+  assetsSnapshot?: AssetsSnapshot;
   resourcePacksKey?: string;
   resourcePackFolders?: string[];
   shaderPacksKey?: string;
@@ -149,11 +162,17 @@ export class ModpackSync {
       throw new Error('mods.zip indisponible (ETag/Last-Modified manquant)');
     }
 
+    const cache = this.readCache(gameDir);
+    const assetsKey = await this.probeAssetsZip(base);
+    if (assetsKey) {
+      await this.syncWithAssetsZip(base, gameDir, dirs, etag, assetsKey, cache, onStatus, onProgress);
+      return;
+    }
+
     const resourcePacks = await this.fetchOptionalManifest(base, RESOURCE_PACKS_MANIFEST);
     const shaderPacks = await this.fetchOptionalManifest(base, SHADER_PACKS_MANIFEST);
     const overrides = await this.fetchOverridesManifest(base);
-    const clientOptions = await this.fetchClientOptions(base);
-    const cache = this.readCache(gameDir);
+    const clientOptions = await this.fetchClientOptions(base, gameDir);
 
     const modsUpToDate =
       cache.modsEtag === etag &&
@@ -381,13 +400,342 @@ export class ModpackSync {
     return this.disabledJarPrefixes.some((prefix) => lower.startsWith(prefix));
   }
 
-  private async fetchClientOptions(baseUrl: string): Promise<ClientOptions | null> {
+  private async fetchClientOptions(baseUrl: string, gameDir?: string): Promise<ClientOptions | null> {
     try {
       const text = await this.http.getText(baseUrl + CLIENT_OPTIONS_NAME);
-      return parseClientOptions(JSON.parse(text)) ?? this.fallbackClientOptions;
+      const parsed = parseClientOptions(JSON.parse(text));
+      if (parsed) return parsed;
+    } catch {
+      /* try local cache / fallback */
+    }
+    return this.loadStoredClientOptions(gameDir);
+  }
+
+  private loadStoredClientOptions(gameDir?: string): ClientOptions | null {
+    if (gameDir) {
+      try {
+        const parsed = parseClientOptions(
+          JSON.parse(fs.readFileSync(path.join(gameDir, CLIENT_OPTIONS_CACHE), 'utf8')),
+        );
+        if (parsed) return parsed;
+      } catch {
+        /* fallback below */
+      }
+    }
+    return this.fallbackClientOptions;
+  }
+
+  private storeClientOptions(gameDir: string, options: ClientOptions | null): void {
+    if (!options) return;
+    try {
+      fs.writeFileSync(path.join(gameDir, CLIENT_OPTIONS_CACHE), JSON.stringify(options), 'utf8');
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  private async probeAssetsZip(baseUrl: string): Promise<string | null> {
+    const url = baseUrl + ASSETS_ZIP_NAME;
+    const githubKey = await githubAssetFreshness(this.http, url);
+    if (githubKey) return githubKey;
+    try {
+      const headers = await this.http.head(url);
+      return ModpackSync.extractEtag(headers) || ModpackSync.extractLengthKey(headers) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async syncWithAssetsZip(
+    baseUrl: string,
+    gameDir: string,
+    dirs: SyncDirs,
+    modsEtag: string,
+    assetsKey: string,
+    cache: CacheData,
+    onStatus: StatusEmitter,
+    onProgress: ProgressEmitter,
+  ): Promise<void> {
+    const modsUpToDate =
+      cache.modsEtag === modsEtag &&
+      Array.isArray(cache.jarNames) &&
+      cache.jarNames.length > 0 &&
+      cache.jarNames.every((n) => fs.existsSync(path.join(dirs.mods, n)));
+    const snapshot = cache.assetsKey === assetsKey ? cache.assetsSnapshot : undefined;
+    const assetsUpToDate = !!snapshot && this.assetsSnapshotPresent(dirs, gameDir, snapshot);
+
+    const applyOptions = (options: ClientOptions | null): void => {
+      const writer = this.optionsWriterFactory(gameDir);
+      try {
+        if (options) {
+          writer.forceResourcePacks(options.resourcePacks);
+          writer.ensureShader(options.shaderPack, options.enableShaders);
+        }
+        applyKaramonBranding(gameDir);
+      } catch {
+        /* non-fatal */
+      }
+    };
+
+    if (modsUpToDate && assetsUpToDate) {
+      applyOptions(this.loadStoredClientOptions(gameDir));
+      onStatus('Pack déjà à jour, aucun téléchargement nécessaire.');
+      onProgress(1);
+      return;
+    }
+
+    let jarNames: string[] = cache.jarNames ?? [];
+    if (!modsUpToDate) {
+      onStatus('Téléchargement de mods.zip...');
+      const zipPath = path.join(gameDir, MODS_ZIP_TMP);
+      try {
+        await this.http.download(baseUrl + MODS_ZIP_NAME, zipPath, {
+          label: MODS_ZIP_NAME,
+          timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
+          onProgress: (p) => onProgress(0.05 + p * 0.55),
+        });
+        onStatus('Extraction des mods...');
+        onProgress(0.62);
+        jarNames = this.extractJars(zipPath, dirs.mods, onStatus);
+      } finally {
+        fs.rmSync(zipPath, { force: true });
+      }
+      this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
+    }
+    onProgress(0.68);
+
+    let installed = snapshot;
+    let clientOptions = this.loadStoredClientOptions(gameDir);
+    let overridesSummary = '';
+    if (!assetsUpToDate) {
+      const result = await this.downloadAndInstallAssets(
+        baseUrl,
+        gameDir,
+        dirs,
+        cache,
+        onStatus,
+        onProgress,
+      );
+      installed = result.snapshot;
+      clientOptions = result.clientOptions ?? clientOptions;
+      overridesSummary = result.overridesSummary;
+    }
+    onProgress(0.98);
+    applyOptions(clientOptions);
+
+    this.writeCache(gameDir, {
+      modsEtag,
+      jarNames,
+      assetsKey,
+      assetsSnapshot: installed,
+      resourcePacksKey: installed ? ModpackSync.hashEntries(installed.resourcePacks) : cache.resourcePacksKey,
+      resourcePackFolders: installed
+        ? ModpackSync.extractedFolders(installed.resourcePacks)
+        : cache.resourcePackFolders,
+      shaderPacksKey: installed ? ModpackSync.hashEntries(installed.shaderPacks) : cache.shaderPacksKey,
+      shaderPackFolders: installed
+        ? ModpackSync.extractedFolders(installed.shaderPacks)
+        : cache.shaderPackFolders,
+      overridesKey: installed?.overridesKey ?? cache.overridesKey,
+      syncedAt: Date.now(),
+    });
+    const rpCount = installed?.resourcePacks.length ?? 0;
+    const spCount = installed?.shaderPacks.length ?? 0;
+    onStatus(`Pack synchronisé: ${jarNames.length} mods, ${rpCount} resource packs, ${spCount} shaders${overridesSummary}.`);
+    onProgress(1);
+  }
+
+  private assetsSnapshotPresent(dirs: SyncDirs, gameDir: string, snapshot: AssetsSnapshot): boolean {
+    if (!this.allEntriesPresent(dirs.resourcepacks, snapshot.resourcePacks)) return false;
+    if (!this.allEntriesPresent(dirs.shaderpacks, snapshot.shaderPacks)) return false;
+    if (snapshot.overridesPresent && !ModpackSync.dirExists(path.join(gameDir, 'config'))) return false;
+    return true;
+  }
+
+  private async downloadAndInstallAssets(
+    baseUrl: string,
+    gameDir: string,
+    dirs: SyncDirs,
+    cache: CacheData,
+    onStatus: StatusEmitter,
+    onProgress: ProgressEmitter,
+  ): Promise<{ snapshot: AssetsSnapshot; clientOptions: ClientOptions | null; overridesSummary: string }> {
+    onStatus('Téléchargement de assets.zip...');
+    const zipPath = path.join(gameDir, ASSETS_ZIP_TMP);
+    const extractDir = path.join(gameDir, ASSETS_EXTRACT_DIR);
+    try {
+      await this.http.download(baseUrl + ASSETS_ZIP_NAME, zipPath, {
+        label: ASSETS_ZIP_NAME,
+        timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
+        onProgress: (p) => onProgress(0.68 + p * 0.2),
+      });
+      onStatus('Extraction des assets...');
+      onProgress(0.89);
+      fs.rmSync(extractDir, { recursive: true, force: true });
+      extractZipToDir(zipPath, extractDir, { stripCommonTopLevelFolder: true });
+
+      const resourcePacks = this.readOptionalManifestFile(path.join(extractDir, RESOURCE_PACKS_MANIFEST));
+      const shaderPacks = this.readOptionalManifestFile(path.join(extractDir, SHADER_PACKS_MANIFEST));
+      const overrides = this.readOverridesManifestFile(path.join(extractDir, OVERRIDES_MANIFEST));
+      const clientOptions = this.readClientOptionsFile(path.join(extractDir, CLIENT_OPTIONS_NAME));
+      this.storeClientOptions(gameDir, clientOptions);
+
+      if (resourcePacks.present) {
+        this.installManifestGroupFromDir(
+          resourcePacks,
+          dirs.resourcepacks,
+          path.join(extractDir, 'resourcepacks'),
+          'resource packs',
+          'Resource pack supprimé',
+          cache.resourcePackFolders,
+          cache.resourcePacksKey !== resourcePacks.key,
+          onStatus,
+        );
+      }
+      if (shaderPacks.present) {
+        this.installManifestGroupFromDir(
+          shaderPacks,
+          dirs.shaderpacks,
+          path.join(extractDir, 'shaderpacks'),
+          'shader packs',
+          'Shader pack supprimé',
+          cache.shaderPackFolders,
+          cache.shaderPacksKey !== shaderPacks.key,
+          onStatus,
+        );
+      }
+
+      let overridesSummary = '';
+      if (overrides.present) {
+        onStatus('Installation des configs du pack...');
+        const result = installOverrides(path.join(extractDir, overrides.name), gameDir);
+        overridesSummary = `, ${result.written} fichier(s) de config`;
+        onStatus(`Configs du pack: ${result.written} écrit(s), ${result.kept} conservé(s).`);
+      }
+
+      return {
+        snapshot: {
+          resourcePacks: resourcePacks.entries,
+          shaderPacks: shaderPacks.entries,
+          overridesPresent: overrides.present,
+          overridesKey: overrides.key,
+        },
+        clientOptions,
+        overridesSummary,
+      };
+    } finally {
+      fs.rmSync(zipPath, { force: true });
+      fs.rmSync(extractDir, { recursive: true, force: true });
+    }
+  }
+
+  private readOptionalManifestFile(filePath: string): OptionalManifest {
+    try {
+      const text = fs.readFileSync(filePath, 'utf8');
+      return {
+        present: true,
+        key: ModpackSync.hashText(text),
+        entries: ModpackSync.parseManifest(text, path.basename(filePath)),
+      };
+    } catch {
+      return { present: false, key: '', entries: [] };
+    }
+  }
+
+  private readOverridesManifestFile(filePath: string): OverridesManifest {
+    try {
+      const text = fs.readFileSync(filePath, 'utf8');
+      const raw = JSON.parse(text) as { name?: unknown; size?: unknown };
+      if (typeof raw?.name !== 'string' || typeof raw?.size !== 'number' || raw.size <= 0) {
+        return { present: false, key: '', name: '', size: 0 };
+      }
+      return { present: true, key: ModpackSync.hashText(text), name: raw.name, size: raw.size };
+    } catch {
+      return { present: false, key: '', name: '', size: 0 };
+    }
+  }
+
+  private readClientOptionsFile(filePath: string): ClientOptions | null {
+    try {
+      return parseClientOptions(JSON.parse(fs.readFileSync(filePath, 'utf8')));
     } catch {
       return this.fallbackClientOptions;
     }
+  }
+
+  private installManifestGroupFromDir(
+    manifest: OptionalManifest,
+    destDir: string,
+    sourceDir: string,
+    statusLabel: string,
+    cleanupLabel: string,
+    previousFolders: string[] | undefined,
+    forceReExtract: boolean,
+    onStatus: StatusEmitter,
+  ): void {
+    if (manifest.entries.length > 0) {
+      onStatus(`Installation de ${manifest.entries.length} ${statusLabel}...`);
+    }
+    for (const entry of manifest.entries) {
+      if (entry.extract) {
+        this.installAndExtractFromDir(entry, destDir, sourceDir, forceReExtract, onStatus);
+      } else {
+        this.installFileFromDir(entry, destDir, sourceDir, onStatus);
+      }
+    }
+    this.cleanupExtras(
+      destDir,
+      manifest.entries.filter((e) => !e.extract).map((e) => e.name),
+      '.zip',
+      onStatus,
+      cleanupLabel,
+    );
+    this.cleanupOrphanedFolders(
+      destDir,
+      previousFolders,
+      ModpackSync.extractedFolders(manifest.entries),
+      onStatus,
+      cleanupLabel,
+    );
+  }
+
+  private installFileFromDir(
+    entry: ManifestEntry,
+    destDir: string,
+    sourceDir: string,
+    onStatus: StatusEmitter,
+  ): void {
+    const target = ModpackSync.safeJoin(destDir, entry.name);
+    if (ModpackSync.fileMatchesSize(target, entry.size)) return;
+    const src = ModpackSync.safeJoin(sourceDir, entry.name);
+    if (!fs.existsSync(src)) {
+      throw new Error(`Asset manquant dans assets.zip: ${entry.name}`);
+    }
+    fs.copyFileSync(src, target);
+    onStatus(`+ ${entry.name}`);
+  }
+
+  private installAndExtractFromDir(
+    entry: ManifestEntry,
+    destDir: string,
+    sourceDir: string,
+    forceReExtract: boolean,
+    onStatus: StatusEmitter,
+  ): void {
+    const folderName = ModpackSync.folderNameFor(entry.name);
+    const folderPath = ModpackSync.safeJoin(destDir, folderName);
+    if (!forceReExtract && ModpackSync.dirExists(folderPath)) return;
+    const src = ModpackSync.safeJoin(sourceDir, entry.name);
+    if (!fs.existsSync(src)) {
+      throw new Error(`Asset manquant dans assets.zip: ${entry.name}`);
+    }
+    fs.rmSync(folderPath, { recursive: true, force: true });
+    extractZipToDir(src, folderPath, { stripCommonTopLevelFolder: true });
+    onStatus(`+ ${folderName}/`);
+  }
+
+  private static hashEntries(entries: ManifestEntry[]): string {
+    return ModpackSync.hashText(JSON.stringify(entries));
   }
 
   private async fetchOptionalManifest(baseUrl: string, manifestName: string): Promise<OptionalManifest> {

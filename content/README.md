@@ -15,7 +15,7 @@ Le tag `pack-latest` est un alias du dernier `pack-vX.Y.Z`. Il n'est jamais marq
 | Fichier | Rôle |
 |---------|------|
 | `pack.json` | Meta pack (MC, Fabric, CDN, jars client à désactiver) |
-| `client-options.json` | Ordre forcé des resource packs + shader Iris |
+| `client-options.json` | Ordre forcé des resource packs + shader Iris (embarqué dans `assets.zip`) |
 | `mods/required.json` | Mods obligatoires |
 | `mods/optional.json` | Mods optionnels |
 | `resourcepacks/required.json` | Resource packs obligatoires |
@@ -29,4 +29,4 @@ Le zip se construit depuis KaramonV2 (`node scripts/build-content-pack.mjs`), pu
 node scripts/publish-pack-assets.mjs
 ```
 
-Le script crée `pack-vX.Y.Z` et met à jour `pack-latest` (les deux avec `--latest=false`).
+Le script crée `pack-vX.Y.Z` et met à jour `pack-latest` (les deux avec `--latest=false`) avec seulement `mods.zip`, `assets.zip`, et `karamon-discord.png`.
