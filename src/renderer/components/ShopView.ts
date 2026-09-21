@@ -36,8 +36,8 @@ const SHOP_KITS: KitOption[] = [
     id: 'mvp',
     name: 'MVP',
     price: 5,
-    accent: '#19d7ff',
-    accent2: '#13a7ff',
+    accent: '#f28ca0',
+    accent2: '#e0556c',
     badge: 'Grade Premium',
     summary: 'Un premier boost solide pour démarrer avec confort, stockage et clés.',
     items: [
@@ -55,8 +55,8 @@ const SHOP_KITS: KitOption[] = [
     id: 'mvpplus',
     name: 'MVP+',
     price: 10,
-    accent: '#8c5cff',
-    accent2: '#db5cff',
+    accent: '#b39dff',
+    accent2: '#c4b9dc',
     badge: 'Meilleur Équilibre',
     summary: 'Plus de Master Balls, des Fossiles Shiny et des clés haut niveau.',
     items: [
@@ -75,8 +75,8 @@ const SHOP_KITS: KitOption[] = [
     id: 'star',
     name: 'STAR',
     price: 30,
-    accent: '#ffcc33',
-    accent2: '#ffe57a',
+    accent: '#ffaa00',
+    accent2: '#ffd27a',
     badge: 'Top Grade',
     summary: 'Le kit le plus complet — Backpack Nétherite, Clés Spéciales et bien plus.',
     items: [
@@ -99,7 +99,7 @@ const SHOP_KEYS: KeyOption[] = [
   {
     id: 'epic',
     name: 'Clé Épique',
-    accent: '#b36cff',
+    accent: '#b39dff',
     summary: 'Progression avancée avec Shiny Charm, Ultimate Candy et récompenses rares.',
     options: [
       { id: 'unit', label: 'Unité', quantity: 1, price: 2.99 },
@@ -115,7 +115,7 @@ const SHOP_KEYS: KeyOption[] = [
   {
     id: 'legendary',
     name: 'Clé Légendaire',
-    accent: '#ff9f1c',
+    accent: '#ffaa00',
     summary: 'La clé haut niveau pour viser les drops qui changent une aventure.',
     options: [
       { id: 'unit', label: 'Unité', quantity: 1, price: 4.99 },
@@ -131,7 +131,7 @@ const SHOP_KEYS: KeyOption[] = [
   {
     id: 'special',
     name: 'Clé Spéciale',
-    accent: '#ff4655',
+    accent: '#e0556c',
     summary: 'La clé la plus rare — drops puissants, exclusifs et très limités.',
     options: [
       { id: 'unit', label: 'Unité', quantity: 1, price: 9.99 },

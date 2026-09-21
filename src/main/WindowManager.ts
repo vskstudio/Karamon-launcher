@@ -16,7 +16,7 @@ export class WindowManager {
       minHeight: 580,
       frame: false,
       transparent: false,
-      backgroundColor: '#0a0e1a',
+      backgroundColor: '#0b0a0d',
       webPreferences: {
         preload: path.join(this.distDir, 'preload.cjs'),
         contextIsolation: true,
