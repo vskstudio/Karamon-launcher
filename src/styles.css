@@ -452,29 +452,6 @@ body {
   -webkit-user-drag: none;
 }
 
-.hero-version {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--quartz-2);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 5px 14px;
-  border-radius: 100px;
-  margin: 0;
-}
-.hero-version::before {
-  content: '';
-  display: inline-block;
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--red);
-  margin-right: 8px;
-  vertical-align: middle;
-  box-shadow: 0 0 8px var(--red-glow);
-}
-
 .play-btn {
   display: flex;
   align-items: center;
