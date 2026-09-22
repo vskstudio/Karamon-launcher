@@ -108,6 +108,8 @@ export class KaramonApp {
     this.discord = new DiscordRpc({
       serverHost: cfg.server?.host || this.pack.statusFallbackHost,
       serverPort: cfg.server?.port || 25565,
+      // play.karamon.fr does not answer status right now. The live tunnel does.
+      fallbackHosts: ['expressing-marx.tun.ply.gg'],
       pinger: this.serverPing,
       log: (msg) => this.window.send(Channels.eventStatus, msg),
     });

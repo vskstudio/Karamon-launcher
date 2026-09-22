@@ -12,6 +12,8 @@ export type RpcState = 'menu' | 'playing';
 export interface DiscordRpcOptions {
   serverHost: string;
   serverPort: number;
+  /** Tried when the primary host does not answer a status ping. */
+  fallbackHosts?: string[];
   pinger: ServerPing;
   log?: (msg: string) => void;
 }
@@ -21,9 +23,7 @@ export class DiscordRpc {
   private connected = false;
   private connecting = false;
   private state: RpcState = 'menu';
-  private playStartedAt: number | null = null;
   private playerCount: number | null = null;
-  private maxPlayers: number | null = null;
   private retryTimer: NodeJS.Timeout | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
@@ -41,15 +41,13 @@ export class DiscordRpc {
 
   setMenu(): void {
     this.state = 'menu';
-    this.playStartedAt = null;
     this.push();
   }
 
   setPlaying(): void {
     this.state = 'playing';
-    this.playStartedAt = Date.now();
-    void this.refreshPlayerCount();
-    this.push();
+    // The game client owns the activity while Minecraft is open, including the
+    // live player count. Pushing here would replace that line with the address.
   }
 
   async destroy(): Promise<void> {
@@ -95,49 +93,50 @@ export class DiscordRpc {
     }
   }
 
-  private async refreshPlayerCount(): Promise<void> {
-    try {
-      const result = await this.opts.pinger.ping(
-        this.opts.serverHost,
-        this.opts.serverPort,
-        PING_TIMEOUT_MS,
-      );
-      if (result.online) {
-        this.playerCount = result.players;
-        this.maxPlayers = result.maxPlayers;
-      } else {
-        this.playerCount = null;
-        this.maxPlayers = null;
-      }
-      this.push();
-    } catch {
-      /* ignore */
+  private hosts(): string[] {
+    const seen = new Set<string>();
+    const hosts: string[] = [];
+    for (const host of [this.opts.serverHost, ...(this.opts.fallbackHosts ?? [])]) {
+      const trimmed = host.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      hosts.push(trimmed);
     }
+    return hosts;
+  }
+
+  private async refreshPlayerCount(): Promise<void> {
+    for (const host of this.hosts()) {
+      try {
+        const result = await this.opts.pinger.ping(host, this.opts.serverPort, PING_TIMEOUT_MS);
+        if (!result.online) continue;
+        this.playerCount = result.players;
+        this.push();
+        return;
+      } catch {
+        /* try the next host */
+      }
+    }
+    this.playerCount = null;
+    this.push();
   }
 
   private playersText(): string {
-    if (this.playerCount !== null && this.maxPlayers !== null) {
+    if (this.playerCount !== null) {
       const word = this.playerCount === 1 ? 'joueur' : 'joueurs';
-      return `${this.playerCount}/${this.maxPlayers} ${word} en ligne`;
+      return `${this.playerCount} ${word} en ligne · play.karamon.fr`;
     }
     return 'play.karamon.fr';
   }
 
   private push(): void {
+    if (this.state === 'playing') return;
     if (!this.connected || !this.client?.user) return;
-    const isPlaying = this.state === 'playing';
-    const base = isPlaying
-      ? {
-          details: 'En jeu sur Karamon',
-          state: this.playersText(),
-          startTimestamp: this.playStartedAt ?? Date.now(),
-          instance: false,
-        }
-      : {
-          details: 'Sur le launcher',
-          state: this.playersText(),
-          instance: false,
-        };
+    const base = {
+      details: 'Sur le launcher',
+      state: this.playersText(),
+      instance: false,
+    };
     const activity = {
       ...base,
       largeImageKey: LARGE_IMAGE_KEY,
