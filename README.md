@@ -3,7 +3,7 @@
   <br/><br/>
   <p>Launcher et pack client pour le serveur <strong>karamon.fr</strong></p>
 
-  ![Version](https://img.shields.io/badge/version-2.0.8-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-2.0.9-blue?style=flat-square)
   ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-green?style=flat-square)
   ![Fabric](https://img.shields.io/badge/Fabric-0.18.4-orange?style=flat-square)
   ![Pack](https://img.shields.io/badge/pack-Cobbleverse%201.7.42-purple?style=flat-square)
@@ -65,8 +65,8 @@ npm run build:dist:mac    # macOS
 Publier le launcher:
 
 ```bash
-git tag launcher-v2.0.8
-git push origin launcher-v2.0.8
+git tag launcher-v2.0.9
+git push origin launcher-v2.0.9
 ```
 
 Publier le pack (après `node scripts/build-content-pack.mjs` côté serveur KaramonV2):

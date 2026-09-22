@@ -9,7 +9,7 @@ const MAX_REDIRECTS = 10;
 const RANGE_MIN_SIZE = 8 * 1024 * 1024;
 const RANGE_PARTS = 8;
 const DEFAULT_HEADERS = {
-  'User-Agent': 'KaramonLauncher/2.0.8',
+  'User-Agent': 'KaramonLauncher/2.0.9',
   Accept: '*/*',
 };
 
