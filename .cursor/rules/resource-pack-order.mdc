@@ -1,0 +1,12 @@
+---
+description: Reapply the Karamon resource pack list on every launch
+alwaysApply: true
+---
+
+# Resource pack order is reapplied every time
+
+The official order lives in memory in KaramonV2 `ResourcePackOrder.PACKS` (last entry = top of the pack screen). Do not rely on a one-shot apply.
+
+Default Options (`defaultResourcePacks` and `defaultoptions.journal.json`) and Resource Pack Overrides `default_packs` only install a list once. That stale Cobbleverse list leaves packs disabled and out of order.
+
+Every launch, and every time the resource pack screen opens, rewrite the saved lists from `ResourcePackOrder.PACKS`, clear the `resource-packs` journal marker, and select that list in the running client.
