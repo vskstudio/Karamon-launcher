@@ -1,7 +1,7 @@
 import { Client } from '@xhayper/discord-rpc';
 import type { ServerPing } from '../server/ServerPing';
 
-const APP_ID = '1501728601760862389';
+const APP_ID = '1550981242508410994';
 const LARGE_IMAGE_KEY = 'karamon';
 const PING_INTERVAL_MS = 60_000;
 const RECONNECT_INTERVAL_MS = 30_000;
