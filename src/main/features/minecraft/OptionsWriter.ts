@@ -40,12 +40,18 @@ export class OptionsWriter {
   }
 
   forceResourcePacks(packs: string[]): void {
-    const file = path.join(this.mcDir, 'options.txt');
+    this.writeResourcePacks(path.join(this.mcDir, 'options.txt'), packs, true);
+    const defaults = path.join(this.mcDir, 'config', 'defaultoptions', 'options.txt');
+    if (fs.existsSync(defaults)) this.writeResourcePacks(defaults, packs, false);
+  }
+
+  private writeResourcePacks(file: string, packs: string[], createIfMissing: boolean): void {
     const key = 'resourcePacks:';
     const line = key + JSON.stringify(packs);
 
     if (!fs.existsSync(file)) {
-      fs.mkdirSync(this.mcDir, { recursive: true });
+      if (!createIfMissing) return;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, `${line}\nincompatibleResourcePacks:[]\n`, 'utf8');
       return;
     }

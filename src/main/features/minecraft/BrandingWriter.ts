@@ -186,8 +186,9 @@ type PackOverride = {
   force_compatible?: boolean;
 };
 
-export function patchPackOverrides(raw: string): string {
+export function patchPackOverrides(raw: string, defaultPacks?: string[]): string {
   const data = JSON.parse(raw) as {
+    default_packs?: string[];
     pack_overrides?: Record<string, PackOverride>;
   };
   if (!data.pack_overrides) data.pack_overrides = {};
@@ -208,6 +209,10 @@ export function patchPackOverrides(raw: string): string {
     '"§e§lTrainer Skins"',
     '"§a✔ Animated Skins for Trainers"',
   );
+
+  if (defaultPacks && defaultPacks.length > 0) {
+    data.default_packs = defaultPacks;
+  }
 
   return `${JSON.stringify(data, null, 2)}\n`;
 }
@@ -271,7 +276,7 @@ function copyFancyAssetsFromUiPack(gameDir: string): void {
   }
 }
 
-export function applyKaramonBranding(gameDir: string): void {
+export function applyKaramonBranding(gameDir: string, resourcePacks?: string[]): void {
   copyFancyAssetsFromUiPack(gameDir);
 
   const fancyDir = path.join(gameDir, 'config', 'fancymenu', 'customization');
@@ -308,7 +313,7 @@ export function applyKaramonBranding(gameDir: string): void {
   if (fs.existsSync(overrides)) {
     try {
       const previous = fs.readFileSync(overrides, 'utf8');
-      writeIfChanged(overrides, patchPackOverrides(previous));
+      writeIfChanged(overrides, patchPackOverrides(previous, resourcePacks));
     } catch {
       /* leave malformed overrides */
     }

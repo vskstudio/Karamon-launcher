@@ -200,7 +200,7 @@ export class ModpackSync {
           writer.forceResourcePacks(clientOptions.resourcePacks);
           writer.ensureShader(clientOptions.shaderPack, clientOptions.enableShaders);
         }
-        applyKaramonBranding(gameDir);
+        applyKaramonBranding(gameDir, clientOptions?.resourcePacks);
       } catch {
         /* non-fatal */
       }
@@ -471,7 +471,7 @@ export class ModpackSync {
           writer.forceResourcePacks(options.resourcePacks);
           writer.ensureShader(options.shaderPack, options.enableShaders);
         }
-        applyKaramonBranding(gameDir);
+        applyKaramonBranding(gameDir, options?.resourcePacks);
       } catch {
         /* non-fatal */
       }

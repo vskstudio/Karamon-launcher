@@ -32,6 +32,22 @@ test('client-options.json pins Karamon UI on top of the current stack', () => {
   assert.ok(idxInterface >= 0 && idxModded === idxInterface + 1);
 });
 
+test('forceResourcePacks updates defaultoptions when present', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-defaultoptions-'));
+  const defaults = path.join(dir, 'config', 'defaultoptions');
+  fs.mkdirSync(defaults, { recursive: true });
+  fs.writeFileSync(
+    path.join(defaults, 'options.txt'),
+    'resourcePacks:["vanilla","file/Old.zip"]\nlanguage:fr_fr\n',
+    'utf8',
+  );
+  new OptionsWriter(dir).forceResourcePacks(['vanilla', 'file/Karamon UI']);
+  const text = fs.readFileSync(path.join(defaults, 'options.txt'), 'utf8');
+  assert.match(text, /resourcePacks:\["vanilla","file\/Karamon UI"\]/);
+  assert.doesNotMatch(text, /Old\.zip/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('forceResourcePacks rewrites the list instead of appending', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-options-'));
   fs.writeFileSync(

@@ -162,6 +162,44 @@ test('patchPackOverrides drops Cobbleverse pack titles', () => {
   assert.doesNotMatch(next, /LUMY/);
 });
 
+test('patchPackOverrides pins default_packs to the given order', () => {
+  const raw = JSON.stringify({
+    schema_version: '2',
+    default_packs: ['vanilla', 'file/COBBLEVERSE RP.zip', 'file/Comforts Modernized.zip'],
+    pack_overrides: {},
+  });
+  const next = patchPackOverrides(raw, [
+    'vanilla',
+    'file/Comforts Modernized - V1.1.zip',
+    'file/Karamon UI',
+  ]);
+  const data = JSON.parse(next) as { default_packs: string[] };
+  assert.deepEqual(data.default_packs, [
+    'vanilla',
+    'file/Comforts Modernized - V1.1.zip',
+    'file/Karamon UI',
+  ]);
+});
+
+test('applyKaramonBranding writes the given pack order into resourcepackoverrides', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-rpo-'));
+  fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'config', 'resourcepackoverrides.json'),
+    JSON.stringify({
+      schema_version: '2',
+      default_packs: ['vanilla', 'file/COBBLEVERSE RP.zip'],
+      pack_overrides: {},
+    }),
+  );
+  applyKaramonBranding(dir, ['vanilla', 'file/Karamon UI']);
+  const data = JSON.parse(
+    fs.readFileSync(path.join(dir, 'config', 'resourcepackoverrides.json'), 'utf8'),
+  ) as { default_packs: string[] };
+  assert.deepEqual(data.default_packs, ['vanilla', 'file/Karamon UI']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('patchFancyOptions sets KARAMON window title', () => {
   const next = patchFancyOptions(
     "B:show_custom_window_icon = 'false';\nS:custom_window_title = '';\nS:custom_window_icon_32 = '';\nS:custom_window_icon_16 = '';\nS:custom_window_icon_macos = '';\nB:show_customization_overlay = 'true';\nB:modpack_mode = 'false';\n",
