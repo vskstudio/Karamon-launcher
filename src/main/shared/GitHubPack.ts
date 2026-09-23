@@ -11,6 +11,7 @@ interface GitHubReleaseAsset {
   id: number;
   name: string;
   size: number;
+  digest?: string;
   updated_at?: string;
   browser_download_url?: string;
 }
@@ -66,6 +67,16 @@ export function parseGitHubDownloadUrl(url: string): GitHubDownloadRef | null {
   return null;
 }
 
+/** Content identity. Republishing pack-latest mints a new asset id; the digest does not. */
+export function assetFreshnessKey(asset: { size?: number; digest?: string }): string | null {
+  const digest = typeof asset.digest === 'string' ? asset.digest.trim().toLowerCase() : '';
+  if (/^sha256:[0-9a-f]{64}$/.test(digest)) return digest;
+  if (typeof asset.size === 'number' && Number.isFinite(asset.size) && asset.size > 0) {
+    return `size:${asset.size}`;
+  }
+  return null;
+}
+
 export async function githubAssetFreshness(http: HttpClient, fileUrl: string): Promise<string | null> {
   const ref = parseGitHubDownloadUrl(fileUrl);
   if (!ref) return null;
@@ -77,7 +88,7 @@ export async function githubAssetFreshness(http: HttpClient, fileUrl: string): P
     const release = await http.getJson<GitHubRelease>(apiUrl);
     const asset = (release.assets ?? []).find((item) => item.name === ref.filename);
     if (!asset) return null;
-    return `${asset.id}-${asset.updated_at ?? asset.size}`;
+    return assetFreshnessKey(asset);
   } catch {
     return null;
   }

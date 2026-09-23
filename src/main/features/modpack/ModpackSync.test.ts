@@ -16,7 +16,10 @@ function zipFiles(filePath: string, files: Record<string, string | Buffer>): voi
   zip.writeZip(filePath);
 }
 
-function fakeHttp(files: Record<string, string>, releaseAssets: { name: string; size: number }[]): HttpClient {
+function fakeHttp(
+  files: Record<string, string>,
+  releaseAssets: { name: string; size: number; digest?: string }[],
+): HttpClient {
   return {
     async getText(url: string): Promise<string> {
       throw new Error(`HTTP 404 for ${url}`);
@@ -29,6 +32,7 @@ function fakeHttp(files: Record<string, string>, releaseAssets: { name: string; 
             id: id + 1,
             name: asset.name,
             size: asset.size,
+            digest: asset.digest,
             updated_at: '2026-09-20T00:00:00Z',
           })),
         };
@@ -118,6 +122,67 @@ test('sync installs mods and assets from two zips', async () => {
     () => undefined,
   );
   assert.equal(again.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('sync keeps installed zips when pack-latest gets a new asset id', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-digest-'));
+  const pack = path.join(dir, 'pack');
+  const game = path.join(dir, 'game');
+  fs.mkdirSync(pack, { recursive: true });
+  const modsZip = path.join(pack, 'mods.zip');
+  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': 'jar-bytes' });
+  const assetsZip = path.join(pack, 'assets.zip');
+  zipFiles(assetsZip, {
+    'client-options.json': JSON.stringify({
+      resourcePacks: ['vanilla'],
+      shaderPack: 'none',
+      enableShaders: false,
+    }),
+    'resourcepacks-manifest.json': '[]',
+    'shaderpacks-manifest.json': '[]',
+  });
+  const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const assetsDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
+  const files = { 'mods.zip': modsZip, 'assets.zip': assetsZip };
+  const first = new ModpackSync({
+    http: fakeHttp(files, [
+      { name: 'mods.zip', size: fs.statSync(modsZip).size, digest },
+      { name: 'assets.zip', size: fs.statSync(assetsZip).size, digest: assetsDigest },
+    ]),
+    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
+  });
+  await first.sync(base, game, () => undefined, () => undefined);
+
+  let downloads = 0;
+  const second = new ModpackSync({
+    http: {
+      async getText(): Promise<string> {
+        throw new Error('unexpected');
+      },
+      async getJson(): Promise<unknown> {
+        return {
+          assets: [
+            { id: 9001, name: 'mods.zip', size: 1, digest, updated_at: '2026-09-23T00:00:00Z' },
+            { id: 9002, name: 'assets.zip', size: 1, digest: assetsDigest, updated_at: '2026-09-23T00:00:00Z' },
+          ],
+        };
+      },
+      async head(): Promise<Record<string, string>> {
+        return {};
+      },
+      async download(): Promise<void> {
+        downloads++;
+        throw new Error('should not download');
+      },
+    } as unknown as HttpClient,
+    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
+  });
+  const statuses: string[] = [];
+  await second.sync(base, game, (msg) => statuses.push(msg), () => undefined);
+  assert.equal(downloads, 0);
+  assert.equal(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

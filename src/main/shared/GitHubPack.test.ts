@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { githubReleaseAssetName, packAssetUrl, parseGitHubDownloadUrl } from './GitHubPack.ts';
+import { assetFreshnessKey, githubReleaseAssetName, packAssetUrl, parseGitHubDownloadUrl } from './GitHubPack.ts';
 
 test('githubReleaseAssetName matches GitHub release filename sanitizing', () => {
   assert.equal(githubReleaseAssetName('COBBLEVERSE RP [CF].zip'), 'COBBLEVERSE.RP.CF.zip');
@@ -34,6 +34,15 @@ test('packAssetUrl keeps folder prefixes on a normal CDN', () => {
     packAssetUrl(base, 'Karamon UI.zip', 'resourcepacks/'),
     'https://cdn.karamon.fr/downloads/resourcepacks/Karamon%20UI.zip',
   );
+});
+
+test('assetFreshnessKey ignores a new GitHub asset id when the digest matches', () => {
+  const digest = 'sha256:c8547dae34c49a797c6d980fba87fc5500c55ed4f27ff963c256371e746ba033';
+  assert.equal(assetFreshnessKey({ size: 383909955, digest }), digest);
+  assert.equal(assetFreshnessKey({ size: 1, digest: digest.toUpperCase() }), digest);
+  assert.equal(assetFreshnessKey({ size: 383909956, digest }), digest);
+  assert.equal(assetFreshnessKey({ size: 100 }), 'size:100');
+  assert.equal(assetFreshnessKey({ size: 0, digest: 'nope' }), null);
 });
 
 test('parseGitHubDownloadUrl reads encoded asset names', () => {
