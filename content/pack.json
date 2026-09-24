@@ -12,6 +12,6 @@
     "url": "https://www.curseforge.com/minecraft/modpacks/cobbleverse-cobblemon/files/8488030",
     "name": "COBBLEVERSE 1.7.42"
   },
-  "cdnBaseUrl": "https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/",
+  "cdnBaseUrl": "https://karamon.fr/downloads/",
   "notes": "Pack 0.5.2: nouveau mod Karamon Admin (touche J, /admin). Logo Karamon a la bonne taille, nouveau fond de menu. Configs du pack (overrides.zip) synchronisees par le launcher 2.0.5+."
 }

@@ -3,7 +3,7 @@
   <br/><br/>
   <p>Launcher et pack client pour le serveur <strong>karamon.fr</strong></p>
 
-  ![Version](https://img.shields.io/badge/version-2.0.10-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-2.0.11-blue?style=flat-square)
   ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-green?style=flat-square)
   ![Fabric](https://img.shields.io/badge/Fabric-0.18.4-orange?style=flat-square)
   ![Pack](https://img.shields.io/badge/pack-Cobbleverse%201.7.42-purple?style=flat-square)
@@ -32,7 +32,7 @@ Le checksum `checksums.txt` est joint à chaque release launcher.
 3. Clique sur **Mettre à jour les mods**
 4. Clique sur **JOUER**
 
-Java 21 est détecté ou installé automatiquement. Le pack se synchronise depuis le tag `pack-latest` de ce repo.
+Java 21 est détecté ou installé automatiquement. Le pack se synchronise depuis `https://karamon.fr/downloads/`.
 
 ## Releases
 
@@ -40,7 +40,7 @@ Java 21 est détecté ou installé automatiquement. Le pack se synchronise depui
 |---|---|
 | `launcher-vX.Y.Z` | Installeur Windows / macOS. Marqué **Latest** pour l'auto-update. |
 | `pack-vX.Y.Z` | Historique du pack client. |
-| `pack-latest` | Alias du pack courant. Le launcher télécharge ici (`mods.zip` + `assets.zip`). |
+| `pack-latest` | Alias du pack courant, lu par les launchers jusqu'à 2.0.10. À partir de 2.0.11, le pack vient de `https://karamon.fr/downloads/`. |
 
 `/releases/latest` reste le launcher. Le pack n'utilise pas ce raccourci, pour ne pas casser l'updater.
 
@@ -65,8 +65,8 @@ npm run build:dist:mac    # macOS
 Publier le launcher:
 
 ```bash
-git tag launcher-v2.0.10
-git push origin launcher-v2.0.10
+git tag launcher-v2.0.11
+git push origin launcher-v2.0.11
 ```
 
 Publier le pack (après `node scripts/build-content-pack.mjs` côté serveur KaramonV2):
@@ -82,7 +82,7 @@ Détail du pack: `content/README.md`.
 | Composant | Technologie |
 |---|---|
 | Shell | Electron |
-| Mods sync | GitHub Releases `pack-latest` + adm-zip |
+| Mods sync | `karamon.fr/downloads/` + adm-zip |
 | Auto-updater | electron-updater (ce repo) |
 | Build | electron-builder |
 

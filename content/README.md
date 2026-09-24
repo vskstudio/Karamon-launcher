@@ -5,10 +5,10 @@ Source de vérité versionnée pour le pack client (Cobbleverse 1.7.42 Fabric + 
 Les binaires (`.jar`, `.zip`) ne sont pas commités. Le launcher synchronise depuis `cdnBaseUrl` dans `pack.json`:
 
 ```
-https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/
+https://karamon.fr/downloads/
 ```
 
-Le tag `pack-latest` est un alias du dernier `pack-vX.Y.Z`. Il n'est jamais marqué Latest, pour laisser `/releases/latest` au launcher.
+Ce dossier est publié par la CI de [`vskstudio/Karamon`](https://github.com/vskstudio/Karamon). Les launchers jusqu'à 2.0.10 lisent encore le tag `pack-latest` de ce repo, gardé à jour le temps que l'auto-update les remplace.
 
 ## Structure
 

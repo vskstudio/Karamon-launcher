@@ -16,7 +16,7 @@ export interface PackProfile {
 const DEFAULTS: PackProfile = {
   minecraft: '1.21.1',
   fabricVersion: '0.18.4',
-  cdnBaseUrl: 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
+  cdnBaseUrl: 'https://karamon.fr/downloads/',
   profileName: 'Karamon',
   publicServerHost: 'karamon.fr',
   statusFallbackHost: 'play.karamon.fr',

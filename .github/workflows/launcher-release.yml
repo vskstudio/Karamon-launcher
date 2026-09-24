@@ -81,7 +81,7 @@ jobs:
             echo "## macOS"
             echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signee: clic droit, Ouvrir."
             echo
-            echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis le tag \`pack-latest\` de ce repo."
+            echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
           } > release-notes.md
           gh release create "$GITHUB_REF_NAME" artifacts/* \
             --repo "${GITHUB_REPOSITORY}" \
