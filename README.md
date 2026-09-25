@@ -62,11 +62,11 @@ npm run build:dist        # Windows
 npm run build:dist:mac    # macOS
 ```
 
-Publier le launcher:
+Publier le launcher: il suffit de pousser sur `main`. Tout push qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante, et les launchers installés la récupèrent (vérif toutes les 30 min, installée à la fermeture). Pour forcer une version précise, pousser un tag:
 
 ```bash
-git tag launcher-v2.0.11
-git push origin launcher-v2.0.11
+git tag launcher-v2.1.0
+git push origin launcher-v2.1.0
 ```
 
 Publier le pack (après `node scripts/build-content-pack.mjs` côté serveur KaramonV2):

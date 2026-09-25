@@ -2,14 +2,58 @@ name: Launcher Release
 
 on:
   push:
+    branches: [main]
+    # Only launcher changes ship a new build; pack content (content/) syncs on its own.
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'build.mjs'
+      - 'electron-builder.yml'
+      - 'scripts/**'
     tags:
       - 'launcher-v*'
 
 permissions:
   contents: write
 
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
+
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A pushed tag keeps its own version. A push to main takes the next patch after the
+      # latest launcher tag, or package.json when it was bumped by hand past that tag.
+      - id: pick
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/launcher-v* ]]; then
+            echo "version=${GITHUB_REF_NAME#launcher-v}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PKG=$(node -p "require('./package.json').version")
+          LAST=$(git tag -l 'launcher-v*' --sort=-v:refname | head -1)
+          LAST="${LAST#launcher-v}"
+          if [ -z "$LAST" ]; then
+            NEXT="$PKG"
+          else
+            IFS=. read -r MA MI PA <<< "$LAST"
+            NEXT=$(printf '%s\n%s\n' "$MA.$MI.$((PA + 1))" "$PKG" | sort -V | tail -1)
+          fi
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -31,11 +75,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Align package version with tag
+      - name: Align package version with release
         shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME#launcher-v}"
-          npm version "$TAG" --no-git-tag-version --allow-same-version
+        run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --allow-same-version
 
       - name: Build installer
         run: npm run ${{ matrix.script }} -- --publish never
@@ -56,7 +98,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER="${GITHUB_REF_NAME#launcher-v}"
+          VER="${{ needs.version.outputs.version }}"
           {
             echo "Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1)."
             echo
@@ -83,8 +125,9 @@ jobs:
             echo
             echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
           } > release-notes.md
-          gh release create "$GITHUB_REF_NAME" artifacts/* \
+          gh release create "launcher-v${VER}" artifacts/* \
             --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
             --title "Karamon Launcher ${VER}" \
             --latest \
             --notes-file release-notes.md

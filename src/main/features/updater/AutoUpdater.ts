@@ -7,6 +7,9 @@ export interface AutoUpdaterOptions {
 }
 
 export class AutoUpdater {
+  // Launchers often stay open for hours, so a release pushed meanwhile must still reach them.
+  private static readonly CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
   private readonly onReady: (info: UpdateInfo) => void;
   private downloadedVersion: string | null = null;
 
@@ -18,7 +21,8 @@ export class AutoUpdater {
     if (!app.isPackaged) return;
 
     autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = false;
+    // Players who ignore the update bar still get the new version the next time they close.
+    autoUpdater.autoInstallOnAppQuit = true;
 
     autoUpdater.on('update-downloaded', (info: ElectronUpdateInfo) => {
       if (info.version === app.getVersion()) return;
@@ -30,6 +34,12 @@ export class AutoUpdater {
       /* silent */
     });
 
+    this.checkQuietly();
+    setInterval(() => this.checkQuietly(), AutoUpdater.CHECK_INTERVAL_MS);
+  }
+
+  private checkQuietly(): void {
+    if (this.downloadedVersion) return;
     autoUpdater.checkForUpdates().catch(() => {
       /* silent if no network */
     });
