@@ -448,7 +448,6 @@ body {
   width: min(520px, 72%);
   max-height: 28%;
   object-fit: contain;
-  filter: drop-shadow(0 10px 28px rgba(224, 85, 108, 0.28));
   -webkit-user-drag: none;
 }
 
