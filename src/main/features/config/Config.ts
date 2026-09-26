@@ -14,6 +14,7 @@ const DEFAULTS: AppConfig = Object.freeze({
   javaPath: '',
   jvmArgs: '',
   closeLauncherOnGameStart: false,
+  devMode: false,
   server: { host: 'play.karamon.fr', port: 25565 },
   theme: 'red',
 }) as AppConfig;
@@ -69,6 +70,7 @@ export class Config {
         updates.closeLauncherOnGameStart,
         base.closeLauncherOnGameStart,
       ),
+      devMode: Config.boolean(updates.devMode, base.devMode),
       theme: updates.theme === 'red' || updates.theme === 'gold' ? updates.theme : base.theme,
       server: {
         host: Config.text(updates.server?.host, base.server.host),

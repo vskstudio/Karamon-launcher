@@ -102,11 +102,15 @@ export class ServersDat {
     this.file = path.join(mcDir, 'servers.dat');
   }
 
-  ensureServer(ip: string, name: string): void {
+  /**
+   * Puts {@code ip} at the top of the list if missing. Outside dev mode, stale entries
+   * (old hosts, localhost) are dropped; in dev mode the player's own entries are kept.
+   */
+  ensureServer(ip: string, name: string, keepLocal = false): void {
     const existing = fs.existsSync(this.file) ? this.read() : [];
     const targetHost = ip.split(':')[0];
 
-    const cleaned = existing.filter((s) => {
+    const cleaned = keepLocal ? existing : existing.filter((s) => {
       const host = (s.ip || '').split(':')[0].toLowerCase();
       return !ServersDat.isLegacyHost(host) || host === targetHost.toLowerCase();
     });

@@ -1,3 +1,4 @@
+import { DevMode } from './shared/DevMode';
 import { app, ipcMain, dialog } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
@@ -271,7 +272,8 @@ export class KaramonApp {
     const results: string[] = [];
     let ok = true;
 
-    const serverResults = this.minecraft.ensureServerLists(gameDir, host, this.pack.profileName);
+    const serverResults = this.minecraft.ensureServerLists(
+      gameDir, host, this.pack.profileName, DevMode.enabled(cfg.devMode));
     const serverErrors = serverResults.filter(
       (r): r is Extract<ServerListSetupResult, { ok: false }> => !r.ok,
     );

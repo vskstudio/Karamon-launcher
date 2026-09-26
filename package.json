@@ -6,7 +6,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/main/features/minecraft/OptionsWriter.test.ts src/main/features/minecraft/BrandingWriter.test.ts src/main/features/modpack/OverridesInstaller.test.ts src/main/features/modpack/ModpackSync.test.ts src/main/shared/ClientOptions.test.ts src/main/shared/GitHubPack.test.ts src/main/shared/HttpClient.test.ts src/main/shared/ZipExtract.test.ts",
+    "test": "node --experimental-strip-types --test src/main/features/minecraft/OptionsWriter.test.ts src/main/features/minecraft/BrandingWriter.test.ts src/main/features/modpack/OverridesInstaller.test.ts src/main/features/modpack/ModpackSync.test.ts src/main/shared/ClientOptions.test.ts src/main/shared/DevMode.test.ts src/main/shared/GitHubPack.test.ts src/main/shared/HttpClient.test.ts src/main/shared/ZipExtract.test.ts",
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "start": "npx electron .",

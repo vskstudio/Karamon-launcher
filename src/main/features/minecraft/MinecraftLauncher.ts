@@ -1,3 +1,4 @@
+import { DevMode } from '../../shared/DevMode';
 import fs from 'fs';
 import path from 'path';
 import type { AppConfig } from '../../../ipc/contract';
@@ -74,10 +75,13 @@ export class MinecraftLauncher {
     return this.gameLauncher.isRunning();
   }
 
-  ensureServerLists(gameDir: string, host: string, name: string): ServerListSetupResult[] {
+  ensureServerLists(gameDir: string, host: string, name: string, devMode = false): ServerListSetupResult[] {
     return this.serverListDirs(gameDir).map((dir) => {
       try {
-        this.serversDatFactory(dir).ensureServer(host, name);
+        const servers = this.serversDatFactory(dir);
+        servers.ensureServer(host, name, devMode);
+        // Dev mode: a ready entry for a server running on this machine.
+        if (devMode) servers.ensureServer('localhost', `${name} (local)`, true);
         return { ok: true, dir };
       } catch (e) {
         return { ok: false, dir, error: (e as Error).message };
@@ -109,6 +113,7 @@ export class MinecraftLauncher {
         memoryMb: config.memoryMb,
         jvmArgs: config.jvmArgs,
         gameDir,
+        devMode: DevMode.enabled(config.devMode),
       },
       {
         onStatus: events.onStatus,
@@ -144,7 +149,8 @@ export class MinecraftLauncher {
   private prepareGameDir(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
     fs.mkdirSync(path.join(gameDir, 'mods'), { recursive: true });
     const host = config.server?.host || this.defaultHost;
-    for (const result of this.ensureServerLists(gameDir, host, this.profileName)) {
+    const dev = DevMode.enabled(config.devMode);
+    for (const result of this.ensureServerLists(gameDir, host, this.profileName, dev)) {
       if (!result.ok) {
         onStatus(`Avertissement servers.dat (${result.dir}): ${result.error}`);
       }
