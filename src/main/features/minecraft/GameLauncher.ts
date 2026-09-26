@@ -1,3 +1,4 @@
+import { DevMode } from '../../shared/DevMode';
 import { spawn, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -23,6 +24,8 @@ export interface LaunchSpec {
   memoryMb: number;
   jvmArgs: string;
   gameDir: string;
+  /** Adds DevMode.JVM_FLAG so the mod shows the server browser. */
+  devMode?: boolean;
 }
 
 export interface LaunchEvents {
@@ -163,6 +166,7 @@ export class GameLauncher {
     const memMb = spec.memoryMb || DEFAULT_MEMORY_MB;
     const heapArgs = [`-Xmx${memMb}m`, '-Xms512m'];
     const userJvm = (spec.jvmArgs || '').split(/\s+/).filter(Boolean);
+    if (spec.devMode) userJvm.push(DevMode.JVM_FLAG);
 
     const vars = {
       authPlayerName: session.profile.name,

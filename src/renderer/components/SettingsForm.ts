@@ -32,6 +32,7 @@ export class SettingsForm {
     $input('cfg-mc-game-dir').value = cfg.mcGameDir ?? '';
     $input('cfg-launcher-path').value = cfg.minecraftLauncherPath ?? '';
     $input('cfg-close-on-launch').checked = cfg.closeLauncherOnGameStart ?? false;
+    $input('cfg-dev-mode').checked = cfg.devMode ?? false;
     return cfg;
   }
 
@@ -136,6 +137,7 @@ export class SettingsForm {
       mcGameDir: $input('cfg-mc-game-dir').value.trim(),
       minecraftLauncherPath: $input('cfg-launcher-path').value.trim(),
       closeLauncherOnGameStart: $input('cfg-close-on-launch').checked,
+      devMode: $input('cfg-dev-mode').checked,
     };
   }
 }
