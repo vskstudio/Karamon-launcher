@@ -129,7 +129,8 @@ export class ServersDat {
   }
 
   private static isLegacyHost(host: string): boolean {
-    return host === 'karamon.fr' || host === 'localhost' || host === '127.0.0.1';
+    // *.ply.gg: the playit tunnel used before the server moved to OVH.
+    return host === 'karamon.fr' || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.ply.gg');
   }
 
   private encode(servers: ServerEntry[]): Buffer {
