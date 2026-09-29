@@ -1,10 +1,4 @@
-/* ─────────────────────────────────────────────────────────────────────────────
-   Karamon Launcher, DA Karamon V2
-   Charbon quartz, rouge pâle, filets cristallins.
-   Display: Space Grotesk · Body: Space Grotesk · Mono: JetBrains Mono
-   ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Surfaces */
   --bg:             #0b0a0d;
   --bg-soft:        #121016;
   --sidebar-bg:     #121016;
@@ -13,18 +7,15 @@
   --surface-3:      #1e1b24;
   --surface-hover:  #17151c;
 
-  /* Lines */
   --border:         #24212b;
   --border-strong:  #2f2b38;
 
-  /* Pale red + quartz */
   --red:            #e0556c;
   --red-2:          #9c1f3a;
   --red-soft:       rgba(224, 85, 108, 0.12);
   --red-glow:       rgba(224, 85, 108, 0.32);
   --accent-light:   #f28ca0;
 
-  /* Aliases */
   --accent:         var(--red);
   --accent-hover:   #c9425a;
   --accent-dim:     var(--red-soft);
@@ -33,19 +24,16 @@
   --quartz-2:       #c4b9dc;
   --quartz-soft:    rgba(196, 185, 220, 0.10);
 
-  /* Status */
   --success:        #22c55e;
   --success-dim:    rgba(34, 197, 94, 0.12);
   --danger:         #f25c4d;
   --warn:           #f59e0b;
   --gold:           #ffaa00;
 
-  /* Text */
   --text:           #ece8f3;
   --text-2:         #b9b3c6;
   --text-3:         #7f798d;
 
-  /* Sizing */
   --sidebar-w:      196px;
   --titlebar-h:     40px;
   --console-h:      220px;
@@ -54,7 +42,6 @@
   --radius-md:      8px;
   --radius-lg:      12px;
 
-  /* Type */
   --font-display:   "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body:      "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-mono:      "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
@@ -62,7 +49,6 @@
   --ease:           cubic-bezier(.22, 1, .36, 1);
 }
 
-/* ── Reset ─────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 input  { font-family: inherit; }
@@ -90,13 +76,11 @@ body {
 
 ::selection { background: var(--red-soft); color: var(--text); }
 
-/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--red-soft); }
 
-/* ── Title bar ──────────────────────────────────────────────────────────────── */
 .titlebar {
   position: fixed;
   top: 0; left: 0; right: 0;
@@ -218,7 +202,6 @@ body {
   max-width: 160px;
 }
 
-/* ── App layout ─────────────────────────────────────────────────────────────── */
 .app {
   position: fixed;
   top: var(--titlebar-h);
@@ -228,7 +211,6 @@ body {
   display: flex;
 }
 
-/* ── Sidebar ────────────────────────────────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);
   background: var(--sidebar-bg);
@@ -300,7 +282,6 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Panels container ───────────────────────────────────────────────────────── */
 .panels {
   flex: 1;
   min-width: 0;
@@ -315,7 +296,6 @@ body {
 }
 .panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
-/* ── Update bar ─────────────────────────────────────────────────────────────── */
 .update-bar {
   display: none;
   align-items: center;
@@ -367,7 +347,6 @@ body {
 }
 .btn-update-later:hover { color: var(--text-2); }
 
-/* ── Home panel ─────────────────────────────────────────────────────────────── */
 #panel-home {
   position: relative;
   overflow: hidden;
@@ -430,7 +409,6 @@ body {
 .server-status-text { font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
 .server-players     { font-size: 12px; color: var(--text-2); font-family: var(--font-mono); }
 
-/* Play area */
 .play-area {
   flex: 1;
   display: flex;
@@ -497,7 +475,6 @@ body {
   transition: opacity 0.15s;
 }
 
-/* Progress */
 .progress-section {
   width: 100%;
   max-width: 420px;
@@ -532,14 +509,12 @@ body {
   color: var(--text-3);
 }
 
-/* ── Mods panel ─────────────────────────────────────────────────────────────── */
 #panel-mods {
   padding: 30px;
   gap: 16px;
   overflow: hidden;
 }
 
-/* ── Tools panel ────────────────────────────────────────────────────────────── */
 #panel-tools {
   padding: 30px;
   gap: 0;
@@ -555,14 +530,12 @@ body {
   padding-bottom: 4px;
 }
 
-/* ── Screenshots panel ──────────────────────────────────────────────────────── */
 #panel-screenshots {
   padding: 30px;
   gap: 0;
   overflow: hidden;
 }
 
-/* ── Shop panel ─────────────────────────────────────────────────────────────── */
 #panel-shop {
   padding: 30px;
   gap: 0;
@@ -769,7 +742,6 @@ body {
   color: var(--text);
 }
 
-/* Cart panel */
 .cart-panel {
   width: 280px;
   flex-shrink: 0;
@@ -908,7 +880,6 @@ body {
   color: #98f3b6;
 }
 
-/* Checkout modal */
 .checkout-backdrop {
   position: fixed;
   inset: 0;
@@ -1047,7 +1018,6 @@ body {
   .cart-panel { width: auto; }
 }
 
-/* ── Settings panel ─────────────────────────────────────────────────────────── */
 #panel-settings {
   padding: 30px;
   gap: 0;
@@ -1064,7 +1034,6 @@ body {
   padding-bottom: 4px;
 }
 
-/* ── Shared page header ─────────────────────────────────────────────────────── */
 .page-header {
   flex-shrink: 0;
   margin-bottom: 24px;
@@ -1092,7 +1061,6 @@ body {
   color: var(--text-2);
 }
 
-/* ── Card ───────────────────────────────────────────────────────────────────── */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1109,7 +1077,6 @@ body {
   align-items: center;
 }
 
-/* ── Mods list ──────────────────────────────────────────────────────────────── */
 .mods-list {
   flex: 1;
   background: var(--surface);
@@ -1124,7 +1091,6 @@ body {
 
 .empty-hint { color: var(--text-3); font-size: 13px; }
 
-/* ── Settings cards ─────────────────────────────────────────────────────────── */
 .settings-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1205,7 +1171,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Checkbox */
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -1261,7 +1226,6 @@ body {
 
 .btn-save { margin-top: 6px; align-self: flex-start; }
 
-/* ── Buttons ────────────────────────────────────────────────────────────────── */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -1308,7 +1272,6 @@ body {
 }
 .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Console drawer ─────────────────────────────────────────────────────────── */
 .console-wrap {
   position: fixed;
   bottom: 0;
@@ -1408,7 +1371,6 @@ body {
 .log-error::before { color: var(--danger); content: '✕'; }
 .log-mc    { color: var(--accent-light); }
 
-/* ── Toasts ─────────────────────────────────────────────────────────────────── */
 .toast-container {
   position: fixed;
   bottom: 20px;
@@ -1440,7 +1402,6 @@ body {
   to   { transform: translateX(0); opacity: 1; }
 }
 
-/* ── Mods list rows ─────────────────────────────────────────────────────────── */
 .mods-list.has-items {
   display: block;
   align-items: stretch;
@@ -1504,7 +1465,6 @@ body {
 }
 .mods-count { color: var(--red); font-weight: 700; }
 
-/* ── Stats strip on home ────────────────────────────────────────────────────── */
 .stats-strip {
   margin-top: 2px;
   display: flex;
@@ -1540,7 +1500,6 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* ── Stats grid in settings ─────────────────────────────────────────────────── */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -1556,7 +1515,6 @@ body {
   border-radius: var(--radius);
 }
 
-/* ── Players tooltip ────────────────────────────────────────────────────────── */
 .server-players { position: relative; cursor: default; }
 
 .players-tooltip {
@@ -1586,7 +1544,6 @@ body {
   animation: toast-in 0.2s var(--ease);
 }
 
-/* ── Form extras ────────────────────────────────────────────────────────────── */
 .field-row {
   display: flex;
   gap: 8px;
@@ -1619,11 +1576,9 @@ body {
   letter-spacing: 0.06em;
 }
 
-/* RAM hint warning */
 #ram-hint.warn { color: var(--warn); }
 #ram-hint.danger { color: var(--danger); }
 
-/* ── Theme picker ───────────────────────────────────────────────────────────── */
 .theme-picker {
   display: flex;
   gap: 10px;
@@ -1665,7 +1620,6 @@ body {
   box-shadow: 0 0 0 2px var(--accent), 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
-/* ── Gold theme override ────────────────────────────────────────────────────── */
 body.theme-gold {
   --red: #ffaa00;
   --red-2: #c48400;
@@ -1677,7 +1631,6 @@ body.theme-gold {
   --accent-light: #ffd27a;
 }
 
-/* ── Pokeball easter egg ────────────────────────────────────────────────────── */
 .pokeball-overlay {
   position: fixed;
   inset: 0;
@@ -1759,7 +1712,6 @@ body.theme-gold {
   vertical-align: middle; box-shadow: 0 0 8px var(--danger);
 }
 
-/* ── Quick links (sidebar footer) ──────────────────────────────────────────── */
 .nav-links { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .nav-link {
   display: flex; align-items: center; gap: 10px;
@@ -1772,14 +1724,12 @@ body.theme-gold {
 .nav-link:hover { color: var(--red); background: var(--red-soft); }
 .nav-link .nav-icon { width: 14px; height: 14px; flex-shrink: 0; }
 
-/* ── Sparkline ─────────────────────────────────────────────────────────────── */
 .players-sparkline {
   width: 80px; height: 24px;
   color: var(--red); opacity: 0.7;
   margin-left: 12px;
 }
 
-/* ── Screenshots gallery ───────────────────────────────────────────────────── */
 .screenshots-grid {
   flex: 1;
   display: grid;
@@ -1831,7 +1781,6 @@ body.theme-gold {
 .screenshot-tile:hover .screenshot-del { opacity: 1; }
 .screenshot-del:hover { background: var(--danger); border-color: var(--danger); }
 
-/* ── Lightbox ──────────────────────────────────────────────────────────────── */
 .lightbox {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.92);
@@ -1867,7 +1816,6 @@ body.theme-gold {
 }
 .lightbox-close:hover { background: var(--danger); border-color: var(--danger); }
 
-/* ── Tools panel: crash list & backup list ─────────────────────────────────── */
 .crash-list, .backup-list {
   display: flex; flex-direction: column; gap: 6px;
   margin-top: 14px;
@@ -1901,7 +1849,6 @@ body.theme-gold {
   color: var(--text);
 }
 
-/* ── Crash modal ───────────────────────────────────────────────────────────── */
 .crash-modal {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.85);
