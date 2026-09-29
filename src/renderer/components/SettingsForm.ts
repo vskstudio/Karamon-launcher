@@ -15,12 +15,6 @@ export interface SettingsFormOptions {
 export class SettingsForm {
   static readonly DEFAULT_MEMORY_MB = 12288;
 
-  private static readonly GAME_DIR_PLACEHOLDERS: Record<string, string> = {
-    win32: '%APPDATA%\\.minecraft',
-    darwin: '~/Library/Application Support/minecraft',
-    linux: '~/.minecraft',
-  };
-
   private readonly api: LauncherApi;
   private readonly onSaved: (updates: AppConfigUpdate) => void;
   private systemInfo: SystemInfo | null = null;
@@ -100,8 +94,6 @@ export class SettingsForm {
     SettingsForm.setText('sys-ram', ram);
     SettingsForm.setText('sys-cpu', `${this.systemInfo.cpuCount} cœurs`);
     SettingsForm.setText('sys-os', `${this.systemInfo.platform} ${this.systemInfo.arch}`);
-    $input('cfg-mc-game-dir').placeholder =
-      SettingsForm.GAME_DIR_PLACEHOLDERS[this.systemInfo.platform] ?? SettingsForm.GAME_DIR_PLACEHOLDERS.linux;
     this.refreshRamHint();
     return this.systemInfo;
   }
