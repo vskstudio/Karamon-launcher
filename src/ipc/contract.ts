@@ -131,13 +131,6 @@ export interface BackupListResult {
   backups: BackupEntry[];
 }
 
-export interface ReleaseNote {
-  version: string;
-  url: string;
-  publishedAt: number | null;
-  highlights: string[];
-}
-
 export interface ShopOffer {
   id: string;
   name: string;
@@ -200,8 +193,8 @@ export const Channels = {
   backupList: 'backup:list',
   backupDelete: 'backup:delete',
 
-  releasesList: 'releases:list',
   shopOffers: 'shop:offers',
+  skinUrl: 'skin:url',
 
   authLogin: 'auth:login',
   authLogout: 'auth:logout',
@@ -241,8 +234,8 @@ export interface IpcInvokeContract {
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
-  [Channels.releasesList]: { req: void; res: ReleaseNote[] };
   [Channels.shopOffers]: { req: void; res: ShopOffer[] };
+  [Channels.skinUrl]: { req: string; res: string | null };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
   [Channels.authLogout]: { req: void; res: void };
   [Channels.authGetSession]: { req: void; res: AuthSessionResult };
@@ -301,8 +294,8 @@ export interface LauncherApi {
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;
 
-  listReleases(): Promise<ReleaseNote[]>;
   listShopOffers(): Promise<ShopOffer[]>;
+  skinUrl(profileId: string): Promise<string | null>;
 
   authLogin(): Promise<AuthLoginResult>;
   authLogout(): Promise<void>;

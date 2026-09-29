@@ -40,8 +40,8 @@ const api: LauncherApi = {
   listBackups: () => ipcRenderer.invoke(Channels.backupList),
   deleteBackup: (name) => ipcRenderer.invoke(Channels.backupDelete, name),
 
-  listReleases: () => ipcRenderer.invoke(Channels.releasesList),
   listShopOffers: () => ipcRenderer.invoke(Channels.shopOffers),
+  skinUrl: (profileId) => ipcRenderer.invoke(Channels.skinUrl, profileId),
 
   authLogin: () => ipcRenderer.invoke(Channels.authLogin),
   authLogout: () => ipcRenderer.invoke(Channels.authLogout),

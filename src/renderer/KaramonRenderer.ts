@@ -17,7 +17,6 @@ import { QuickLinks } from './components/QuickLinks';
 import { JvmPresets } from './components/JvmPresets';
 import { ToolsView } from './components/ToolsView';
 import { ShopView } from './components/ShopView';
-import { ReleaseCards } from './components/ReleaseCards';
 import { AccountChip } from './components/AccountChip';
 import type { PingResult } from '../ipc/contract';
 
@@ -37,7 +36,6 @@ export class KaramonRenderer {
   private readonly sparkline: PlayersSparkline;
   private readonly tools: ToolsView;
   private readonly shop: ShopView;
-  private readonly releases: ReleaseCards;
   private readonly accountChip: AccountChip;
   private gameRunning = false;
   private actionRunning = false;
@@ -75,8 +73,11 @@ export class KaramonRenderer {
     this.screenshots = new ScreenshotsView(api, $('screenshots-grid'));
     this.tools = new ToolsView(api);
     this.shop = new ShopView(api);
-    this.releases = new ReleaseCards(api, $('release-grid'));
-    this.accountChip = new AccountChip($('account-chip'), () => void this.handleLogout());
+    this.accountChip = new AccountChip(
+      $('account-chip'),
+      () => void this.handleLogout(),
+      (profileId) => api.skinUrl(profileId),
+    );
   }
 
   private onPingResult(r: PingResult, prev: 'online' | 'offline' | 'unknown'): void {
@@ -140,7 +141,6 @@ export class KaramonRenderer {
     void this.settings.loadSystemInfo();
     void this.settings.populateJava();
     void this.stats.refresh();
-    void this.releases.load();
 
     const setup = await this.api.setupMinecraft();
     this.console.log('Instance: ' + setup.path, setup.ok ? 'ok' : 'warn');
