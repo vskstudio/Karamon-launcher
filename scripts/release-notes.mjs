@@ -8,7 +8,7 @@ const notes = [
   'Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1).',
   '',
   '## Windows',
-  `Installe \`Karamon Launcher Setup ${version}.exe\`, connecte-toi avec Microsoft, mets à jour les mods, puis JOUER.`,
+  `Installe \`Karamon-Launcher-Setup-${version}.exe\`, connecte-toi avec Microsoft, mets à jour les mods, puis JOUER.`,
   '',
   '## macOS',
   "Ouvre le `.dmg` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signée : clic droit, Ouvrir.",

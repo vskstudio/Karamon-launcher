@@ -18,10 +18,10 @@ Repo public unique: installeur du launcher **et** le pack client (`mods.zip` + `
 Dernier installeur: [Releases](https://github.com/vskstudio/Karamon-launcher/releases) (tags `launcher-v*`).
 
 ```
-Karamon Launcher Setup x.x.x.exe
+Karamon-Launcher-Setup-x.x.x.exe
 ```
 
-macOS: `.dmg` arm64 (Apple Silicon) ou x64 (Intel). App non signée: clic droit, Ouvrir.
+macOS: `.dmg` arm64 (Apple Silicon) ou x64 (Intel). App non signée: clic droit, Ouvrir. Chaque release macOS publie aussi un `.zip` par architecture, référencé par `latest-mac.yml` pour l'auto-update. electron-updater n'installe ce `.zip` que sur une app signée, donc tant que l'app ne l'est pas, une mise à jour macOS passe par le `.dmg` de la dernière release.
 
 Linux: `Karamon-Launcher-x.x.x.AppImage` (x64), à rendre exécutable avec `chmod +x`.
 
