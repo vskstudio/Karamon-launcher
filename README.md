@@ -23,7 +23,9 @@ Karamon Launcher Setup x.x.x.exe
 
 macOS: `.dmg` arm64 (Apple Silicon) ou x64 (Intel). App non signée: clic droit, Ouvrir.
 
-Le checksum `checksums.txt` est joint à chaque release launcher.
+Linux: `Karamon-Launcher-x.x.x.AppImage` (x64), à rendre exécutable avec `chmod +x`.
+
+Le job de release calcule un seul `checksums.txt` (SHA256 et SHA512 des installeurs Windows, macOS et Linux et de leurs fichiers d'auto-update) et le joint à chaque release launcher.
 
 ## Utilisation
 
@@ -38,7 +40,7 @@ Java 21 est détecté ou installé automatiquement. Le pack se synchronise depui
 
 | Tag | Rôle |
 |---|---|
-| `launcher-vX.Y.Z` | Installeur Windows / macOS. Marqué **Latest** pour l'auto-update. |
+| `launcher-vX.Y.Z` | Installeur Windows / macOS / Linux. Marqué **Latest** pour l'auto-update. |
 | `pack-vX.Y.Z` | Historique du pack client. |
 | `pack-latest` | Alias du pack courant, lu par les launchers jusqu'à 2.0.10. À partir de 2.0.11, le pack vient de `https://karamon.fr/downloads/`. |
 
@@ -60,6 +62,7 @@ npm start
 ```bash
 npm run build:dist        # Windows
 npm run build:dist:mac    # macOS
+npm run build:dist:linux  # Linux (AppImage)
 ```
 
 Publier le launcher: il suffit de pousser sur `main`. Tout push qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante, et les launchers installés la récupèrent (vérif toutes les 30 min, installée à la fermeture). Pour forcer une version précise, pousser un tag:
@@ -87,5 +90,5 @@ Détail du pack: `content/README.md`.
 | Build | electron-builder |
 
 <div align="center">
-  <sub>Karamon — karamon.fr</sub>
+  <sub>Karamon, karamon.fr</sub>
 </div>

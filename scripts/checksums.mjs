@@ -1,13 +1,13 @@
 import { createHash } from 'crypto';
-import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
 import { join, extname, resolve } from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = new URL('.', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
-const distDir   = process.argv[2] ? resolve(process.argv[2]) : join(__dirname, '..', 'dist');
 
 const INCLUDE_EXTS = new Set(['.exe', '.dmg', '.zip', '.AppImage', '.yml', '.blockmap']);
-const EXCLUDE      = new Set(['builder-debug.yml', 'builder-effective-config.yaml']);
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
 
 function hash(file, algo) {
   return createHash(algo).update(readFileSync(file)).digest('hex');
@@ -19,19 +19,15 @@ function formatSize(bytes) {
   return bytes + ' B';
 }
 
+if (!process.argv[2]) fail('usage: node scripts/checksums.mjs <dossier des artefacts>');
+const distDir = resolve(process.argv[2]);
+if (!existsSync(distDir) || !statSync(distDir).isDirectory()) fail(`Dossier introuvable : ${distDir}`);
+
 const files = readdirSync(distDir)
-  .filter(name => {
-    if (EXCLUDE.has(name))          return false;
-    if (!INCLUDE_EXTS.has(extname(name))) return false;
-    const full = join(distDir, name);
-    return statSync(full).isFile();
-  })
+  .filter(name => INCLUDE_EXTS.has(extname(name)) && statSync(join(distDir, name)).isFile())
   .sort();
 
-if (files.length === 0) {
-  console.log('Aucun artefact trouvé dans dist/');
-  process.exit(0);
-}
+if (files.length === 0) fail(`Aucun artefact trouvé dans ${distDir}`);
 
 const lines = [
   `Karamon Launcher checksums`,
