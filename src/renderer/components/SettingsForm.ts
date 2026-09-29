@@ -15,19 +15,10 @@ export interface SettingsFormOptions {
 export class SettingsForm {
   static readonly DEFAULT_MEMORY_MB = 12288;
 
-  private static readonly PATH_PLACEHOLDERS: Record<string, { gameDir: string; launcher: string }> = {
-    win32: {
-      gameDir: '%APPDATA%\\.minecraft',
-      launcher: 'C:\\Program Files (x86)\\Minecraft Launcher\\MinecraftLauncher.exe',
-    },
-    darwin: {
-      gameDir: '~/Library/Application Support/minecraft',
-      launcher: '/Applications/Minecraft.app',
-    },
-    linux: {
-      gameDir: '~/.minecraft',
-      launcher: '/usr/bin/minecraft-launcher',
-    },
+  private static readonly GAME_DIR_PLACEHOLDERS: Record<string, string> = {
+    win32: '%APPDATA%\\.minecraft',
+    darwin: '~/Library/Application Support/minecraft',
+    linux: '~/.minecraft',
   };
 
   private readonly api: LauncherApi;
@@ -45,7 +36,6 @@ export class SettingsForm {
     $input('cfg-jvm-args').value = cfg.jvmArgs ?? '';
     $input('cfg-java-path').value = cfg.javaPath ?? '';
     $input('cfg-mc-game-dir').value = cfg.mcGameDir ?? '';
-    $input('cfg-launcher-path').value = cfg.minecraftLauncherPath ?? '';
     $input('cfg-close-on-launch').checked = cfg.closeLauncherOnGameStart ?? false;
     $input('cfg-dev-mode').checked = cfg.devMode ?? false;
     return cfg;
@@ -110,22 +100,17 @@ export class SettingsForm {
     SettingsForm.setText('sys-ram', ram);
     SettingsForm.setText('sys-cpu', `${this.systemInfo.cpuCount} cœurs`);
     SettingsForm.setText('sys-os', `${this.systemInfo.platform} ${this.systemInfo.arch}`);
-    this.applyPathPlaceholders(this.systemInfo.platform);
+    $input('cfg-mc-game-dir').placeholder =
+      SettingsForm.GAME_DIR_PLACEHOLDERS[this.systemInfo.platform] ?? SettingsForm.GAME_DIR_PLACEHOLDERS.linux;
     this.refreshRamHint();
     return this.systemInfo;
-  }
-
-  private applyPathPlaceholders(platform: string): void {
-    const placeholders = SettingsForm.PATH_PLACEHOLDERS[platform] ?? SettingsForm.PATH_PLACEHOLDERS.linux;
-    $input('cfg-mc-game-dir').placeholder = placeholders.gameDir;
-    $input('cfg-launcher-path').placeholder = placeholders.launcher;
   }
 
   private refreshRamHint(): void {
     const hint = $('ram-hint');
     const value = parseInt($input('cfg-memory').value, 10) || 0;
     if (!this.systemInfo) {
-      hint.textContent = 'Recommandé : 8192–12288 Mo (8–12 Go)';
+      hint.textContent = 'Recommandé : 8192 à 12288 Mo (8 à 12 Go)';
       hint.classList.remove('warn');
       return;
     }
@@ -157,7 +142,6 @@ export class SettingsForm {
       jvmArgs: $input('cfg-jvm-args').value.trim(),
       javaPath: $input('cfg-java-path').value.trim(),
       mcGameDir: $input('cfg-mc-game-dir').value.trim(),
-      minecraftLauncherPath: $input('cfg-launcher-path').value.trim(),
       closeLauncherOnGameStart: $input('cfg-close-on-launch').checked,
       devMode: $input('cfg-dev-mode').checked,
     };

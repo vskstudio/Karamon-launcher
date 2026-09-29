@@ -9,7 +9,6 @@ const MAX_PORT = 65535;
 
 const DEFAULTS: AppConfig = Object.freeze({
   mcGameDir: '',
-  minecraftLauncherPath: '',
   memoryMb: 12288,
   javaPath: '',
   jvmArgs: '',
@@ -34,8 +33,8 @@ export class Config {
         this.data = Config.normalize(Config.merge(DEFAULTS, raw));
         return this;
       }
-    } catch {
-      /* fall through to defaults */
+    } catch (error) {
+      console.warn(`Config ${this.filePath} illisible, valeurs par défaut utilisées:`, error);
     }
     this.data = Config.clone(DEFAULTS);
     return this;
@@ -62,7 +61,6 @@ export class Config {
     const updates: AppConfigUpdate = raw && typeof raw === 'object' ? raw : {};
     return {
       mcGameDir: Config.text(updates.mcGameDir, base.mcGameDir),
-      minecraftLauncherPath: Config.text(updates.minecraftLauncherPath, base.minecraftLauncherPath),
       memoryMb: Config.number(updates.memoryMb, base.memoryMb),
       javaPath: Config.text(updates.javaPath, base.javaPath),
       jvmArgs: Config.text(updates.jvmArgs, base.jvmArgs),

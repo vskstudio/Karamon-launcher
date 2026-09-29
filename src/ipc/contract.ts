@@ -5,12 +5,10 @@ export interface ServerInfo {
 
 export interface AppConfig {
   mcGameDir: string;
-  minecraftLauncherPath: string;
   memoryMb: number;
   javaPath: string;
   jvmArgs: string;
   closeLauncherOnGameStart: boolean;
-  /** Development build of the game: brings back the server browser (see DevMode). */
   devMode: boolean;
   server: ServerInfo;
   theme: 'red' | 'gold';

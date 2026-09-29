@@ -103,7 +103,6 @@
 
   <main class="panels">
 
-    <!-- UPDATE BAR (visible uniquement quand la mise à jour est prête) -->
     <div class="update-bar" id="update-bar">
       <div class="update-bar-left">
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,7 +116,6 @@
       </div>
     </div>
 
-    <!-- HOME -->
     <section class="panel active" id="panel-home">
       <div class="server-bar">
         <div class="server-bar-left">
@@ -167,7 +165,6 @@
       </div>
     </section>
 
-    <!-- MODS -->
     <section class="panel" id="panel-mods">
       <div class="page-header">
         <h2>Pack</h2>
@@ -204,7 +201,6 @@
       </div>
     </section>
 
-    <!-- TOOLS -->
     <section class="panel" id="panel-tools">
       <div class="page-header">
         <h2>Outils</h2>
@@ -231,7 +227,6 @@
       </div>
     </section>
 
-    <!-- SCREENSHOTS -->
     <section class="panel" id="panel-screenshots">
       <div class="page-header">
         <h2>Captures</h2>
@@ -242,11 +237,10 @@
       </div>
     </section>
 
-    <!-- SHOP -->
     <section class="panel" id="panel-shop">
       <div class="page-header">
         <h2>Boutique</h2>
-        <p>Grades & clés de lootbox — paiement PayPal</p>
+        <p>Grades & clés de lootbox, paiement PayPal</p>
       </div>
       <div class="shop-body">
         <div class="shop-content">
@@ -254,7 +248,7 @@
             <div class="shop-section-heading">
               <p class="kicker">Grades achetables</p>
               <h3>Grades disponibles</h3>
-              <p class="shop-section-lead">Un seul achat — les avantages sont permanents sur le serveur.</p>
+              <p class="shop-section-lead">Un seul achat : les avantages sont permanents sur le serveur.</p>
             </div>
             <div class="product-grid" id="shop-kits-grid"></div>
           </section>
@@ -284,7 +278,6 @@
       </div>
     </section>
 
-    <!-- SETTINGS -->
     <section class="panel" id="panel-settings">
       <div class="page-header">
         <h2>Paramètres</h2>
@@ -297,11 +290,6 @@
           <div class="field">
             <label>Dossier .minecraft</label>
             <input type="text" id="cfg-mc-game-dir" />
-            <span class="field-hint">Laisser vide pour détection automatique</span>
-          </div>
-          <div class="field">
-            <label>Launcher Minecraft</label>
-            <input type="text" id="cfg-launcher-path" />
             <span class="field-hint">Laisser vide pour détection automatique</span>
           </div>
           <div class="field">
@@ -322,7 +310,7 @@
           <div class="field">
             <label>RAM allouée (Mo)</label>
             <input type="number" id="cfg-memory" min="1024" max="32768" step="512" placeholder="12288" />
-            <span class="field-hint" id="ram-hint">Recommandé : 8192–12288 Mo (8–12 Go)</span>
+            <span class="field-hint" id="ram-hint">Recommandé : 8192 à 12288 Mo (8 à 12 Go)</span>
           </div>
           <div class="field">
             <label>Arguments JVM</label>
@@ -406,7 +394,6 @@
   </main>
 </div>
 
-<!-- CONSOLE DRAWER -->
 <div class="console-wrap" id="console-wrap">
   <div class="console-header" id="console-toggle">
     <div class="console-header-left">
@@ -453,7 +440,7 @@
         </button>
       </div>
       <p class="checkout-help">
-        Le paiement ouvre PayPal avec le montant du panier. Le résumé Username / Items est copié dans le presse-papier — colle-le dans la note PayPal.
+        Le paiement ouvre PayPal avec le montant du panier. Le résumé Username / Items est copié dans le presse-papier. Colle-le dans la note PayPal.
       </p>
       <label class="checkout-field">
         <span>Username Minecraft</span>
