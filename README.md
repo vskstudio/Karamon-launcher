@@ -34,7 +34,7 @@ Le job de release calcule un seul `checksums.txt` (SHA256 et SHA512 des installe
 3. Clique sur **Mettre à jour les mods**
 4. Clique sur **JOUER**
 
-Java 21 est détecté ou installé automatiquement. Le pack se synchronise depuis `https://karamon.fr/downloads/`.
+Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis `https://karamon.fr/downloads/`.
 
 ## Releases
 

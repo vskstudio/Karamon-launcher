@@ -24,6 +24,7 @@ interface AdoptiumPlatform {
 const ADOPTIUM_PLATFORMS: Partial<Record<NodeJS.Platform, AdoptiumPlatform>> = {
   win32: { os: 'windows', archiveExt: '.zip' },
   linux: { os: 'linux', archiveExt: '.tar.gz' },
+  darwin: { os: 'mac', archiveExt: '.tar.gz' },
 };
 
 interface AdoptiumPackage {

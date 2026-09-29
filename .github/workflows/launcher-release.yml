@@ -144,7 +144,7 @@ jobs:
             echo "## Linux"
             echo "Télécharge \`Karamon-Launcher-${VER}.AppImage\`, rends-le exécutable (\`chmod +x\`) puis lance-le."
             echo
-            echo "Java 21 est détecté ou installé automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
+            echo "Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis https://karamon.fr/downloads/."
           } > release-notes.md
           gh release create "launcher-v${VER}" artifacts/* \
             --repo "${GITHUB_REPOSITORY}" \
