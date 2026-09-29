@@ -14,7 +14,14 @@ const RUNTIME_DIR_NAME = 'jre-21';
 const ADOPTIUM_DOWNLOAD_TIMEOUT_MS = 600000;
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
-const ADOPTIUM_PLATFORMS: Partial<Record<NodeJS.Platform, { os: string; archiveExt: string }>> = {
+type ArchiveExt = '.zip' | '.tar.gz';
+
+interface AdoptiumPlatform {
+  os: string;
+  archiveExt: ArchiveExt;
+}
+
+const ADOPTIUM_PLATFORMS: Partial<Record<NodeJS.Platform, AdoptiumPlatform>> = {
   win32: { os: 'windows', archiveExt: '.zip' },
   linux: { os: 'linux', archiveExt: '.tar.gz' },
 };
@@ -85,7 +92,7 @@ export class JavaProvisioner {
   }
 
   private async installAdoptium(
-    platform: { os: string; archiveExt: string },
+    platform: AdoptiumPlatform,
     onStatus: StatusEmitter,
     onProgress: ProgressEmitter,
   ): Promise<string> {
@@ -121,7 +128,7 @@ export class JavaProvisioner {
     });
 
     onStatus('Extraction de Java 21...');
-    await this.extractRuntime(tmpArchive);
+    await this.extractRuntime(tmpArchive, platform.archiveExt);
     fs.rmSync(tmpArchive, { force: true });
 
     const javaPath = this.managedJavaPath();
@@ -136,13 +143,13 @@ export class JavaProvisioner {
     return javaPath;
   }
 
-  private async extractRuntime(archivePath: string): Promise<void> {
+  private async extractRuntime(archivePath: string, archiveExt: ArchiveExt): Promise<void> {
     const root = this.runtimeRoot();
     if (fs.existsSync(root)) {
       fs.rmSync(root, { recursive: true, force: true });
     }
     fs.mkdirSync(root, { recursive: true });
-    if (archivePath.toLowerCase().endsWith('.tar.gz')) {
+    if (archiveExt === '.tar.gz') {
       await execFileP('tar', ['-xzf', archivePath, '-C', root]);
       return;
     }
@@ -193,7 +200,7 @@ export class JavaProvisioner {
 
   private static pickArchiveAsset(
     assets: AdoptiumAsset[] | null | undefined,
-    archiveExt: string,
+    archiveExt: ArchiveExt,
   ): AdoptiumAsset | null {
     if (!Array.isArray(assets) || assets.length === 0) return null;
     return assets.find((a) => a.binary.package.name?.toLowerCase().endsWith(archiveExt)) ?? null;
