@@ -136,15 +136,15 @@ jobs:
             echo "Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1)."
             echo
             echo "## Windows"
-            echo "Installe \`Karamon Launcher Setup ${VER}.exe\`, connecte-toi avec Microsoft, mets a jour les mods, puis JOUER."
+            echo "Installe \`Karamon Launcher Setup ${VER}.exe\`, connecte-toi avec Microsoft, mets à jour les mods, puis JOUER."
             echo
             echo "## macOS"
-            echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signee: clic droit, Ouvrir."
+            echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signée : clic droit, Ouvrir."
             echo
             echo "## Linux"
-            echo "Telecharge \`Karamon-Launcher-${VER}.AppImage\`, rends-le executable (\`chmod +x\`) puis lance-le."
+            echo "Télécharge \`Karamon-Launcher-${VER}.AppImage\`, rends-le exécutable (\`chmod +x\`) puis lance-le."
             echo
-            echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
+            echo "Java 21 est détecté ou installé automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
           } > release-notes.md
           gh release create "launcher-v${VER}" artifacts/* \
             --repo "${GITHUB_REPOSITORY}" \
