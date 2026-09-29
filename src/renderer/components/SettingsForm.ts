@@ -15,6 +15,21 @@ export interface SettingsFormOptions {
 export class SettingsForm {
   static readonly DEFAULT_MEMORY_MB = 12288;
 
+  private static readonly PATH_PLACEHOLDERS: Record<string, { gameDir: string; launcher: string }> = {
+    win32: {
+      gameDir: '%APPDATA%\\.minecraft',
+      launcher: 'C:\\Program Files (x86)\\Minecraft Launcher\\MinecraftLauncher.exe',
+    },
+    darwin: {
+      gameDir: '~/Library/Application Support/minecraft',
+      launcher: '/Applications/Minecraft.app',
+    },
+    linux: {
+      gameDir: '~/.minecraft',
+      launcher: '/usr/bin/minecraft-launcher',
+    },
+  };
+
   private readonly api: LauncherApi;
   private readonly onSaved: (updates: AppConfigUpdate) => void;
   private systemInfo: SystemInfo | null = null;
@@ -95,8 +110,15 @@ export class SettingsForm {
     SettingsForm.setText('sys-ram', ram);
     SettingsForm.setText('sys-cpu', `${this.systemInfo.cpuCount} cœurs`);
     SettingsForm.setText('sys-os', `${this.systemInfo.platform} ${this.systemInfo.arch}`);
+    this.applyPathPlaceholders(this.systemInfo.platform);
     this.refreshRamHint();
     return this.systemInfo;
+  }
+
+  private applyPathPlaceholders(platform: string): void {
+    const placeholders = SettingsForm.PATH_PLACEHOLDERS[platform] ?? SettingsForm.PATH_PLACEHOLDERS.linux;
+    $input('cfg-mc-game-dir').placeholder = placeholders.gameDir;
+    $input('cfg-launcher-path').placeholder = placeholders.launcher;
   }
 
   private refreshRamHint(): void {
