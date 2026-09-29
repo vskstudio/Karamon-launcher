@@ -40,6 +40,7 @@ import { DiscordRpc } from './features/discord/DiscordRpc';
 import { CrashReports } from './features/crashes/CrashReports';
 import { Backup } from './features/backup/Backup';
 import { ReleaseNotes } from './features/news/ReleaseNotes';
+import { ShopCatalog } from './features/shop/ShopCatalog';
 import { AuthSession } from './features/auth/AuthSession';
 import { TokenStore } from './features/auth/TokenStore';
 import { GameLauncher } from './features/minecraft/GameLauncher';
@@ -72,6 +73,7 @@ export class KaramonApp {
   private readonly crashes = new CrashReports();
   private readonly backup = new Backup(this.paths.dataDir);
   private readonly releases = new ReleaseNotes(this.http);
+  private readonly shop = new ShopCatalog(this.http);
   private readonly discord: DiscordRpc;
   private javaCache: JavaCandidate[] | null = null;
 
@@ -199,6 +201,7 @@ export class KaramonApp {
     ipcMain.handle(Channels.backupDelete, (_e, name: string) => this.backup.delete(name));
 
     ipcMain.handle(Channels.releasesList, () => this.releases.list());
+    ipcMain.handle(Channels.shopOffers, () => this.shop.offers());
 
     ipcMain.handle(Channels.authLogin, () => this.authLogin());
     ipcMain.handle(Channels.authLogout, () => this.auth.logout());

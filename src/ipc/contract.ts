@@ -138,6 +138,17 @@ export interface ReleaseNote {
   highlights: string[];
 }
 
+export interface ShopOffer {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  lumis: number;
+  bonus: number;
+  priceCents: number;
+  currency: string;
+}
+
 export interface MinecraftProfile {
   id: string;
   name: string;
@@ -190,6 +201,7 @@ export const Channels = {
   backupDelete: 'backup:delete',
 
   releasesList: 'releases:list',
+  shopOffers: 'shop:offers',
 
   authLogin: 'auth:login',
   authLogout: 'auth:logout',
@@ -230,6 +242,7 @@ export interface IpcInvokeContract {
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
   [Channels.releasesList]: { req: void; res: ReleaseNote[] };
+  [Channels.shopOffers]: { req: void; res: ShopOffer[] };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
   [Channels.authLogout]: { req: void; res: void };
   [Channels.authGetSession]: { req: void; res: AuthSessionResult };
@@ -289,6 +302,7 @@ export interface LauncherApi {
   deleteBackup(name: string): Promise<BackupListResult>;
 
   listReleases(): Promise<ReleaseNote[]>;
+  listShopOffers(): Promise<ShopOffer[]>;
 
   authLogin(): Promise<AuthLoginResult>;
   authLogout(): Promise<void>;
