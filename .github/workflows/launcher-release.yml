@@ -13,13 +13,24 @@ on:
       - 'scripts/**'
     tags:
       - 'launcher-v*'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'build.mjs'
+      - 'electron-builder.yml'
+      - 'scripts/**'
+      - '.github/workflows/launcher-release.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: launcher-release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'push' && 'launcher-release' || format('launcher-dry-run-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   version:
@@ -100,7 +111,10 @@ jobs:
 
   release:
     needs: [version, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
