@@ -3,6 +3,7 @@
   "version": "2.0.11",
   "description": "Karamon V2 Minecraft Launcher (Cobbleverse)",
   "author": "Karamon",
+  "type": "module",
   "main": "dist/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -11,7 +12,7 @@
     "watch": "node build.mjs --watch",
     "start": "npx electron .",
     "dev": "npm run build && npm start",
-    "prebuild:dist": "node scripts/convert-icon.js && node build.mjs",
+    "prebuild:dist": "node scripts/convert-icon.cjs && node build.mjs",
     "build:dist": "electron-builder --win --x64",
     "prebuild:dist:mac": "node build.mjs",
     "build:dist:mac": "electron-builder --mac",
