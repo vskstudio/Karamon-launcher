@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
 import type { IpcEventContract } from '../ipc/contract';
-import { ASPECT_RATIO, initialWindowSize, minimumWindowSize, zoomFor } from './shared/WindowSize';
+import { ASPECT_RATIO, initialWindowSize, minimumWindowSize } from './shared/WindowSize';
 
 export class WindowManager {
   private window: BrowserWindow | null = null;
@@ -33,23 +33,12 @@ export class WindowManager {
 
     this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
-    WindowManager.scaleContent(this.window);
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {
       this.window = null;
     });
     return this.window;
-  }
-
-  private static scaleContent(window: BrowserWindow): void {
-    const apply = (): void => {
-      if (window.isDestroyed()) return;
-      const [width, height] = window.getContentSize();
-      window.webContents.setZoomFactor(zoomFor({ width, height }));
-    };
-    window.on('resize', apply);
-    window.webContents.on('did-finish-load', apply);
   }
 
   private static lockNavigation(window: BrowserWindow): void {

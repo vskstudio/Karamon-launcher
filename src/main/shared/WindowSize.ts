@@ -1,8 +1,6 @@
 export const ASPECT_RATIO = 16 / 9;
 export const PREFERRED_WIDTH = 1920;
 export const MIN_WIDTH = 1024;
-/** The renderer lays out at this width and is zoomed to fill the window. */
-export const DESIGN_WIDTH = 1280;
 const SCREEN_SHARE = 0.9;
 
 export interface Size {
@@ -28,8 +26,3 @@ export function minimumWindowSize(workArea: Size): Size {
   return { width, height: Math.round(width / ASPECT_RATIO) };
 }
 
-/** Scales the 1280x720 layout to the window, bounded by whichever side is shorter. */
-export function zoomFor(size: Size): number {
-  const scale = Math.min(size.width / DESIGN_WIDTH, size.height / (DESIGN_WIDTH / ASPECT_RATIO));
-  return Math.round(scale * 100) / 100;
-}

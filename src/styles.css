@@ -352,6 +352,8 @@ html, body {
   object-fit: cover;
   object-position: 60% 45%;
   z-index: -2;
+  filter: blur(4px);
+  transform: scale(1.04);
   -webkit-user-drag: none;
 }
 
@@ -376,13 +378,14 @@ html, body {
 .hero-content {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
+  width: fit-content;
 }
 
 .hero-logo {
-  width: 380px;
+  width: 340px;
   max-width: 100%;
-  margin-left: -14px;
   filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.55));
   -webkit-user-drag: none;
 }
@@ -390,9 +393,8 @@ html, body {
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 8px;
-  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
 }
 
 .play-btn {
@@ -400,16 +402,16 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-width: 190px;
-  height: 50px;
-  padding: 0 30px;
+  min-width: 170px;
+  height: 44px;
+  padding: 0 26px;
   background: var(--accent);
   border-radius: 999px;
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.01em;
-  box-shadow: 0 10px 30px var(--red-glow);
+  box-shadow: 0 8px 24px var(--red-glow);
   transition: transform 0.16s var(--ease), background 0.16s var(--ease), box-shadow 0.16s var(--ease);
   -webkit-app-region: no-drag;
 }
@@ -445,13 +447,13 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 50px;
-  padding: 0 28px;
+  height: 44px;
+  padding: 0 24px;
   border-radius: 999px;
   background: rgba(30, 30, 30, 0.72);
   backdrop-filter: blur(12px);
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   transition: background 0.16s var(--ease);
   -webkit-app-region: no-drag;
@@ -463,8 +465,10 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  height: 40px;
-  margin-left: auto;
+  position: absolute;
+  right: var(--page-x);
+  bottom: 34px;
+  height: 36px;
   padding: 0 16px;
   border-radius: 999px;
   background: rgba(20, 20, 20, 0.6);
@@ -494,8 +498,8 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 14px;
-  max-width: 420px;
+  align-self: stretch;
+  margin-top: 10px;
 }
 
 .progress-track {
