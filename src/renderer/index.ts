@@ -1,5 +1,6 @@
 import { KaramonRenderer } from './KaramonRenderer';
 import { $opt } from './util/dom';
+import { renderIcons } from './util/icons';
 
 const brandLogo = $opt('brand-logo');
 if (brandLogo instanceof HTMLImageElement) {
@@ -8,4 +9,5 @@ if (brandLogo instanceof HTMLImageElement) {
   });
 }
 
+renderIcons();
 new KaramonRenderer(window.launcher).start();

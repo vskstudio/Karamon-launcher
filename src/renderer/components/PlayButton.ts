@@ -8,19 +8,19 @@ export class PlayButton {
   }
 
   setIdle(): void {
-    this.apply('play-btn', 'JOUER', '1');
+    this.apply('play-btn', 'Jouer', '1');
   }
 
   setLoading(): void {
-    this.apply('play-btn loading', 'CHARGEMENT…', '0.5');
+    this.apply('play-btn loading', 'Chargement…', '0.5');
   }
 
   setRunning(): void {
-    this.apply('play-btn running', 'EN JEU', '1');
+    this.apply('play-btn running', 'En jeu', '1');
   }
 
   setLoginRequired(): void {
-    this.apply('play-btn login-required', 'SE CONNECTER', '1');
+    this.apply('play-btn login-required', 'Se connecter', '1');
   }
 
   private apply(className: string, label: string, opacity: string): void {

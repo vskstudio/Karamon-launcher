@@ -7,7 +7,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/main/features/java/JavaProvisioner.test.ts src/main/features/minecraft/OptionsWriter.test.ts src/main/features/minecraft/BrandingWriter.test.ts src/main/features/minecraft/ServersDat.test.ts src/main/features/modpack/OverridesInstaller.test.ts src/main/features/modpack/ModpackSync.test.ts src/main/shared/ClientOptions.test.ts src/main/shared/DevMode.test.ts src/main/shared/GitHubPack.test.ts src/main/shared/HttpClient.test.ts src/main/shared/ZipExtract.test.ts scripts/verify-manifests.test.mjs",
+    "test": "node --experimental-strip-types --test src/main/features/java/JavaProvisioner.test.ts src/main/features/auth/SkinLookup.test.ts src/main/features/shop/ShopCatalog.test.ts src/main/features/minecraft/OptionsWriter.test.ts src/main/features/minecraft/BrandingWriter.test.ts src/main/features/minecraft/ServersDat.test.ts src/main/features/modpack/OverridesInstaller.test.ts src/main/features/modpack/ModpackSync.test.ts src/main/shared/ClientOptions.test.ts src/main/shared/DevMode.test.ts src/main/shared/GitHubPack.test.ts src/main/shared/HttpClient.test.ts src/main/shared/WindowSize.test.ts src/main/shared/ZipExtract.test.ts scripts/verify-manifests.test.mjs scripts/release-notes.test.mjs",
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "start": "npx electron .",
@@ -23,7 +23,8 @@
   "dependencies": {
     "@xhayper/discord-rpc": "^1.3.4",
     "adm-zip": "^0.5.16",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "lucide": "^1.49.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

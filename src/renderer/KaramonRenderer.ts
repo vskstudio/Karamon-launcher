@@ -10,7 +10,6 @@ import { Navigation } from './components/Navigation';
 import { WindowControls } from './components/WindowControls';
 import { ModsList } from './components/ModsList';
 import { StatsView } from './components/StatsView';
-import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { Konami } from './components/Konami';
 import { ScreenshotsView } from './components/ScreenshotsView';
 import { PlayersSparkline } from './components/PlayersSparkline';
@@ -33,7 +32,6 @@ export class KaramonRenderer {
   private readonly settings: SettingsForm;
   private readonly mods: ModsList;
   private readonly stats: StatsView;
-  private readonly theme: ThemeSwitcher;
   private readonly screenshots: ScreenshotsView;
   private readonly sparkline: PlayersSparkline;
   private readonly tools: ToolsView;
@@ -72,11 +70,14 @@ export class KaramonRenderer {
     });
     this.mods = new ModsList(api, $('mods-list'));
     this.stats = new StatsView(api);
-    this.theme = new ThemeSwitcher(api);
     this.screenshots = new ScreenshotsView(api, $('screenshots-grid'));
     this.tools = new ToolsView(api);
     this.shop = new ShopView(api);
-    this.accountChip = new AccountChip($('account-chip'), () => void this.handleLogout());
+    this.accountChip = new AccountChip(
+      $('account-chip'),
+      () => void this.handleLogout(),
+      (profileId) => api.skinUrl(profileId),
+    );
   }
 
   private onPingResult(r: PingResult, prev: 'online' | 'offline' | 'unknown'): void {
@@ -112,6 +113,7 @@ export class KaramonRenderer {
     $('btn-logs-toggle').addEventListener('click', () => this.console.toggle());
     $('btn-play').addEventListener('click', () => this.play());
     $('btn-sync-mods').addEventListener('click', () => this.syncMods());
+    $('btn-hero-sync').addEventListener('click', () => this.syncMods());
     $('btn-open-mods-folder').addEventListener('click', () => this.api.openInstance());
     $('btn-folder').addEventListener('click', () => this.api.openInstance());
     $('btn-export-logs').addEventListener('click', (e) => this.exportLogs(e));
@@ -122,7 +124,6 @@ export class KaramonRenderer {
     $('btn-repair-pack').addEventListener('click', () => this.repair());
     $('btn-reset-stats').addEventListener('click', () => this.resetStats());
 
-    this.theme.attach();
     QuickLinks.render(this.api, $('nav-links'));
     JvmPresets.attach();
     this.settings.attach($('btn-save-settings'));
@@ -134,9 +135,8 @@ export class KaramonRenderer {
 
     this.console.log('Karamon Launcher démarré.', 'ok');
 
-    const cfg = await this.settings.load();
+    await this.settings.load();
     JvmPresets.syncFromArgs();
-    this.theme.fromConfig(cfg);
 
     void this.settings.loadSystemInfo();
     void this.settings.populateJava();
@@ -320,11 +320,11 @@ export class KaramonRenderer {
   }
 
   private async syncMods(): Promise<void> {
-    const btn = $button('btn-sync-mods');
-    btn.disabled = true;
+    const buttons = [$button('btn-sync-mods'), $button('btn-hero-sync')];
+    buttons.forEach((b) => (b.disabled = true));
     this.console.log('Synchronisation du pack en cours...', 'info');
     const result = await this.api.syncMods();
-    btn.disabled = false;
+    buttons.forEach((b) => (b.disabled = false));
     if (result.ok) {
       this.console.log('Pack synchronisé avec succès.', 'ok');
       Toast.show('Pack mis à jour !', 'ok');

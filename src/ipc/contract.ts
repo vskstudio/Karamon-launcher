@@ -11,7 +11,6 @@ export interface AppConfig {
   closeLauncherOnGameStart: boolean;
   devMode: boolean;
   server: ServerInfo;
-  theme: 'red' | 'gold';
 }
 
 export type AppConfigUpdate = Partial<Omit<AppConfig, 'server'>> & {
@@ -132,6 +131,17 @@ export interface BackupListResult {
   backups: BackupEntry[];
 }
 
+export interface ShopOffer {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  lumis: number;
+  bonus: number;
+  priceCents: number;
+  currency: string;
+}
+
 export interface MinecraftProfile {
   id: string;
   name: string;
@@ -183,6 +193,9 @@ export const Channels = {
   backupList: 'backup:list',
   backupDelete: 'backup:delete',
 
+  shopOffers: 'shop:offers',
+  skinUrl: 'skin:url',
+
   authLogin: 'auth:login',
   authLogout: 'auth:logout',
   authGetSession: 'auth:get-session',
@@ -221,6 +234,8 @@ export interface IpcInvokeContract {
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
+  [Channels.shopOffers]: { req: void; res: ShopOffer[] };
+  [Channels.skinUrl]: { req: string; res: string | null };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
   [Channels.authLogout]: { req: void; res: void };
   [Channels.authGetSession]: { req: void; res: AuthSessionResult };
@@ -278,6 +293,9 @@ export interface LauncherApi {
   createBackup(): Promise<BackupEntry>;
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;
+
+  listShopOffers(): Promise<ShopOffer[]>;
+  skinUrl(profileId: string): Promise<string | null>;
 
   authLogin(): Promise<AuthLoginResult>;
   authLogout(): Promise<void>;

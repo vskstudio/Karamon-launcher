@@ -1,7 +1,8 @@
-import { BrowserWindow } from 'electron/main';
+import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
 import type { IpcEventContract } from '../ipc/contract';
+import { ASPECT_RATIO, initialWindowSize, minimumWindowSize } from './shared/WindowSize';
 
 export class WindowManager {
   private window: BrowserWindow | null = null;
@@ -9,14 +10,17 @@ export class WindowManager {
   constructor(private readonly distDir: string, private readonly assetsDir: string) {}
 
   create(): BrowserWindow {
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    const size = initialWindowSize(workArea);
+    const min = minimumWindowSize(workArea);
     this.window = new BrowserWindow({
-      width: 1100,
-      height: 680,
-      minWidth: 900,
-      minHeight: 580,
+      width: size.width,
+      height: size.height,
+      minWidth: min.width,
+      minHeight: min.height,
       frame: false,
       transparent: false,
-      backgroundColor: '#0b0a0d',
+      backgroundColor: '#0a0a0a',
       webPreferences: {
         preload: path.join(this.distDir, 'preload.cjs'),
         contextIsolation: true,
@@ -27,7 +31,11 @@ export class WindowManager {
       show: false,
     });
 
+    this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
+    // Chromium remembers a zoom level per origin, so reset any zoom a previous version left behind.
+    const window = this.window;
+    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(1));
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {
