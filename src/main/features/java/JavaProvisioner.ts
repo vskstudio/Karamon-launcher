@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { HttpClient } from '../../shared/HttpClient';
-import type { Paths } from '../../shared/Paths';
-import { extractZipToDir } from '../../shared/ZipExtract';
-import { JavaDetector } from './JavaDetector';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { Paths } from '../../shared/Paths.ts';
+import { extractZipToDir } from '../../shared/ZipExtract.ts';
+import type { JavaDetector } from './JavaDetector.ts';
 
 const execFileP = promisify(execFile);
 
@@ -13,7 +13,6 @@ const REQUIRED_MAJOR = 21;
 const RUNTIME_DIR_NAME = 'jre-21';
 const ADOPTIUM_DOWNLOAD_TIMEOUT_MS = 600000;
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
-const EXECUTABLE_MODE = 0o755;
 
 const ADOPTIUM_PLATFORMS: Partial<Record<NodeJS.Platform, { os: string; archiveExt: string }>> = {
   win32: { os: 'windows', archiveExt: '.zip' },
@@ -39,11 +38,15 @@ export type StatusEmitter = (msg: string) => void;
 export type ProgressEmitter = (fraction: number) => void;
 
 export class JavaProvisioner {
-  constructor(
-    private readonly paths: Paths,
-    private readonly http: HttpClient,
-    private readonly detector: JavaDetector,
-  ) {}
+  private readonly paths: Paths;
+  private readonly http: HttpClient;
+  private readonly detector: JavaDetector;
+
+  constructor(paths: Paths, http: HttpClient, detector: JavaDetector) {
+    this.paths = paths;
+    this.http = http;
+    this.detector = detector;
+  }
 
   async ensure(
     configuredPath: string | undefined,
@@ -125,7 +128,6 @@ export class JavaProvisioner {
     if (!javaPath) {
       throw new Error(`Extraction terminée mais ${JavaProvisioner.javaExecutable()} introuvable dans le runtime.`);
     }
-    JavaProvisioner.markBinariesExecutable(path.dirname(javaPath));
     const major = await this.probeMajor(javaPath);
     if (major === null || major < REQUIRED_MAJOR) {
       throw new Error(`Le runtime extrait n'est pas Java ${REQUIRED_MAJOR} (détecté: ${major ?? '?'}).`);
@@ -145,14 +147,6 @@ export class JavaProvisioner {
       return;
     }
     extractZipToDir(archivePath, root);
-  }
-
-  private static markBinariesExecutable(binDir: string): void {
-    if (process.platform === 'win32') return;
-    for (const entry of fs.readdirSync(binDir)) {
-      const file = path.join(binDir, entry);
-      if (fs.statSync(file).isFile()) fs.chmodSync(file, EXECUTABLE_MODE);
-    }
   }
 
   private static javaExecutable(): string {
