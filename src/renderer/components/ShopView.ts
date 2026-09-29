@@ -67,7 +67,16 @@ export class ShopView {
       currency: offer.currency.toUpperCase(),
     }).format(offer.priceCents / 100);
 
-    card.append(art, name, price);
+    const info = document.createElement('div');
+    info.append(name, price);
+    const buy = document.createElement('span');
+    buy.className = 'offer-card__buy';
+    buy.textContent = 'Acheter';
+    const foot = document.createElement('div');
+    foot.className = 'offer-card__foot';
+    foot.append(info, buy);
+
+    card.append(art, foot);
     return card;
   }
 }
