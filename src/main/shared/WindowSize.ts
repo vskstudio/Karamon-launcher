@@ -1,5 +1,5 @@
 export const ASPECT_RATIO = 16 / 9;
-export const PREFERRED_WIDTH = 1920;
+export const PREFERRED_WIDTH = 1366;
 export const MIN_WIDTH = 1024;
 const SCREEN_SHARE = 0.9;
 
@@ -8,7 +8,7 @@ export interface Size {
   height: number;
 }
 
-/** The largest 16:9 window up to 1920x1080 that fits in 90% of the work area. */
+/** The largest 16:9 window up to 1366x768 that fits in 90% of the work area. */
 export function initialWindowSize(workArea: Size): Size {
   let width = Math.min(PREFERRED_WIDTH, Math.floor(workArea.width * SCREEN_SHARE));
   let height = Math.round(width / ASPECT_RATIO);
