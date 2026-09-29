@@ -336,9 +336,7 @@ html, body {
 
 .home-scroll {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: 40px;
+  overflow: hidden;
 }
 
 .hero {
@@ -476,16 +474,21 @@ html, body {
 .btn-pill:disabled { opacity: 0.55; cursor: progress; }
 
 .server-pill {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  margin-top: 4px;
-  height: 32px;
-  padding: 0 14px;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: rgba(20, 20, 20, 0.6);
-  backdrop-filter: blur(12px);
+  background: rgba(10, 10, 10, 0.55);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong);
   font-size: 12px;
+  -webkit-app-region: no-drag;
 }
 
 .server-status-dot {
@@ -542,17 +545,26 @@ html, body {
   color: rgba(255, 255, 255, 0.65);
 }
 
-.home-section {
-  padding: 20px var(--page-x) 0;
+.hero-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
 }
 
-.section-title {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  margin-bottom: 12px;
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
 }
+
+.activity-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 
 .page-header {
   flex-shrink: 0;
@@ -939,18 +951,19 @@ html, body {
 .mods-count { color: var(--red); font-weight: 700; }
 
 .stats-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  gap: 8px;
 }
 
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
+  gap: 2px;
+  min-width: 104px;
+  padding: 10px 14px;
+  background: rgba(20, 20, 20, 0.6);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius);
 }
 
 .stat-label {
@@ -960,7 +973,7 @@ html, body {
 }
 
 .stat-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -986,9 +999,9 @@ html, body {
 .players-tooltip {
   display: none;
   position: absolute;
-  bottom: 100%;
-  right: -16px;
-  margin-bottom: 14px;
+  top: 100%;
+  right: -12px;
+  margin-top: 12px;
   padding: 10px 12px;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);

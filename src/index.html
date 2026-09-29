@@ -12,6 +12,17 @@
 <body>
 
 <header class="titlebar" id="drag-region">
+  <div class="server-pill">
+    <span class="server-status-dot" id="status-dot"></span>
+    <span class="server-name">karamon.fr</span>
+    <span class="server-status-text" id="status-text">Vérification…</span>
+    <span class="server-players" id="server-players">
+      <span class="players-tooltip" id="players-tooltip"></span>
+    </span>
+    <svg class="players-sparkline" id="players-sparkline" viewBox="0 0 80 24" preserveAspectRatio="none" aria-hidden="true">
+      <path id="sparkline-path" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </div>
   <button class="account-chip" id="account-chip" type="button" title="Se connecter avec Microsoft">
     <span class="chip-avatar chip-avatar-empty" aria-hidden="true"></span>
     <span class="chip-label">Se connecter</span>
@@ -92,54 +103,45 @@
         <div class="hero">
           <img src="../assets/brand/Background.png" alt="" class="hero-bg" />
           <h1 class="hero-page-title">Accueil</h1>
-          <div class="hero-content">
-            <img src="../assets/brand/Karamon Wordmark.png" alt="Karamon" class="hero-logo" />
-            <div class="hero-actions">
-              <button class="play-btn" id="btn-play">
-                <span class="play-btn-icon">
-                  <i data-lucide="play" class="btn-icon"></i>
-                </span>
-                <span id="play-label">Jouer</span>
-              </button>
-              <button class="btn-pill" id="btn-hero-sync" type="button">Mettre à jour le pack</button>
-            </div>
-            <div class="progress-section">
-              <div class="progress-track">
-                <div class="progress-bar" id="progress-bar"></div>
+          <div class="hero-bottom">
+            <div class="hero-content">
+              <img src="../assets/brand/Karamon Wordmark.png" alt="Karamon" class="hero-logo" />
+              <div class="hero-actions">
+                <button class="play-btn" id="btn-play">
+                  <span class="play-btn-icon">
+                    <i data-lucide="play" class="btn-icon"></i>
+                  </span>
+                  <span id="play-label">Jouer</span>
+                </button>
+                <button class="btn-pill" id="btn-hero-sync" type="button">Mettre à jour le pack</button>
               </div>
-              <span class="progress-label" id="progress-label">Prêt</span>
+              <div class="progress-section">
+                <div class="progress-track">
+                  <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <span class="progress-label" id="progress-label">Prêt</span>
+              </div>
             </div>
-            <div class="server-pill">
-              <span class="server-status-dot" id="status-dot"></span>
-              <span class="server-name">karamon.fr</span>
-              <span class="server-status-text" id="status-text">Vérification…</span>
-              <span class="server-players" id="server-players">
-                <span class="players-tooltip" id="players-tooltip"></span>
-              </span>
-              <svg class="players-sparkline" id="players-sparkline" viewBox="0 0 80 24" preserveAspectRatio="none" aria-hidden="true">
-                <path id="sparkline-path" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+
+            <div class="activity">
+              <h2 class="activity-title">Ton activité</h2>
+              <div class="stats-strip" id="stats-strip">
+                <div class="stat">
+                  <span class="stat-label">Temps de jeu</span>
+                  <span class="stat-value" id="stat-playtime">0 min</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Sessions</span>
+                  <span class="stat-value" id="stat-sessions">0</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Dernière fois</span>
+                  <span class="stat-value" id="stat-last">Jamais</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        <section class="home-section">
-          <h2 class="section-title">Ton activité</h2>
-          <div class="stats-strip" id="stats-strip">
-            <div class="stat">
-              <span class="stat-label">Temps de jeu</span>
-              <span class="stat-value" id="stat-playtime">0 min</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Sessions</span>
-              <span class="stat-value" id="stat-sessions">0</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Dernière fois</span>
-              <span class="stat-value" id="stat-last">Jamais</span>
-            </div>
-          </div>
-        </section>
       </div>
     </section>
 
