@@ -38,34 +38,38 @@ test(
   { skip: process.platform !== 'linux' || process.arch !== 'x64' },
   async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-java-'));
-    const archive = buildLinuxJreArchive(dir);
-    const checksum = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
-    const requestedApis: string[] = [];
-    const downloads: { url: string; expectedSha256: string | undefined }[] = [];
-    const http = {
-      async getJson(url: string): Promise<unknown> {
-        requestedApis.push(url);
-        return [
-          adoptiumAsset(path.basename(ZIP_LINK), ZIP_LINK, checksum),
-          adoptiumAsset(path.basename(TAR_LINK), TAR_LINK, checksum),
-        ];
-      },
-      async download(url: string, dest: string, opts: DownloadOptions): Promise<void> {
-        downloads.push({ url, expectedSha256: opts.expectedSha256 });
-        fs.copyFileSync(archive, dest);
-      },
-    } as unknown as HttpClient;
-    const detector = { detect: async () => [] } as unknown as JavaDetector;
-    const paths = new Paths(path.join(dir, 'launcher'));
+    try {
+      const archive = buildLinuxJreArchive(dir);
+      const checksum = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+      const requestedApis: string[] = [];
+      const downloads: { url: string; expectedSha256: string | undefined }[] = [];
+      const http = {
+        async getJson(url: string): Promise<unknown> {
+          requestedApis.push(url);
+          return [
+            adoptiumAsset(path.basename(ZIP_LINK), ZIP_LINK, checksum),
+            adoptiumAsset(path.basename(TAR_LINK), TAR_LINK, checksum),
+          ];
+        },
+        async download(url: string, dest: string, opts: DownloadOptions): Promise<void> {
+          downloads.push({ url, expectedSha256: opts.expectedSha256 });
+          fs.copyFileSync(archive, dest);
+        },
+      } as unknown as HttpClient;
+      const detector = { detect: async () => [] } as unknown as JavaDetector;
+      const paths = new Paths(path.join(dir, 'launcher'));
 
-    const javaPath = await new JavaProvisioner(paths, http, detector).ensure(undefined, () => {}, () => {});
+      const javaPath = await new JavaProvisioner(paths, http, detector).ensure(undefined, () => {}, () => {});
 
-    assert.deepEqual(requestedApis, [
-      'https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=linux&vendor=eclipse',
-    ]);
-    assert.deepEqual(downloads, [{ url: TAR_LINK, expectedSha256: checksum }]);
-    assert.equal(javaPath, path.join(paths.dataDir, 'runtime', 'jre-21', RUNTIME_FOLDER, 'bin', 'java'));
-    assert.equal(fs.statSync(javaPath).mode & 0o111, 0o111);
-    assert.deepEqual(fs.readdirSync(paths.cacheDir), []);
+      assert.deepEqual(requestedApis, [
+        'https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=linux&vendor=eclipse',
+      ]);
+      assert.deepEqual(downloads, [{ url: TAR_LINK, expectedSha256: checksum }]);
+      assert.equal(javaPath, path.join(paths.dataDir, 'runtime', 'jre-21', RUNTIME_FOLDER, 'bin', 'java'));
+      assert.equal(fs.statSync(javaPath).mode & 0o111, 0o111);
+      assert.deepEqual(fs.readdirSync(paths.cacheDir), []);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   },
 );
