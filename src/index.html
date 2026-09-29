@@ -6,19 +6,12 @@
   <title>Karamon Launcher</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
 <header class="titlebar" id="drag-region">
-  <div class="titlebar-brand">
-    <img src="../assets/brand/Karamon.png" alt="" class="brand-logo" id="brand-logo" />
-    <span class="brand-text">
-      <span class="brand-name">Karamon</span>
-      <span class="brand-tag">Launcher</span>
-    </span>
-  </div>
   <button class="account-chip" id="account-chip" type="button" title="Se connecter avec Microsoft">
     <span class="chip-avatar chip-avatar-empty" aria-hidden="true"></span>
     <span class="chip-label">Se connecter</span>
@@ -39,6 +32,9 @@
 <div class="app">
 
   <nav class="sidebar">
+    <div class="sidebar-brand">
+      <img src="../assets/brand/Karamon.png" alt="Karamon" class="brand-logo" id="brand-logo" />
+    </div>
     <div class="nav-group">
       <button class="nav-btn active" data-panel="home">
         <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
@@ -117,51 +113,66 @@
     </div>
 
     <section class="panel active" id="panel-home">
-      <div class="server-bar">
-        <div class="server-bar-left">
-          <span class="server-status-dot" id="status-dot"></span>
-          <span class="server-name">karamon.fr</span>
-          <span class="server-status-text" id="status-text">Vérification…</span>
-        </div>
-        <span class="server-players" id="server-players">
-          <span class="players-tooltip" id="players-tooltip"></span>
-        </span>
-        <svg class="players-sparkline" id="players-sparkline" viewBox="0 0 80 24" preserveAspectRatio="none" aria-hidden="true">
-          <path id="sparkline-path" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-
-      <div class="play-area">
-        <img src="../assets/brand/Karamon Wordmark.png" alt="Karamon" class="hero-banner" />
-
-        <button class="play-btn" id="btn-play">
-          <span class="play-btn-icon">
-            <svg viewBox="0 0 20 20" width="20" height="20"><polygon points="5,3 17,10 5,17" fill="currentColor"/></svg>
-          </span>
-          <span id="play-label">JOUER</span>
-        </button>
-
-        <div class="progress-section">
-          <div class="progress-track">
-            <div class="progress-bar" id="progress-bar"></div>
-          </div>
-          <span class="progress-label" id="progress-label">Prêt</span>
-        </div>
-
-        <div class="stats-strip" id="stats-strip">
-          <div class="stat">
-            <span class="stat-label">Temps de jeu</span>
-            <span class="stat-value" id="stat-playtime">0 min</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Sessions</span>
-            <span class="stat-value" id="stat-sessions">0</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Dernière fois</span>
-            <span class="stat-value" id="stat-last">Jamais</span>
+      <div class="home-scroll">
+        <div class="hero">
+          <img src="../assets/brand/Karamon Banner No Text.png" alt="" class="hero-bg" />
+          <h1 class="hero-page-title">Accueil</h1>
+          <div class="hero-content">
+            <h2 class="hero-title">Cobbleverse sur Karamon</h2>
+            <p class="hero-desc">Minecraft 1.21.1 et Cobblemon, avec les mods, resource packs et shaders du serveur synchronisés à chaque lancement.</p>
+            <div class="hero-actions">
+              <button class="play-btn" id="btn-play">
+                <span class="play-btn-icon">
+                  <svg viewBox="0 0 20 20" width="14" height="14"><polygon points="5,3 17,10 5,17" fill="currentColor"/></svg>
+                </span>
+                <span id="play-label">Jouer</span>
+              </button>
+              <button class="btn-pill" id="btn-hero-sync" type="button">Mettre à jour le pack</button>
+              <div class="server-pill">
+                <span class="server-status-dot" id="status-dot"></span>
+                <span class="server-name">karamon.fr</span>
+                <span class="server-status-text" id="status-text">Vérification…</span>
+                <span class="server-players" id="server-players">
+                  <span class="players-tooltip" id="players-tooltip"></span>
+                </span>
+                <svg class="players-sparkline" id="players-sparkline" viewBox="0 0 80 24" preserveAspectRatio="none" aria-hidden="true">
+                  <path id="sparkline-path" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+            </div>
+            <div class="progress-section">
+              <div class="progress-track">
+                <div class="progress-bar" id="progress-bar"></div>
+              </div>
+              <span class="progress-label" id="progress-label">Prêt</span>
+            </div>
           </div>
         </div>
+
+        <section class="home-section">
+          <h2 class="section-title">Dernières mises à jour</h2>
+          <div class="release-grid" id="release-grid">
+            <p class="empty-hint">Chargement…</p>
+          </div>
+        </section>
+
+        <section class="home-section">
+          <h2 class="section-title">Ton activité</h2>
+          <div class="stats-strip" id="stats-strip">
+            <div class="stat">
+              <span class="stat-label">Temps de jeu</span>
+              <span class="stat-value" id="stat-playtime">0 min</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Sessions</span>
+              <span class="stat-value" id="stat-sessions">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Dernière fois</span>
+              <span class="stat-value" id="stat-last">Jamais</span>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -336,22 +347,6 @@
               Mode développement (navigateur de serveurs en jeu)
             </label>
             <span class="field-hint">Affiche le bouton « Serveurs (dev) » sur l'écran titre pour rejoindre un serveur local ou du réseau. Aussi activable en lançant le launcher avec <code>--dev</code>.</span>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Apparence</h3>
-          <div class="field">
-            <label>Thème</label>
-            <div class="theme-picker">
-              <button type="button" class="theme-swatch theme-red" data-theme="red" title="Rouge Karamon">
-                <span class="theme-swatch-name">Rouge</span>
-              </button>
-              <button type="button" class="theme-swatch theme-gold" data-theme="gold" title="Or Cobblemon">
-                <span class="theme-swatch-name">Or</span>
-              </button>
-            </div>
-            <span class="field-hint">Le thème s'applique immédiatement.</span>
           </div>
         </div>
 

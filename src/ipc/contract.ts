@@ -11,7 +11,6 @@ export interface AppConfig {
   closeLauncherOnGameStart: boolean;
   devMode: boolean;
   server: ServerInfo;
-  theme: 'red' | 'gold';
 }
 
 export type AppConfigUpdate = Partial<Omit<AppConfig, 'server'>> & {
