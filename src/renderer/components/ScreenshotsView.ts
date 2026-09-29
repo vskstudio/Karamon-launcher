@@ -68,7 +68,7 @@ export class ScreenshotsView {
     const img = $('lightbox-img') as HTMLImageElement;
     const cap = $('lightbox-caption');
     img.src = item.url;
-    cap.textContent = `${item.name} — ${new Date(item.mtime).toLocaleString('fr-FR')}`;
+    cap.textContent = `${item.name} · ${new Date(item.mtime).toLocaleString('fr-FR')}`;
     box.classList.add('show');
     box.setAttribute('aria-hidden', 'false');
   }

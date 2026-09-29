@@ -16,7 +16,7 @@ export class AccountChip {
     }
     this.root.style.display = '';
     this.root.classList.add('signed-in');
-    this.root.title = `${profile.name} — cliquer pour se déconnecter`;
+    this.root.title = `${profile.name}, cliquer pour se déconnecter`;
     this.root.replaceChildren(
       AccountChip.avatar(profile.id),
       AccountChip.label(profile.name),

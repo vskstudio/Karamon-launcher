@@ -38,7 +38,7 @@ export class AuthSession {
 
   async refresh(): Promise<ActiveSession> {
     const stored = this.store.load();
-    if (!stored) throw new Error('Aucune session stockée — connexion requise');
+    if (!stored) throw new Error('Aucune session stockée, connexion requise');
     const ms = await this.microsoft.refresh(stored.refreshToken);
     return await this.completeChain(ms);
   }

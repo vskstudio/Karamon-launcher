@@ -42,7 +42,7 @@ export class ServerStatusPanel {
     } else {
       this.dot.className = 'server-status-dot offline';
       this.text.textContent = 'Hors ligne';
-      this.setCount('—');
+      this.setCount('');
       this.setTooltip([]);
       this.previous = 'offline';
     }

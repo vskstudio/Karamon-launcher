@@ -82,7 +82,7 @@ export class XboxAuth {
       case 2148916237:
         return "Vérification d'âge requise sur le compte adulte associé.";
       case 2148916238:
-        return 'Compte mineur — il doit être ajouté à une famille par un adulte.';
+        return 'Compte mineur : il doit être ajouté à une famille par un adulte.';
       default:
         return `XSTS a refusé l'authentification (XErr=${body.XErr ?? 'inconnu'})`;
     }
