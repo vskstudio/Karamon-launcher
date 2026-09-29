@@ -48,14 +48,18 @@ export interface GameState {
   running: boolean;
 }
 
+export type UpdateInstall = 'restart' | 'download';
+
 export interface UpdateInfo {
   version: string;
+  install: UpdateInstall;
 }
 
 export type UpdateCheckResult =
   | { status: 'no-update'; currentVersion: string }
   | { status: 'downloading'; version: string }
   | { status: 'downloaded'; version: string }
+  | { status: 'available'; version: string }
   | { status: 'error'; error: string }
   | { status: 'unsupported' };
 

@@ -21,7 +21,7 @@ Dernier installeur: [Releases](https://github.com/vskstudio/Karamon-launcher/rel
 Karamon-Launcher-Setup-x.x.x.exe
 ```
 
-macOS: `.dmg` arm64 (Apple Silicon) ou x64 (Intel). App non signée: clic droit, Ouvrir. Chaque release macOS publie aussi un `.zip` par architecture, référencé par `latest-mac.yml` pour l'auto-update. electron-updater n'installe ce `.zip` que sur une app signée, donc tant que l'app ne l'est pas, une mise à jour macOS passe par le `.dmg` de la dernière release.
+macOS: `.dmg` arm64 (Apple Silicon) ou x64 (Intel). App non signée: clic droit, Ouvrir. electron-updater n'installe une mise à jour macOS que sur une app signée, donc la release ne publie pas de `.zip` et `latest-mac.yml` ne liste que les `.dmg`. Le launcher macOS y lit seulement la dernière version: il l'annonce et son bouton « Télécharger » ouvre la dernière release, où le joueur reprend le `.dmg`.
 
 Linux: `Karamon-Launcher-x.x.x.AppImage` (x64), à rendre exécutable avec `chmod +x`.
 
@@ -65,7 +65,7 @@ npm run build:dist:mac    # macOS
 npm run build:dist:linux  # Linux (AppImage)
 ```
 
-Publier le launcher: il suffit de pousser sur `main`. Tout push qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante, et les launchers installés la récupèrent (vérif toutes les 30 min, installée à la fermeture). Pour forcer une version précise, pousser un tag:
+Publier le launcher: il suffit de pousser sur `main`. Tout push qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante, et les launchers installés la récupèrent (vérif toutes les 30 min, installée à la fermeture sur Windows et Linux, annoncée avec un lien vers le `.dmg` sur macOS). Avant de publier, la release vérifie que chaque `url:` et `path:` des `latest*.yml` désigne un fichier publié et qu'aucun nom de fichier ne contient d'espace. Pour forcer une version précise, pousser un tag:
 
 ```bash
 git tag launcher-v2.1.0

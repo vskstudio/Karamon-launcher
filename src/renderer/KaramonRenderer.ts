@@ -214,6 +214,11 @@ export class KaramonRenderer {
           btn.textContent = 'Installer maintenant';
           mode = 'install';
           break;
+        case 'available':
+          status.textContent = `Version ${result.version} disponible : installe le .dmg de la dernière release.`;
+          btn.textContent = 'Télécharger';
+          mode = 'install';
+          break;
         case 'unsupported':
           status.textContent = 'Indisponible en mode développement.';
           btn.textContent = idleLabel;
@@ -229,12 +234,19 @@ export class KaramonRenderer {
   private wireUpdateBar(): void {
     const bar = $('update-bar');
     const msg = $('update-msg');
-    $('btn-install-update').addEventListener('click', () => this.api.installUpdate());
+    const installButton = $button('btn-install-update');
+    installButton.addEventListener('click', () => this.api.installUpdate());
     $('btn-dismiss-update').addEventListener('click', () => bar.classList.remove('show'));
-    this.api.onUpdateReady(({ version }) => {
-      msg.textContent = `Mise à jour ${version} prête.`;
+    this.api.onUpdateReady(({ version, install }) => {
+      if (install === 'download') {
+        msg.textContent = `Version ${version} disponible.`;
+        installButton.textContent = 'Télécharger';
+        this.console.log(`Version ${version} disponible, à installer depuis le .dmg.`, 'ok');
+      } else {
+        msg.textContent = `Mise à jour ${version} prête.`;
+        this.console.log(`Mise à jour ${version} téléchargée.`, 'ok');
+      }
       bar.classList.add('show');
-      this.console.log(`Mise à jour ${version} téléchargée.`, 'ok');
     });
   }
 

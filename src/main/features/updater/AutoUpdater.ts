@@ -1,55 +1,58 @@
 import { app } from 'electron/main';
+import { shell } from 'electron/common';
 import { autoUpdater, type UpdateInfo as ElectronUpdateInfo } from 'electron-updater';
-import type { UpdateCheckResult, UpdateInfo } from '../../../ipc/contract';
+import type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../../../ipc/contract';
 
 export interface AutoUpdaterOptions {
   onReady: (info: UpdateInfo) => void;
 }
 
 export class AutoUpdater {
-  // Launchers often stay open for hours, so a release pushed meanwhile must still reach them.
   private static readonly CHECK_INTERVAL_MS = 30 * 60 * 1000;
+  private static readonly LATEST_RELEASE_URL = 'https://github.com/vskstudio/Karamon-launcher/releases/latest';
 
   private readonly onReady: (info: UpdateInfo) => void;
-  private downloadedVersion: string | null = null;
+  private readonly install: UpdateInstall = process.platform === 'darwin' ? 'download' : 'restart';
+  private readyVersion: string | null = null;
 
   constructor({ onReady }: AutoUpdaterOptions) {
     this.onReady = onReady;
   }
 
+  private get installsInPlace(): boolean {
+    return this.install === 'restart';
+  }
+
   start(): void {
     if (!app.isPackaged) return;
 
-    autoUpdater.autoDownload = true;
-    // Players who ignore the update bar still get the new version the next time they close.
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoDownload = this.installsInPlace;
+    autoUpdater.autoInstallOnAppQuit = this.installsInPlace;
 
-    autoUpdater.on('update-downloaded', (info: ElectronUpdateInfo) => {
+    autoUpdater.on(this.installsInPlace ? 'update-downloaded' : 'update-available', (info: ElectronUpdateInfo) => {
       if (info.version === app.getVersion()) return;
-      this.downloadedVersion = info.version;
-      this.onReady({ version: info.version });
+      this.readyVersion = info.version;
+      this.onReady({ version: info.version, install: this.install });
     });
 
-    autoUpdater.on('error', () => {
-      /* silent */
-    });
+    autoUpdater.on('error', () => {});
 
     this.checkQuietly();
     setInterval(() => this.checkQuietly(), AutoUpdater.CHECK_INTERVAL_MS);
   }
 
   private checkQuietly(): void {
-    if (this.downloadedVersion) return;
-    autoUpdater.checkForUpdates().catch(() => {
-      /* silent if no network */
-    });
+    if (this.readyVersion) return;
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
+
+  private readyResult(version: string): UpdateCheckResult {
+    return this.installsInPlace ? { status: 'downloaded', version } : { status: 'available', version };
   }
 
   async check(): Promise<UpdateCheckResult> {
     if (!app.isPackaged) return { status: 'unsupported' };
-    if (this.downloadedVersion) {
-      return { status: 'downloaded', version: this.downloadedVersion };
-    }
+    if (this.readyVersion) return this.readyResult(this.readyVersion);
 
     return new Promise<UpdateCheckResult>((resolve) => {
       const cleanup = (): void => {
@@ -64,12 +67,17 @@ export class AutoUpdater {
       };
       const onAvailable = (info: ElectronUpdateInfo): void => {
         cleanup();
-        resolve({ status: 'downloading', version: info.version });
+        if (this.installsInPlace) {
+          resolve({ status: 'downloading', version: info.version });
+          return;
+        }
+        this.readyVersion = info.version;
+        resolve(this.readyResult(info.version));
       };
       const onDownloaded = (info: ElectronUpdateInfo): void => {
         cleanup();
-        this.downloadedVersion = info.version;
-        resolve({ status: 'downloaded', version: info.version });
+        this.readyVersion = info.version;
+        resolve(this.readyResult(info.version));
       };
       const onError = (e: Error): void => {
         cleanup();
@@ -86,6 +94,10 @@ export class AutoUpdater {
   }
 
   installNow(): void {
-    autoUpdater.quitAndInstall(false, true);
+    if (this.installsInPlace) {
+      autoUpdater.quitAndInstall(false, true);
+      return;
+    }
+    void shell.openExternal(AutoUpdater.LATEST_RELEASE_URL);
   }
 }
