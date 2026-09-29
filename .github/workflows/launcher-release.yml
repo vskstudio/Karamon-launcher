@@ -121,6 +121,9 @@ jobs:
           pattern: launcher-*
           merge-multiple: true
 
+      - name: Update manifests point at published files
+        run: node scripts/verify-manifests.mjs artifacts
+
       - name: Checksums for every platform
         run: node scripts/checksums.mjs artifacts
 
@@ -147,6 +150,9 @@ jobs:
           path: artifacts
           pattern: launcher-*
           merge-multiple: true
+
+      - name: Update manifests point at published files
+        run: node scripts/verify-manifests.mjs artifacts
 
       - name: Checksums for every platform
         run: node scripts/checksums.mjs artifacts
