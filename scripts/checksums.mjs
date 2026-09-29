@@ -1,10 +1,10 @@
 import { createHash } from 'crypto';
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
-import { join, extname } from 'path';
+import { join, extname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = new URL('.', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
-const distDir   = join(__dirname, '..', 'dist');
+const distDir   = process.argv[2] ? resolve(process.argv[2]) : join(__dirname, '..', 'dist');
 
 const INCLUDE_EXTS = new Set(['.exe', '.dmg', '.zip', '.AppImage', '.yml', '.blockmap']);
 const EXCLUDE      = new Set(['builder-debug.yml', 'builder-effective-config.yaml']);

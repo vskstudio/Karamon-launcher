@@ -98,7 +98,6 @@ jobs:
             dist/*.zip
             dist/*.yml
             dist/*.blockmap
-            dist/checksums.txt
           if-no-files-found: error
 
   release:
@@ -112,6 +111,9 @@ jobs:
           path: artifacts
           pattern: launcher-*
           merge-multiple: true
+
+      - name: Checksums for every platform
+        run: node scripts/checksums.mjs artifacts
 
       - name: Publish GitHub release
         env:
