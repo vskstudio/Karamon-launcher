@@ -48,7 +48,7 @@ Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, ma
 
 ## Développement
 
-Prérequis: [Node.js](https://nodejs.org) 18+
+Prérequis: [Node.js](https://nodejs.org) 22.19+
 
 ```bash
 git clone https://github.com/vskstudio/Karamon-launcher.git
