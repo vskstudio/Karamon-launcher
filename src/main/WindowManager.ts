@@ -1,7 +1,8 @@
-import { BrowserWindow } from 'electron/main';
+import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
 import type { IpcEventContract } from '../ipc/contract';
+import { ASPECT_RATIO, initialWindowSize, minimumWindowSize, zoomFor } from './shared/WindowSize';
 
 export class WindowManager {
   private window: BrowserWindow | null = null;
@@ -9,14 +10,17 @@ export class WindowManager {
   constructor(private readonly distDir: string, private readonly assetsDir: string) {}
 
   create(): BrowserWindow {
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    const size = initialWindowSize(workArea);
+    const min = minimumWindowSize(workArea);
     this.window = new BrowserWindow({
-      width: 1100,
-      height: 680,
-      minWidth: 900,
-      minHeight: 580,
+      width: size.width,
+      height: size.height,
+      minWidth: min.width,
+      minHeight: min.height,
       frame: false,
       transparent: false,
-      backgroundColor: '#0b0a0d',
+      backgroundColor: '#0a0a0a',
       webPreferences: {
         preload: path.join(this.distDir, 'preload.cjs'),
         contextIsolation: true,
@@ -27,13 +31,25 @@ export class WindowManager {
       show: false,
     });
 
+    this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
+    WindowManager.scaleContent(this.window);
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {
       this.window = null;
     });
     return this.window;
+  }
+
+  private static scaleContent(window: BrowserWindow): void {
+    const apply = (): void => {
+      if (window.isDestroyed()) return;
+      const [width, height] = window.getContentSize();
+      window.webContents.setZoomFactor(zoomFor({ width, height }));
+    };
+    window.on('resize', apply);
+    window.webContents.on('did-finish-load', apply);
   }
 
   private static lockNavigation(window: BrowserWindow): void {

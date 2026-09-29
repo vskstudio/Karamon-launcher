@@ -350,7 +350,7 @@ html, body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 62% 40%;
+  object-position: 60% 45%;
   z-index: -2;
   -webkit-user-drag: none;
 }
@@ -379,29 +379,19 @@ html, body {
   gap: 10px;
 }
 
-.hero-title {
-  font-size: 27px;
-  font-weight: 800;
-  line-height: 1.22;
-  letter-spacing: -0.015em;
-  max-width: 560px;
-  color: #fff;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
-}
-
-.hero-desc {
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-  max-width: 470px;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+.hero-logo {
+  width: 380px;
+  max-width: 100%;
+  margin-left: -14px;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.55));
+  -webkit-user-drag: none;
 }
 
 .hero-actions {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 18px;
+  margin-top: 8px;
   flex-wrap: wrap;
 }
 
