@@ -20,6 +20,14 @@ mac:
   icon: assets/icon.png
   category: public.app-category.games
 
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: assets/icon.png
+  category: Game
+  artifactName: Karamon-Launcher-${version}.${ext}
+
 nsis:
   oneClick: true
   perMachine: false

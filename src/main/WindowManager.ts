@@ -23,7 +23,7 @@ export class WindowManager {
         nodeIntegration: false,
         sandbox: true,
       },
-      icon: path.join(this.assetsDir, 'icon.ico'),
+      icon: path.join(this.assetsDir, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
       show: false,
     });
 

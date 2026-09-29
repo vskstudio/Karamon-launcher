@@ -64,6 +64,9 @@ jobs:
           - os: macos-latest
             artifact: macos
             script: build:dist:mac
+          - os: ubuntu-latest
+            artifact: linux
+            script: build:dist:linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +94,7 @@ jobs:
           path: |
             dist/*.exe
             dist/*.dmg
+            dist/*.AppImage
             dist/*.zip
             dist/*.yml
             dist/*.blockmap
@@ -122,6 +126,9 @@ jobs:
             echo
             echo "## macOS"
             echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signee: clic droit, Ouvrir."
+            echo
+            echo "## Linux"
+            echo "Telecharge \`Karamon-Launcher-${VER}.AppImage\`, rends-le executable (\`chmod +x\`) puis lance-le."
             echo
             echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
           } > release-notes.md

@@ -17,6 +17,9 @@
     "prebuild:dist:mac": "node build.mjs",
     "build:dist:mac": "electron-builder --mac",
     "postbuild:dist:mac": "node scripts/checksums.mjs",
+    "prebuild:dist:linux": "node build.mjs",
+    "build:dist:linux": "electron-builder --linux --x64",
+    "postbuild:dist:linux": "node scripts/checksums.mjs",
     "pack": "electron-builder --dir"
   },
   "dependencies": {
