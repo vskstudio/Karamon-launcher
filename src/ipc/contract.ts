@@ -132,6 +132,13 @@ export interface BackupListResult {
   backups: BackupEntry[];
 }
 
+export interface ReleaseNote {
+  version: string;
+  url: string;
+  publishedAt: number | null;
+  highlights: string[];
+}
+
 export interface MinecraftProfile {
   id: string;
   name: string;
@@ -183,6 +190,8 @@ export const Channels = {
   backupList: 'backup:list',
   backupDelete: 'backup:delete',
 
+  releasesList: 'releases:list',
+
   authLogin: 'auth:login',
   authLogout: 'auth:logout',
   authGetSession: 'auth:get-session',
@@ -221,6 +230,7 @@ export interface IpcInvokeContract {
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
+  [Channels.releasesList]: { req: void; res: ReleaseNote[] };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
   [Channels.authLogout]: { req: void; res: void };
   [Channels.authGetSession]: { req: void; res: AuthSessionResult };
@@ -278,6 +288,8 @@ export interface LauncherApi {
   createBackup(): Promise<BackupEntry>;
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;
+
+  listReleases(): Promise<ReleaseNote[]>;
 
   authLogin(): Promise<AuthLoginResult>;
   authLogout(): Promise<void>;
