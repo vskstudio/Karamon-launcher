@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { HttpClient } from '../../shared/HttpClient';
-import type { Paths } from '../../shared/Paths';
-import { extractZipToDir } from '../../shared/ZipExtract';
-import { JavaDetector } from './JavaDetector';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { Paths } from '../../shared/Paths.ts';
+import { extractZipToDir } from '../../shared/ZipExtract.ts';
+import type { JavaDetector } from './JavaDetector.ts';
 
 const execFileP = promisify(execFile);
 
@@ -13,6 +13,19 @@ const REQUIRED_MAJOR = 21;
 const RUNTIME_DIR_NAME = 'jre-21';
 const ADOPTIUM_DOWNLOAD_TIMEOUT_MS = 600000;
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
+
+type ArchiveExt = '.zip' | '.tar.gz';
+
+interface AdoptiumPlatform {
+  os: string;
+  archiveExt: ArchiveExt;
+}
+
+const ADOPTIUM_PLATFORMS: Partial<Record<NodeJS.Platform, AdoptiumPlatform>> = {
+  win32: { os: 'windows', archiveExt: '.zip' },
+  linux: { os: 'linux', archiveExt: '.tar.gz' },
+  darwin: { os: 'mac', archiveExt: '.tar.gz' },
+};
 
 interface AdoptiumPackage {
   link: string;
@@ -33,11 +46,15 @@ export type StatusEmitter = (msg: string) => void;
 export type ProgressEmitter = (fraction: number) => void;
 
 export class JavaProvisioner {
-  constructor(
-    private readonly paths: Paths,
-    private readonly http: HttpClient,
-    private readonly detector: JavaDetector,
-  ) {}
+  private readonly paths: Paths;
+  private readonly http: HttpClient;
+  private readonly detector: JavaDetector;
+
+  constructor(paths: Paths, http: HttpClient, detector: JavaDetector) {
+    this.paths = paths;
+    this.http = http;
+    this.detector = detector;
+  }
 
   async ensure(
     configuredPath: string | undefined,
@@ -65,24 +82,29 @@ export class JavaProvisioner {
     );
     if (compatible) return compatible.path;
 
-    if (process.platform !== 'win32') {
+    const platform = ADOPTIUM_PLATFORMS[process.platform];
+    if (!platform) {
       throw new Error(
         `Java ${REQUIRED_MAJOR} requis et non détecté. Installe-le depuis adoptium.net puis relance le launcher.`,
       );
     }
 
-    return await this.installAdoptium(onStatus, onProgress);
+    return await this.installAdoptium(platform, onStatus, onProgress);
   }
 
-  private async installAdoptium(onStatus: StatusEmitter, onProgress: ProgressEmitter): Promise<string> {
+  private async installAdoptium(
+    platform: AdoptiumPlatform,
+    onStatus: StatusEmitter,
+    onProgress: ProgressEmitter,
+  ): Promise<string> {
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
     const apiUrl =
       `https://api.adoptium.net/v3/assets/latest/${REQUIRED_MAJOR}/hotspot` +
-      `?architecture=${arch}&image_type=jre&os=windows&vendor=eclipse`;
+      `?architecture=${arch}&image_type=jre&os=${platform.os}&vendor=eclipse`;
 
     onStatus('Recherche de Java 21 (Adoptium Temurin)...');
     const assets = await this.http.getJson<AdoptiumAsset[]>(apiUrl);
-    const asset = JavaProvisioner.pickZipAsset(assets);
+    const asset = JavaProvisioner.pickArchiveAsset(assets, platform.archiveExt);
     if (!asset) {
       throw new Error('Aucune archive Java 21 disponible chez Adoptium pour cette architecture.');
     }
@@ -97,9 +119,9 @@ export class JavaProvisioner {
 
     const cacheDir = this.paths.cacheDir;
     fs.mkdirSync(cacheDir, { recursive: true });
-    const tmpZip = path.join(cacheDir, path.basename(asset.binary.package.name));
+    const tmpArchive = path.join(cacheDir, path.basename(asset.binary.package.name));
 
-    await this.http.download(asset.binary.package.link, tmpZip, {
+    await this.http.download(asset.binary.package.link, tmpArchive, {
       label: 'Java 21',
       timeoutMs: ADOPTIUM_DOWNLOAD_TIMEOUT_MS,
       expectedSha256: checksum,
@@ -107,12 +129,12 @@ export class JavaProvisioner {
     });
 
     onStatus('Extraction de Java 21...');
-    this.extractRuntime(tmpZip);
-    fs.rmSync(tmpZip, { force: true });
+    await this.extractRuntime(tmpArchive, platform.archiveExt);
+    fs.rmSync(tmpArchive, { force: true });
 
     const javaPath = this.managedJavaPath();
     if (!javaPath) {
-      throw new Error('Extraction terminée mais java.exe introuvable dans le runtime.');
+      throw new Error(`Extraction terminée mais ${JavaProvisioner.javaExecutable()} introuvable dans le runtime.`);
     }
     const major = await this.probeMajor(javaPath);
     if (major === null || major < REQUIRED_MAJOR) {
@@ -122,13 +144,21 @@ export class JavaProvisioner {
     return javaPath;
   }
 
-  private extractRuntime(zipPath: string): void {
+  private async extractRuntime(archivePath: string, archiveExt: ArchiveExt): Promise<void> {
     const root = this.runtimeRoot();
     if (fs.existsSync(root)) {
       fs.rmSync(root, { recursive: true, force: true });
     }
     fs.mkdirSync(root, { recursive: true });
-    extractZipToDir(zipPath, root);
+    if (archiveExt === '.tar.gz') {
+      await execFileP('tar', ['-xzf', archivePath, '-C', root]);
+      return;
+    }
+    extractZipToDir(archivePath, root);
+  }
+
+  private static javaExecutable(): string {
+    return process.platform === 'win32' ? 'java.exe' : 'java';
   }
 
   private runtimeRoot(): string {
@@ -138,7 +168,7 @@ export class JavaProvisioner {
   private managedJavaPath(): string | null {
     const root = this.runtimeRoot();
     if (!fs.existsSync(root)) return null;
-    const exe = process.platform === 'win32' ? 'java.exe' : 'java';
+    const exe = JavaProvisioner.javaExecutable();
     let entries: string[];
     try {
       entries = fs.readdirSync(root);
@@ -169,9 +199,12 @@ export class JavaProvisioner {
     }
   }
 
-  private static pickZipAsset(assets: AdoptiumAsset[] | null | undefined): AdoptiumAsset | null {
+  private static pickArchiveAsset(
+    assets: AdoptiumAsset[] | null | undefined,
+    archiveExt: ArchiveExt,
+  ): AdoptiumAsset | null {
     if (!Array.isArray(assets) || assets.length === 0) return null;
-    return assets.find((a) => a.binary.package.name?.toLowerCase().endsWith('.zip')) ?? null;
+    return assets.find((a) => a.binary.package.name?.toLowerCase().endsWith(archiveExt)) ?? null;
   }
 
   static parseMajor(version: string): number {

@@ -98,7 +98,7 @@ export class MicrosoftAuth {
       const win = new BrowserWindow({
         width: 520,
         height: 720,
-        title: 'Karamon — Connexion Microsoft',
+        title: 'Karamon · Connexion Microsoft',
         autoHideMenuBar: true,
         backgroundColor: '#0a0a0a',
         webPreferences: {

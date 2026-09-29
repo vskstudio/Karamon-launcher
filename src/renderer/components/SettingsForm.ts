@@ -30,7 +30,6 @@ export class SettingsForm {
     $input('cfg-jvm-args').value = cfg.jvmArgs ?? '';
     $input('cfg-java-path').value = cfg.javaPath ?? '';
     $input('cfg-mc-game-dir').value = cfg.mcGameDir ?? '';
-    $input('cfg-launcher-path').value = cfg.minecraftLauncherPath ?? '';
     $input('cfg-close-on-launch').checked = cfg.closeLauncherOnGameStart ?? false;
     $input('cfg-dev-mode').checked = cfg.devMode ?? false;
     return cfg;
@@ -103,7 +102,7 @@ export class SettingsForm {
     const hint = $('ram-hint');
     const value = parseInt($input('cfg-memory').value, 10) || 0;
     if (!this.systemInfo) {
-      hint.textContent = 'Recommandé : 8192–12288 Mo (8–12 Go)';
+      hint.textContent = 'Recommandé : 8192 à 12288 Mo (8 à 12 Go)';
       hint.classList.remove('warn');
       return;
     }
@@ -135,7 +134,6 @@ export class SettingsForm {
       jvmArgs: $input('cfg-jvm-args').value.trim(),
       javaPath: $input('cfg-java-path').value.trim(),
       mcGameDir: $input('cfg-mc-game-dir').value.trim(),
-      minecraftLauncherPath: $input('cfg-launcher-path').value.trim(),
       closeLauncherOnGameStart: $input('cfg-close-on-launch').checked,
       devMode: $input('cfg-dev-mode').checked,
     };

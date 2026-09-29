@@ -27,7 +27,7 @@ export class MinecraftAuth {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      const detail = body ? ` — ${body.slice(0, 300)}` : '';
+      const detail = body ? `: ${body.slice(0, 300)}` : '';
       throw new Error(`Minecraft a refusé l'authentification (HTTP ${res.status})${detail}`);
     }
     const data = (await res.json()) as LoginResponse;

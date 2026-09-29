@@ -12,13 +12,28 @@ win:
     - target: nsis
       arch: [x64]
   icon: assets/icon.ico
+  artifactName: Karamon-Launcher-Setup-${version}.${ext}
 
 mac:
   target:
     - target: dmg
       arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
   icon: assets/icon.png
   category: public.app-category.games
+  artifactName: Karamon-Launcher-${version}-${arch}-mac.${ext}
+
+dmg:
+  artifactName: Karamon-Launcher-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: assets/icon.png
+  category: Game
+  artifactName: Karamon-Launcher-${version}.${ext}
 
 nsis:
   oneClick: true

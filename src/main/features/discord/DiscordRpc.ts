@@ -140,10 +140,10 @@ export class DiscordRpc {
     const activity = {
       ...base,
       largeImageKey: LARGE_IMAGE_KEY,
-      largeImageText: 'Karamon — play.karamon.fr',
+      largeImageText: 'Karamon · play.karamon.fr',
     };
     this.client.user.setActivity(activity).then(
-      () => this.opts.log?.(`[Discord] activité: ${this.state} — ${this.playersText()}`),
+      () => this.opts.log?.(`[Discord] activité: ${this.state}, ${this.playersText()}`),
       (err: Error) => {
         this.opts.log?.(`[Discord] setActivity échoué (avec image): ${err?.message ?? err}`);
         this.client?.user?.setActivity(base).then(

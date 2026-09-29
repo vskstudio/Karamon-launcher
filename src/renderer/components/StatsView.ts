@@ -60,7 +60,7 @@ export class StatsView {
   }
 
   private static formatDate(ts: number | null): string {
-    if (!ts) return '—';
+    if (!ts) return 'Aucune';
     return new Date(ts).toLocaleDateString('fr-FR');
   }
 }

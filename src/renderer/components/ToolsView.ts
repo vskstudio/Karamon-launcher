@@ -55,7 +55,7 @@ export class ToolsView {
       tag.textContent = r.summary;
       const meta = document.createElement('span');
       meta.className = 'crash-meta';
-      meta.textContent = `${r.name} — ${new Date(r.mtime).toLocaleString('fr-FR')}`;
+      meta.textContent = `${r.name} · ${new Date(r.mtime).toLocaleString('fr-FR')}`;
       main.append(tag, meta);
 
       const view = document.createElement('button');
@@ -97,7 +97,7 @@ export class ToolsView {
       name.textContent = b.name;
       const meta = document.createElement('span');
       meta.className = 'backup-meta';
-      meta.textContent = `${ToolsView.formatSize(b.size)} — ${new Date(b.mtime).toLocaleString('fr-FR')}`;
+      meta.textContent = `${ToolsView.formatSize(b.size)} · ${new Date(b.mtime).toLocaleString('fr-FR')}`;
       main.append(name, meta);
 
       const del = document.createElement('button');
@@ -132,7 +132,7 @@ export class ToolsView {
 
   private async openCrash(r: CrashReport): Promise<void> {
     const content = await this.api.readCrash(r.name);
-    ($('crash-modal-title')).textContent = `${r.name} — ${r.summary}`;
+    ($('crash-modal-title')).textContent = `${r.name} : ${r.summary}`;
     ($('crash-modal-body')).textContent = content;
     $('crash-modal').classList.add('show');
   }

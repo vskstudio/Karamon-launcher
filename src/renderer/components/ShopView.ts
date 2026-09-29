@@ -78,7 +78,7 @@ const SHOP_KITS: KitOption[] = [
     accent: '#ffaa00',
     accent2: '#ffd27a',
     badge: 'Top Grade',
-    summary: 'Le kit le plus complet — Backpack Nétherite, Clés Spéciales et bien plus.',
+    summary: 'Le kit le plus complet : Backpack Nétherite, Clés Spéciales et bien plus.',
     items: [
       '128 Ultra Balls',
       '15 Master Balls',
@@ -132,7 +132,7 @@ const SHOP_KEYS: KeyOption[] = [
     id: 'special',
     name: 'Clé Spéciale',
     accent: '#e0556c',
-    summary: 'La clé la plus rare — drops puissants, exclusifs et très limités.',
+    summary: 'La clé la plus rare : drops puissants, exclusifs et très limités.',
     options: [
       { id: 'unit', label: 'Unité', quantity: 1, price: 9.99 },
       { id: 'pack5', label: 'Pack de 5', quantity: 5, price: 29.99 },
@@ -263,7 +263,7 @@ export class ShopView {
         btn.append(label, priceEl);
         btn.addEventListener('click', () => this.addItem({
           sku: `key:${key.id}:${option.id}`,
-          name: `${key.name} — ${option.label}`,
+          name: `${key.name} (${option.label})`,
           detail: `${option.quantity} clé${option.quantity > 1 ? 's' : ''}`,
           price: option.price,
           count: 1,
@@ -369,7 +369,7 @@ export class ShopView {
         const name = document.createElement('strong');
         name.textContent = item.name;
         const detail = document.createElement('span');
-        detail.textContent = `${item.detail} — ${formatPrice(item.price)}`;
+        detail.textContent = `${item.detail} · ${formatPrice(item.price)}`;
         info.append(name, detail);
 
         const qty = document.createElement('div');
@@ -402,7 +402,7 @@ export class ShopView {
     checkout.disabled = this.cart.length === 0;
     checkout.textContent = this.cart.length === 0
       ? 'Panier vide'
-      : `Checkout — ${formatPrice(total)}`;
+      : `Checkout : ${formatPrice(total)}`;
 
     const error = $('shop-cart-error');
     error.hidden = true;
@@ -468,7 +468,7 @@ export class ShopView {
 
   private orderNote(username: string): string {
     const lines = this.cart.map((item) =>
-      `- ${item.name} x${item.count} (${item.detail}) — ${formatPrice(item.price * item.count)}`,
+      `- ${item.name} x${item.count} (${item.detail}): ${formatPrice(item.price * item.count)}`,
     );
     return `Username: ${username}\nItems:\n${lines.join('\n')}\nTotal: ${formatPrice(this.cartTotal())}`;
   }

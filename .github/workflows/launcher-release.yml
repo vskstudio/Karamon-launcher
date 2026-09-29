@@ -3,7 +3,6 @@ name: Launcher Release
 on:
   push:
     branches: [main]
-    # Only launcher changes ship a new build; pack content (content/) syncs on its own.
     paths:
       - 'src/**'
       - 'assets/**'
@@ -14,13 +13,24 @@ on:
       - 'scripts/**'
     tags:
       - 'launcher-v*'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'build.mjs'
+      - 'electron-builder.yml'
+      - 'scripts/**'
+      - '.github/workflows/launcher-release.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: launcher-release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'push' && 'launcher-release' || format('launcher-dry-run-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   version:
@@ -32,8 +42,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # A pushed tag keeps its own version. A push to main takes the next patch after the
-      # latest launcher tag, or package.json when it was bumped by hand past that tag.
       - id: pick
         shell: bash
         run: |
@@ -64,6 +72,9 @@ jobs:
           - os: macos-latest
             artifact: macos
             script: build:dist:mac
+          - os: ubuntu-latest
+            artifact: linux
+            script: build:dist:linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -91,14 +102,16 @@ jobs:
           path: |
             dist/*.exe
             dist/*.dmg
+            dist/*.AppImage
             dist/*.zip
             dist/*.yml
+            !dist/builder-debug.yml
             dist/*.blockmap
-            dist/checksums.txt
           if-no-files-found: error
 
-  release:
+  release-dry-run:
     needs: [version, build]
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,25 +122,46 @@ jobs:
           pattern: launcher-*
           merge-multiple: true
 
+      - name: Checksums for every platform
+        run: node scripts/checksums.mjs artifacts
+
+      - name: Release notes
+        run: node scripts/release-notes.mjs "${{ needs.version.outputs.version }}" > release-notes.md
+
+      - name: Show what the release would publish
+        run: |
+          ls -l artifacts
+          cat artifacts/checksums.txt
+          cat release-notes.md
+
+  release:
+    needs: [version, build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: launcher-*
+          merge-multiple: true
+
+      - name: Checksums for every platform
+        run: node scripts/checksums.mjs artifacts
+
+      - name: Release notes
+        run: node scripts/release-notes.mjs "${{ needs.version.outputs.version }}" > release-notes.md
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER="${{ needs.version.outputs.version }}"
-          {
-            echo "Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1)."
-            echo
-            echo "## Windows"
-            echo "Installe \`Karamon Launcher Setup ${VER}.exe\`, connecte-toi avec Microsoft, mets a jour les mods, puis JOUER."
-            echo
-            echo "## macOS"
-            echo "Ouvre le \`.dmg\` (arm64 Apple Silicon, x64 Intel). L'app n'est pas signee: clic droit, Ouvrir."
-            echo
-            echo "Java 21 est detecte ou installe automatiquement. Le pack se synchronise depuis https://karamon.fr/downloads/."
-          } > release-notes.md
-          gh release create "launcher-v${VER}" artifacts/* \
+          gh release create "launcher-v${{ needs.version.outputs.version }}" artifacts/* \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
-            --title "Karamon Launcher ${VER}" \
+            --title "Karamon Launcher ${{ needs.version.outputs.version }}" \
             --latest \
             --notes-file release-notes.md
