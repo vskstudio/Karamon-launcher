@@ -33,6 +33,9 @@ export class WindowManager {
 
     this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
+    // Chromium remembers a zoom level per origin, so reset any zoom a previous version left behind.
+    const window = this.window;
+    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(1));
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {
