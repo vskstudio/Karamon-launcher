@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { safeStorage } from 'electron/main';
+import { app, safeStorage } from 'electron/main';
 import type { MinecraftProfile } from '../../../ipc/contract';
 
 interface StoredSession {
@@ -17,8 +17,14 @@ export interface LoadedSession {
 export class TokenStore {
   constructor(private readonly file: string) {}
 
+  static preferLinuxSecretService(): void {
+    if (process.platform !== 'linux') return;
+    if (app.commandLine.hasSwitch('password-store')) return;
+    app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+  }
+
   save(refreshToken: string, profile: MinecraftProfile): void {
-    if (!safeStorage.isEncryptionAvailable()) {
+    if (!TokenStore.encryptionAvailable()) {
       throw new Error('Stockage chiffré indisponible sur ce système');
     }
     const encrypted = safeStorage.encryptString(refreshToken).toString('base64');
@@ -29,7 +35,7 @@ export class TokenStore {
 
   load(): LoadedSession | null {
     if (!fs.existsSync(this.file)) return null;
-    if (!safeStorage.isEncryptionAvailable()) return null;
+    if (!TokenStore.encryptionAvailable()) return null;
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
       if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
@@ -38,6 +44,14 @@ export class TokenStore {
     } catch {
       return null;
     }
+  }
+
+  private static encryptionAvailable(): boolean {
+    if (safeStorage.isEncryptionAvailable()) return true;
+    if (process.platform !== 'linux' || !app.isReady()) return false;
+    if (safeStorage.getSelectedStorageBackend() !== 'basic_text') return false;
+    safeStorage.setUsePlainTextEncryption(true);
+    return safeStorage.isEncryptionAvailable();
   }
 
   clear(): void {
