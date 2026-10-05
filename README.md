@@ -36,6 +36,16 @@ Le job de release calcule un seul `checksums.txt` (SHA256 et SHA512 des installe
 
 Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis `https://karamon.fr/downloads/`.
 
+### Intégrité et réparation
+
+Un plantage du PC pendant une écriture peut laisser un fichier de la bonne taille mais rempli d'octets nuls. Le launcher s'en protège (`src/main/features/integrity/`) :
+
+- **Vérification par empreinte** : quand les manifestes du pack (`mods-manifest.json`, `resourcepacks-manifest.json`, `shaderpacks-manifest.json`, `overrides-manifest.json`) donnent un `sha1`, un fichier n'est à jour que si sa taille et son SHA-1 correspondent. Les empreintes sont mises en cache dans `.karamon-integrity-cache.json` (taille + date) pour ne recalculer que ce qui a bougé. Chaque `.jar`/`.zip` est aussi contrôlé par sa fin d'archive, même sans `sha1`. Seuls les fichiers abîmés sont réécrits.
+- **Écritures sûres** : les fichiers du pack passent par un fichier temporaire vidé sur disque puis renommé (`src/main/shared/AtomicWrite.ts`).
+- **Configs vides** : avant chaque lancement, les fichiers de `config/`, `defaultoptions.journal.json` et `resourcepacks/*.rpo` entièrement nuls sont déplacés dans `config-corrompues-AAAA-MM-JJ/`, puis remplacés par la version du pack (archive des overrides gardée dans `.karamon-overrides.zip`) ou laissés absents pour que le mod régénère sa valeur par défaut.
+- **Réparer l'installation** (Paramètres → Maintenance) : revérifie chaque fichier sans le cache, réinstalle ceux qui sont abîmés et répare les configs.
+- **Après un plantage au démarrage** (sortie en erreur dans les 2 premières minutes) : si le rapport de crash ou `logs/latest.log` montrent une corruption (`zip END header not found`, `ZipException`, `Error analyzing [`, `\u0000` dans une erreur JSON), la réparation se lance seule et le launcher propose de relancer.
+
 ## Releases
 
 | Tag | Rôle |
