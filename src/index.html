@@ -98,6 +98,17 @@
       </div>
     </div>
 
+    <div class="update-bar" id="repair-bar">
+      <div class="update-bar-left">
+        <i data-lucide="wrench" class="btn-icon"></i>
+        <span id="repair-msg"></span>
+      </div>
+      <div class="update-bar-right">
+        <button class="btn-update-install" id="btn-repair-relaunch">Relancer</button>
+        <button class="btn-update-later"   id="btn-dismiss-repair">Plus tard</button>
+      </div>
+    </div>
+
     <section class="panel active" id="panel-home">
       <div class="home-scroll">
         <div class="hero">
@@ -303,6 +314,14 @@
               <div><span class="stat-label">CPU</span><span class="stat-value" id="sys-cpu">…</span></div>
               <div><span class="stat-label">OS</span><span class="stat-value" id="sys-os">…</span></div>
             </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3 class="settings-group-title">Maintenance</h3>
+          <div class="field">
+            <button class="btn-primary" id="btn-repair-install" type="button">Réparer l'installation</button>
+            <span class="field-hint" id="repair-status">Revérifie chaque fichier du pack, retélécharge ceux qui sont abîmés et répare les fichiers de configuration vides. Utile si le jeu plante au démarrage.</span>
           </div>
         </div>
 

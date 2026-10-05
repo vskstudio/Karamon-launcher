@@ -122,6 +122,7 @@ export class KaramonRenderer {
       this.console.clear();
     });
     $('btn-repair-pack').addEventListener('click', () => this.repair());
+    $('btn-repair-install').addEventListener('click', () => this.repair());
     $('btn-reset-stats').addEventListener('click', () => this.resetStats());
 
     QuickLinks.render(this.api, $('nav-links'));
@@ -129,6 +130,7 @@ export class KaramonRenderer {
     this.settings.attach($('btn-save-settings'));
     this.wireIpcEvents();
     this.wireUpdateBar();
+    this.wireRepairBar();
     this.wireCheckUpdateButton();
     Konami.attach(() => this.fireKonami());
     await this.refreshAuthState();
@@ -337,20 +339,44 @@ export class KaramonRenderer {
   }
 
   private async repair(): Promise<void> {
-    const btn = $button('btn-repair-pack');
-    btn.disabled = true;
-    this.console.log('Réparation du pack en cours...', 'info');
+    const buttons = [$button('btn-repair-pack'), $button('btn-repair-install')];
+    const status = $('repair-status');
+    buttons.forEach((b) => (b.disabled = true));
+    status.textContent = 'Vérification de chaque fichier en cours…';
+    this.console.log("Réparation de l'installation en cours...", 'info');
     const result = await this.api.repair();
-    btn.disabled = false;
+    buttons.forEach((b) => (b.disabled = false));
     if (result.ok) {
-      this.console.log('Pack réparé.', 'ok');
-      Toast.show('Pack réparé !', 'ok');
+      status.textContent = result.summary;
+      this.console.log(result.summary, 'ok');
+      Toast.show(result.summary, 'ok');
       this.mods.invalidate();
       void this.mods.load(true);
     } else {
+      status.textContent = 'Erreur : ' + result.error;
       this.console.log('Erreur réparation: ' + result.error, 'error');
       Toast.show(result.error, 'error');
     }
+  }
+
+  private wireRepairBar(): void {
+    const bar = $('repair-bar');
+    const msg = $('repair-msg');
+    $('btn-dismiss-repair').addEventListener('click', () => bar.classList.remove('show'));
+    $('btn-repair-relaunch').addEventListener('click', () => {
+      bar.classList.remove('show');
+      void this.play();
+    });
+    this.api.onRepairOffer(({ result }) => {
+      if (result.ok) {
+        msg.textContent = `Le jeu a planté sur des fichiers abîmés. ${result.summary}`;
+        this.console.log('Réparation automatique terminée : ' + result.summary, 'ok');
+      } else {
+        msg.textContent = 'Le jeu a planté sur des fichiers abîmés, la réparation a échoué.';
+        this.console.log('Réparation automatique échouée : ' + result.error, 'error');
+      }
+      bar.classList.add('show');
+    });
   }
 
   private async resetStats(): Promise<void> {

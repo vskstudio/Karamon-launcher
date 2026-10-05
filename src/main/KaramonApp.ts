@@ -14,6 +14,7 @@ import {
   type LaunchResult,
   type ModsListResult,
   type PingResult,
+  type RepairResult,
   type SetupResult,
   type SystemInfo,
 } from '../ipc/contract';
@@ -45,6 +46,7 @@ import { AuthSession } from './features/auth/AuthSession';
 import { TokenStore } from './features/auth/TokenStore';
 import { GameLauncher } from './features/minecraft/GameLauncher';
 import { WindowManager } from './WindowManager';
+import { repairSummary } from './features/integrity/RepairSummary';
 
 const SERVER_PING_TIMEOUT_MS = 5000;
 const CLOSE_DELAY_MS = 2000;
@@ -76,6 +78,7 @@ export class KaramonApp {
   private readonly skins = new SkinLookup(this.http);
   private readonly discord: DiscordRpc;
   private javaCache: JavaCandidate[] | null = null;
+  private repairing: Promise<RepairResult> | null = null;
 
   constructor(distDir: string, assetsDir: string) {
     this.pack = loadPackProfile(distDir);
@@ -250,17 +253,29 @@ export class KaramonApp {
     return this.javaCache;
   }
 
-  private async repair(): Promise<LaunchResult> {
+  private repair(): Promise<RepairResult> {
+    if (!this.repairing) {
+      this.repairing = this.runRepair().finally(() => {
+        this.repairing = null;
+      });
+    }
+    return this.repairing;
+  }
+
+  private async runRepair(): Promise<RepairResult> {
     const cfg = this.config.get();
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
     try {
       onProgress(0);
-      onStatus('Réparation du pack...');
-      await this.minecraft.repair(cfg, onStatus, onProgress);
+      onStatus("Réparation de l'installation : vérification complète...");
+      const report = await this.minecraft.repair(cfg, onStatus, onProgress);
+      const damaged = report.damaged.length;
+      const configs = report.configs.repaired.length;
+      const summary = repairSummary(damaged, configs);
       onProgress(1);
-      onStatus('Pack réparé.');
-      return { ok: true };
+      onStatus(summary);
+      return { ok: true, summary, damaged, configs };
     } catch (e) {
       const msg = (e as Error).message;
       onStatus('Erreur de réparation: ' + msg);
@@ -331,7 +346,7 @@ export class KaramonApp {
         onStatus,
         onProgress,
         onLog: (line) => this.window.send(Channels.eventStatus, line),
-        onExit: (code) => {
+        onExit: (code, corruption) => {
           this.stats.endSession();
           this.discord.setMenu();
           this.window.send(Channels.eventGameState, { running: false });
@@ -339,6 +354,7 @@ export class KaramonApp {
             Channels.eventStatus,
             code === 0 ? 'Minecraft fermé.' : `Minecraft fermé (code ${code}).`,
           );
+          if (corruption.length > 0) void this.repairAfterCrash(corruption);
         },
       });
       this.stats.startSession();
@@ -354,6 +370,16 @@ export class KaramonApp {
       this.window.send(Channels.eventGameState, { running: false });
       return { ok: false, error: msg };
     }
+  }
+
+  /** The game died at startup on damaged files: repair, then let the player relaunch. */
+  private async repairAfterCrash(reasons: string[]): Promise<void> {
+    this.window.send(
+      Channels.eventStatus,
+      `Le jeu a planté au démarrage sur des fichiers abîmés (${reasons.join(', ')}). Réparation automatique...`,
+    );
+    const result = await this.repair();
+    this.window.send(Channels.eventRepairOffer, { reasons, result });
   }
 
   private async syncMods(): Promise<LaunchResult> {

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import AdmZip from 'adm-zip';
+import { writeFileAtomic } from './AtomicWrite.ts';
 
 const LOCAL_HEADER_SIGNATURE = 0x04034b50;
 const LOCAL_HEADER_SIZE = 30;
@@ -11,6 +12,8 @@ const DEFLATED = 8;
 export interface ZipExtractOptions {
   stripCommonTopLevelFolder?: boolean;
   exclude?: string[];
+  /** Writes each file through a flushed temp file + rename (pack files). */
+  durable?: boolean;
 }
 
 export function readEntryData(zipBuffer: Buffer, entry: AdmZip.IZipEntry): Buffer {
@@ -55,7 +58,7 @@ function inflateEntryFromCentralDirectory(zipBuffer: Buffer, entry: AdmZip.IZipE
 export function extractZipToDir(
   zipPath: string,
   destDir: string,
-  { stripCommonTopLevelFolder = false, exclude = [] }: ZipExtractOptions = {},
+  { stripCommonTopLevelFolder = false, exclude = [], durable = false }: ZipExtractOptions = {},
 ): void {
   const zipBuffer = fs.readFileSync(zipPath);
   const entries = new AdmZip(zipBuffer).getEntries();
@@ -74,8 +77,13 @@ export function extractZipToDir(
       fs.mkdirSync(target, { recursive: true });
       continue;
     }
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, readEntryData(zipBuffer, entry));
+    const data = readEntryData(zipBuffer, entry);
+    if (durable) {
+      writeFileAtomic(target, data);
+    } else {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, data);
+    }
   }
 }
 

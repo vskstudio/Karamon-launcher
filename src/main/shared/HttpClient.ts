@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import type { IncomingHttpHeaders, IncomingMessage } from 'http';
+import { fsyncFile } from './AtomicWrite.ts';
 
 const REDIRECT_STATUS = new Set([301, 302, 307, 308]);
 const MAX_REDIRECTS = 10;
@@ -275,7 +276,7 @@ export class HttpClient {
           }),
         ),
       );
-      fs.rmSync(dest, { force: true });
+      fsyncFile(tmp);
       fs.renameSync(tmp, dest);
       return true;
     } catch {
@@ -339,7 +340,7 @@ export class HttpClient {
             : undefined,
         })
           .then(() => {
-            fs.rmSync(dest, { force: true });
+            fsyncFile(tmp);
             fs.renameSync(tmp, dest);
             resolve();
           })
