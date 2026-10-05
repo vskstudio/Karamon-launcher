@@ -3,6 +3,7 @@ import path from 'path';
 import AdmZip from 'adm-zip';
 // Explicit extension so node --experimental-strip-types can run the unit test; esbuild bundles it fine.
 import { resolveInside } from '../../shared/ZipExtract.ts';
+import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
 
 /**
  * Files under these prefixes are owned by the pack: every sync rewrites them so
@@ -65,8 +66,7 @@ export function installOverrides(
         /* rewrite below */
       }
     }
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, data);
+    writeFileAtomic(target, data);
     written++;
   }
   return { written, kept };
