@@ -25,6 +25,16 @@ export interface SetupResult {
 
 export type LaunchResult = { ok: true } | { ok: false; error: string };
 
+export type RepairResult =
+  | { ok: true; summary: string; damaged: number; configs: number }
+  | { ok: false; error: string };
+
+/** Sent after a startup crash that points at damaged files, once the repair ran. */
+export interface RepairOffer {
+  reasons: string[];
+  result: RepairResult;
+}
+
 export interface SamplePlayer {
   name: string;
   id?: string;
@@ -204,6 +214,7 @@ export const Channels = {
   eventProgress: 'progress:update',
   eventGameState: 'game:state',
   eventUpdateReady: 'update:ready',
+  eventRepairOffer: 'repair:offer',
 } as const;
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels];
@@ -214,7 +225,7 @@ export interface IpcInvokeContract {
   [Channels.minecraftSetup]: { req: void; res: SetupResult };
   [Channels.launchPlay]: { req: void; res: LaunchResult };
   [Channels.launchSyncMods]: { req: void; res: LaunchResult };
-  [Channels.launchRepair]: { req: void; res: LaunchResult };
+  [Channels.launchRepair]: { req: void; res: RepairResult };
   [Channels.serverPing]: { req: void; res: PingResult };
   [Channels.folderInstance]: { req: void; res: void };
   [Channels.folderData]: { req: void; res: void };
@@ -253,6 +264,7 @@ export interface IpcEventContract {
   [Channels.eventProgress]: number;
   [Channels.eventGameState]: GameState;
   [Channels.eventUpdateReady]: UpdateInfo;
+  [Channels.eventRepairOffer]: RepairOffer;
 }
 
 export interface LauncherApi {
@@ -267,7 +279,7 @@ export interface LauncherApi {
 
   play(): Promise<LaunchResult>;
   syncMods(): Promise<LaunchResult>;
-  repair(): Promise<LaunchResult>;
+  repair(): Promise<RepairResult>;
 
   pingServer(): Promise<PingResult>;
 
@@ -305,6 +317,7 @@ export interface LauncherApi {
   onProgress(cb: (val: number) => void): void;
   onGameState(cb: (state: GameState) => void): void;
   onUpdateReady(cb: (info: UpdateInfo) => void): void;
+  onRepairOffer(cb: (offer: RepairOffer) => void): void;
 }
 
 declare global {

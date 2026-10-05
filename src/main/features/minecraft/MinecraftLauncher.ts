@@ -2,11 +2,13 @@ import { DevMode } from '../../shared/DevMode';
 import fs from 'fs';
 import path from 'path';
 import type { AppConfig } from '../../../ipc/contract';
-import type {
+import {
   ModpackSync,
-  StatusEmitter,
-  ProgressEmitter,
+  type StatusEmitter,
+  type ProgressEmitter,
 } from '../modpack/ModpackSync';
+import { repairCorruptConfigs, repairMessage, type ConfigRepairResult } from '../integrity/ConfigRepair';
+import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/CrashDiagnosis';
 import { ServersDat } from './ServersDat';
 import type { GameLauncher } from './GameLauncher';
 import type { JavaProvisioner } from '../java/JavaProvisioner';
@@ -27,7 +29,14 @@ export interface LaunchEvents {
   onStatus: StatusEmitter;
   onProgress: ProgressEmitter;
   onLog: (line: string) => void;
-  onExit: (code: number | null) => void;
+  /** `corruption`: reasons a startup crash points at damaged files (empty otherwise). */
+  onExit: (code: number | null, corruption: string[]) => void;
+}
+
+export interface RepairReport {
+  /** Pack files found damaged and reinstalled. */
+  damaged: string[];
+  configs: ConfigRepairResult;
 }
 
 export type ServerListSetupResult =
@@ -106,7 +115,9 @@ export class MinecraftLauncher {
       events.onStatus,
       (p) => events.onProgress(0.1 + p * 0.25),
     );
+    this.repairConfigs(gameDir, events.onStatus);
 
+    let spawnedAt = Date.now();
     await this.gameLauncher.launch(
       {
         javaPath,
@@ -119,9 +130,15 @@ export class MinecraftLauncher {
         onStatus: events.onStatus,
         onProgress: (p) => events.onProgress(0.35 + p * 0.65),
         onLog: events.onLog,
-        onExit: events.onExit,
+        onExit: (code) => {
+          const corruption = isEarlyCrash(code, spawnedAt, Date.now())
+            ? detectCorruption(readCrashEvidence(gameDir, spawnedAt))
+            : [];
+          events.onExit(code, corruption);
+        },
       },
     );
+    spawnedAt = Date.now();
   }
 
   async syncOnly(
@@ -134,16 +151,28 @@ export class MinecraftLauncher {
     await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress);
   }
 
+  /** Full verification: rehash every pack file, reinstall the damaged ones, repair configs. */
   async repair(
     config: AppConfig,
     onStatus: StatusEmitter,
     onProgress: ProgressEmitter,
-  ): Promise<void> {
+  ): Promise<RepairReport> {
+    if (this.isRunning()) throw new Error("Ferme Minecraft avant de réparer l'installation.");
     const gameDir = this.instanceDir(config);
     this.prepareGameDir(gameDir, config, onStatus);
-    onStatus('Réparation : invalidation du cache...');
-    this.modpackSync.invalidateCache(gameDir);
-    await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress);
+    const sync = await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress, {
+      verifyAll: true,
+    });
+    const configs = this.repairConfigs(gameDir, onStatus);
+    return { damaged: sync.damaged, configs };
+  }
+
+  private repairConfigs(gameDir: string, onStatus: StatusEmitter): ConfigRepairResult {
+    const result = repairCorruptConfigs(gameDir, ModpackSync.overridesArchive(gameDir));
+    if (result.repaired.length > 0 && result.backupDir) {
+      onStatus(`${repairMessage(result.repaired.length)} Copies abîmées: ${path.basename(result.backupDir)}/`);
+    }
+    return result;
   }
 
   private prepareGameDir(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {

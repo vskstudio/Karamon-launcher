@@ -59,6 +59,9 @@ const api: LauncherApi = {
   onUpdateReady: (cb) => {
     ipcRenderer.on(Channels.eventUpdateReady, (_e, info) => cb(info));
   },
+  onRepairOffer: (cb) => {
+    ipcRenderer.on(Channels.eventRepairOffer, (_e, offer) => cb(offer));
+  },
 };
 
 contextBridge.exposeInMainWorld('launcher', api);
