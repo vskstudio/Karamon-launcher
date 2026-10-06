@@ -3,7 +3,7 @@
   <br/><br/>
   <p>Launcher et pack client pour le serveur <strong>karamon.fr</strong></p>
 
-  ![Version](https://img.shields.io/badge/version-2.0.11-blue?style=flat-square)
+  ![Version](https://img.shields.io/github/v/release/vskstudio/Karamon-launcher?filter=launcher-v*&label=launcher&style=flat-square)
   ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-green?style=flat-square)
   ![Fabric](https://img.shields.io/badge/Fabric-0.18.4-orange?style=flat-square)
   ![Pack](https://img.shields.io/badge/pack-Cobbleverse%201.7.42-purple?style=flat-square)
@@ -11,7 +11,7 @@
 
 ---
 
-Repo public unique: installeur du launcher **et** le pack client (`mods.zip` + `assets.zip`).
+Repo public du launcher. Le pack client (mods, resource packs, shaders, configs) est construit et publié par la CI de [`vskstudio/Karamon`](https://github.com/vskstudio/Karamon) sur `https://karamon.fr/downloads/`.
 
 ## Téléchargement
 
@@ -51,8 +51,9 @@ Un plantage du PC pendant une écriture peut laisser un fichier de la bonne tail
 | Tag | Rôle |
 |---|---|
 | `launcher-vX.Y.Z` | Installeur Windows / macOS / Linux. Marqué **Latest** pour l'auto-update. |
-| `pack-vX.Y.Z` | Historique du pack client. |
-| `pack-latest` | Alias du pack courant, lu par les launchers jusqu'à 2.0.10. À partir de 2.0.11, le pack vient de `https://karamon.fr/downloads/`. |
+| `pack-vX.Y.Z` | Historique de l'ancien circuit du pack (jusqu'à 0.5.86). Plus alimenté. |
+
+Le tag `pack-latest`, lu par les launchers jusqu'à 2.0.10, n'existe plus. Depuis 2.0.11, le pack vient uniquement de `https://karamon.fr/downloads/`.
 
 `/releases/latest` reste le launcher. Le pack n'utilise pas ce raccourci, pour ne pas casser l'updater.
 
@@ -82,11 +83,9 @@ git tag launcher-v2.1.0
 git push origin launcher-v2.1.0
 ```
 
-Publier le pack (après `node scripts/build-content-pack.mjs` côté serveur KaramonV2):
+Publier le pack: rien à faire dans ce repo. Tout push sur `main` de `vskstudio/Karamon` qui touche `content/` ou `mod/` lance le workflow « Publish pack », qui construit le pack et le dépose sur `https://karamon.fr/downloads/` (`pack.json` + manifestes). Le launcher le récupère au prochain clic sur « Mettre à jour les mods ». `scripts/publish-pack.sh` (publication en release GitHub) appartient à l'ancien circuit et ne sert plus.
 
-```bash
-./scripts/publish-pack.sh 0.5.2 path/to/mods.zip path/to/other-assets...
-```
+Attention: un push sur `main` qui touche `src/` (tests compris) ou `scripts/` publie une release du launcher. `content/` et les `.md` n'en déclenchent pas.
 
 Détail du pack: `content/README.md`.
 

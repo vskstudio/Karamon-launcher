@@ -1,21 +1,23 @@
 # Pack client Karamon (`content/`)
 
-Source de vérité versionnée pour le pack client (Cobbleverse 1.7.42 Fabric + extras Karamon): mods, resource packs, shaders optionnels.
+Copie des manifestes du pack client (Cobbleverse 1.7.42 Fabric + extras Karamon): mods, resource packs, shaders optionnels.
 
-Les binaires (`.jar`, `.zip`) ne sont pas commités. Le launcher synchronise depuis `cdnBaseUrl` dans `pack.json`:
+La source qui fait foi est `content/` de [`vskstudio/Karamon`](https://github.com/vskstudio/Karamon). Sa CI « Publish pack » construit le pack et le publie sur:
 
 ```
 https://karamon.fr/downloads/
 ```
 
-Ce dossier est publié par la CI de [`vskstudio/Karamon`](https://github.com/vskstudio/Karamon). Les launchers jusqu'à 2.0.10 lisent encore le tag `pack-latest` de ce repo, gardé à jour le temps que l'auto-update les remplace.
+C'est là que le launcher synchronise le pack (`cdnBaseUrl` dans `pack.json`). Ici, seuls `pack.json` et `client-options.json` servent: ils sont embarqués dans le launcher au build comme valeurs par défaut (version de Minecraft et de Fabric, CDN, ordre des resource packs, shader). Les binaires (`.jar`, `.zip`) ne sont pas commités.
+
+Le tag `pack-latest`, lu par les launchers jusqu'à 2.0.10, n'existe plus.
 
 ## Structure
 
 | Fichier | Rôle |
 |---------|------|
 | `pack.json` | Meta pack (MC, Fabric, CDN, jars client à désactiver) |
-| `client-options.json` | Ordre forcé des resource packs + shader Iris (embarqué dans `assets.zip`) |
+| `client-options.json` | Ordre forcé des resource packs + shader Iris |
 | `mods/required.json` | Mods obligatoires |
 | `mods/optional.json` | Mods optionnels |
 | `resourcepacks/required.json` | Resource packs obligatoires |
@@ -23,10 +25,6 @@ Ce dossier est publié par la CI de [`vskstudio/Karamon`](https://github.com/vsk
 
 ## Publier
 
-Le zip se construit depuis KaramonV2 (`node scripts/build-content-pack.mjs`), puis:
+Rien à faire ici: tout push sur `main` de `vskstudio/Karamon` qui touche `content/` ou `mod/` republie le pack sur karamon.fr.
 
-```bash
-node scripts/publish-pack-assets.mjs
-```
-
-Le script crée `pack-vX.Y.Z` et met à jour `pack-latest` (les deux avec `--latest=false`) avec seulement `mods.zip`, `assets.zip`, et `karamon-discord.png`.
+Pour resynchroniser cette copie, recopier `content/*.json` et `content/*/*.json` depuis `vskstudio/Karamon`. Le test `src/main/features/minecraft/OptionsWriter.test.ts` vérifie `client-options.json` (haut de la pile de resource packs, shader): l'ajuster dans le même commit si ces valeurs changent.
