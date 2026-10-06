@@ -26,7 +26,7 @@ test('client-options.json pins Karamon UI on top of the current stack', () => {
   assert.equal(opts.resourcePacks.at(-1), 'file/Karamon UI');
   assert.equal(opts.resourcePacks.at(-2), 'file/bushy-leaves-1-6-5.zip');
   assert.equal(opts.resourcePacks.at(-3), 'file/COBBLEVERSE RP [CF].zip');
-  assert.equal(opts.shaderPack, 'COBBLEVERSE - Shaders');
+  assert.equal(opts.shaderPack, 'KARAMON - Shader');
   const idxInterface = opts.resourcePacks.indexOf('file/Cobblemon Interface v1.6.0.zip');
   const idxModded = opts.resourcePacks.indexOf('file/Cobblemon Interface Modded v1.9.4.zip');
   assert.ok(idxInterface >= 0 && idxModded === idxInterface + 1);
