@@ -38,15 +38,20 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
 
+# Only what the app loads at runtime. esbuild bundles every dependency into
+# dist/*.cjs and dist/renderer.js except electron and adm-zip, and electron-builder
+# writes its own output (win-unpacked, linux-unpacked, mac...) into dist/ too:
+# a dist/**/* glob shipped a second full Electron inside app.asar.
 files:
-  - "dist/**/*"
-  - "assets/**/*"
-  - "node_modules/**/*"
-  - "!node_modules/.cache/**"
-  - "!**/*.java"
-  - "!.claude/**"
-
-extraResources:
-  - from: assets/
-    to: assets/
-    filter: ["**/*"]
+  - "dist/main.cjs"
+  - "dist/preload.cjs"
+  - "dist/renderer.js"
+  - "dist/index.html"
+  - "dist/styles.css"
+  - "dist/pack.json"
+  - "dist/client-options.json"
+  - "assets/icon.ico"
+  - "assets/ui/**/*"
+  - "package.json"
+  - "!node_modules/**/*"
+  - "node_modules/adm-zip/**/*"
