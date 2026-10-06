@@ -39,6 +39,37 @@ export interface ByteRange {
   end: number;
 }
 
+export interface RangeRequest {
+  /** First byte, or with `end` omitted and a negative value, the last -start bytes. */
+  start: number;
+  end?: number;
+  /** ETag the file must still have; otherwise the request fails. */
+  ifRange?: string;
+}
+
+export interface RangeResponse {
+  stream: IncomingMessage;
+  start: number;
+  end: number;
+  total: number;
+  etag: string;
+}
+
+export interface RangeBuffer {
+  body: Buffer;
+  start: number;
+  total: number;
+  etag: string;
+}
+
+/** The server cannot serve this range (no Range support, or the file changed). */
+export class RangeUnsupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RangeUnsupportedError';
+  }
+}
+
 export function planByteRanges(size: number, parts = RANGE_PARTS): ByteRange[] {
   if (size <= 0) return [];
   const n = Math.max(1, Math.min(parts, size));
@@ -152,6 +183,76 @@ export class HttpClient {
     const res = await this.get(url);
     if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status} for ${url}`);
     return res.body.toString('utf8');
+  }
+
+  /**
+   * Opens a byte range of `url` and returns the response stream. Rejects unless
+   * the server answers 206 for exactly that range: a server that ignores Range,
+   * or a file that changed since `ifRange` (ETag) was read, sends 200 instead.
+   * `end` omitted with a negative `start` asks for the last -start bytes.
+   */
+  openRange(url: string, range: RangeRequest, { timeoutMs = 30000 }: { timeoutMs?: number } = {}): Promise<RangeResponse> {
+    const spec = range.end === undefined ? `bytes=${range.start}` : `bytes=${range.start}-${range.end}`;
+    const headers: Record<string, string> = { Range: spec, 'Accept-Encoding': 'identity' };
+    if (range.ifRange) headers['If-Range'] = range.ifRange;
+    return new Promise((resolve, reject) => {
+      this.open(url, headers, timeoutMs, (err, res) => {
+        if (err || !res) return reject(err ?? new Error('Réponse vide'));
+        if (res.statusCode !== 206) {
+          res.resume();
+          return reject(new RangeUnsupportedError(`HTTP ${res.statusCode} pour la plage ${spec} de ${url}`));
+        }
+        const contentRange = headerValue(res.headers['content-range']);
+        const match = contentRange.match(/^bytes (\d+)-(\d+)\/(\d+)\s*$/);
+        if (!match) {
+          res.resume();
+          return reject(new RangeUnsupportedError(`Content-Range illisible (${contentRange}) pour ${url}`));
+        }
+        const first = Number(match[1]);
+        const last = Number(match[2]);
+        if (range.end !== undefined && (first !== range.start || last !== range.end)) {
+          res.resume();
+          return reject(new RangeUnsupportedError(`Plage ${first}-${last} reçue au lieu de ${spec} pour ${url}`));
+        }
+        resolve({
+          stream: res,
+          start: first,
+          end: last,
+          total: Number(match[3]),
+          etag: headerValue(res.headers.etag),
+        });
+      });
+    });
+  }
+
+  /** A byte range in memory, with a stall timeout. For small reads (zip directories). */
+  async getRange(url: string, range: RangeRequest, { stallTimeoutMs = 30000 }: { stallTimeoutMs?: number } = {}): Promise<RangeBuffer> {
+    const opened = await this.openRange(url, range);
+    const expected = opened.end - opened.start + 1;
+    const body = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      let timer = setTimeout(() => fail(new Error(`Téléchargement bloqué: ${url}`)), stallTimeoutMs);
+      const fail = (e: Error): void => {
+        clearTimeout(timer);
+        opened.stream.destroy();
+        reject(e);
+      };
+      opened.stream.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+        received += chunk.length;
+        clearTimeout(timer);
+        timer = setTimeout(() => fail(new Error(`Téléchargement bloqué: ${url}`)), stallTimeoutMs);
+      });
+      opened.stream.on('error', (e) => fail(e as Error));
+      opened.stream.on('aborted', () => fail(new Error('Connexion interrompue: ' + url)));
+      opened.stream.on('end', () => {
+        clearTimeout(timer);
+        if (received !== expected) reject(new Error(`Plage incomplète ${received}/${expected} octets: ${url}`));
+        else resolve(Buffer.concat(chunks));
+      });
+    });
+    return { body, start: opened.start, total: opened.total, etag: opened.etag };
   }
 
   async getJson<T = unknown>(url: string): Promise<T> {

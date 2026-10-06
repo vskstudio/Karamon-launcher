@@ -14,18 +14,25 @@ let tmpCounter = 0;
  *
  * Sizes and offsets come from the central directory, so entries whose general
  * purpose flag announces a data descriptor that is not there still read fine.
+ *
+ * The central directory parsing and the streamed, CRC-checked write are
+ * exported for RemoteZip, which reads the same structures over HTTP ranges.
  */
 
 const EOCD_SIGNATURE = 0x06054b50;
 const EOCD_SIZE = 22;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
+const ZIP64_LOCATOR_SIZE = 20;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
+const ZIP64_EOCD_SIZE = 56;
 const CENTRAL_SIGNATURE = 0x02014b50;
-const LOCAL_SIGNATURE = 0x04034b50;
-const LOCAL_HEADER_SIZE = 30;
+export const LOCAL_SIGNATURE = 0x04034b50;
+export const LOCAL_HEADER_SIZE = 30;
 const MAX_COMMENT = 0xffff;
-const STORED = 0;
-const DEFLATED = 8;
+/** Bytes to read from the end of a zip to be sure to hold its end records. */
+export const ZIP_TAIL_SIZE = EOCD_SIZE + MAX_COMMENT + ZIP64_LOCATOR_SIZE + ZIP64_EOCD_SIZE;
+export const STORED = 0;
+export const DEFLATED = 8;
 const U32_MAX = 0xffffffff;
 const U16_MAX = 0xffff;
 
@@ -37,6 +44,12 @@ export interface ZipEntry {
   compressedSize: number;
   size: number;
   localHeaderOffset: number;
+}
+
+export interface CentralDirectoryLocation {
+  count: number;
+  cdSize: number;
+  cdOffset: number;
 }
 
 export class ZipReader {
@@ -81,11 +94,7 @@ export class ZipReader {
   /** Whole entry in memory: for small files (configs) only. */
   read(entry: ZipEntry): Buffer {
     const fd = this.requireFd();
-    const header = readAt(fd, entry.localHeaderOffset, LOCAL_HEADER_SIZE);
-    if (header.length < LOCAL_HEADER_SIZE || header.readUInt32LE(0) !== LOCAL_SIGNATURE) {
-      throw new Error(`Entrée zip illisible: ${entry.entryName}`);
-    }
-    const start = entry.localHeaderOffset + LOCAL_HEADER_SIZE + header.readUInt16LE(26) + header.readUInt16LE(28);
+    const start = this.dataStart(fd, entry);
     const compressed = readAt(fd, start, entry.compressedSize);
     if (compressed.length !== entry.compressedSize) {
       throw new Error(`Entrée zip tronquée: ${entry.entryName}`);
@@ -111,52 +120,17 @@ export class ZipReader {
   /**
    * Streams one entry to `target` without holding it in memory, and without
    * blocking the event loop (the Electron main process keeps answering the
-   * window). The data goes to a temp file next to the target, its size and CRC
-   * are checked, then it is renamed over the target; with `durable` the temp
-   * file is flushed to disk first, so a power cut never leaves a zero-filled file.
+   * window). See writeEntryStream for the temp file, CRC and rename.
    */
   async extractTo(entry: ZipEntry, target: string, { durable = false }: { durable?: boolean } = {}): Promise<void> {
     const fd = this.requireFd();
-    const header = readAt(fd, entry.localHeaderOffset, LOCAL_HEADER_SIZE);
-    if (header.length < LOCAL_HEADER_SIZE || header.readUInt32LE(0) !== LOCAL_SIGNATURE) {
-      throw new Error(`Entrée zip illisible: ${entry.entryName}`);
-    }
-    if (entry.method !== STORED && entry.method !== DEFLATED) {
-      throw new Error(`Compression zip non supportée (${entry.method}): ${entry.entryName}`);
-    }
-    const start = entry.localHeaderOffset + LOCAL_HEADER_SIZE + header.readUInt16LE(26) + header.readUInt16LE(28);
-
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}-${++tmpCounter}.karamon-tmp`);
-    let crc = 0;
-    let size = 0;
-    const check = new Transform({
-      transform(chunk: Buffer, _enc, done) {
-        crc = zlib.crc32(chunk, crc);
-        size += chunk.length;
-        done(null, chunk);
-      },
-    });
-    try {
-      const source =
-        entry.compressedSize === 0
-          ? Readable.from([])
-          : fs.createReadStream('', { fd, autoClose: false, start, end: start + entry.compressedSize - 1 });
-      const out = fs.createWriteStream(tmp);
-      const piped =
-        entry.method === DEFLATED ? pipeline(source, zlib.createInflateRaw(), check, out) : pipeline(source, check, out);
-      await piped.catch((e: unknown) => {
-        const message = e instanceof Error ? e.message : String(e);
-        throw new Error(`Entrée zip corrompue: ${entry.entryName} (${message})`);
-      });
-      if (size !== entry.size) throw new Error(`Entrée zip corrompue: ${entry.entryName}`);
-      if (crc !== entry.crc) throw new Error(`Checksum zip invalide: ${entry.entryName}`);
-      if (durable) fsyncFile(tmp);
-      await fs.promises.rename(tmp, target);
-    } catch (e) {
-      fs.rmSync(tmp, { force: true });
-      throw e;
-    }
+    assertSupportedMethod(entry);
+    const start = this.dataStart(fd, entry);
+    const source =
+      entry.compressedSize === 0
+        ? Readable.from([])
+        : fs.createReadStream('', { fd, autoClose: false, start, end: start + entry.compressedSize - 1 });
+    await writeEntryStream(source, entry, target, { durable });
   }
 
   close(): void {
@@ -165,9 +139,71 @@ export class ZipReader {
     this.fd = null;
   }
 
+  private dataStart(fd: number, entry: ZipEntry): number {
+    const header = readAt(fd, entry.localHeaderOffset, LOCAL_HEADER_SIZE);
+    return entry.localHeaderOffset + localHeaderLength(header, entry);
+  }
+
   private requireFd(): number {
     if (this.fd === null) throw new Error('ZipReader fermé');
     return this.fd;
+  }
+}
+
+/** Size of the local header (fixed part + name + extra) given its first 30 bytes. */
+export function localHeaderLength(header: Buffer, entry: ZipEntry): number {
+  if (header.length < LOCAL_HEADER_SIZE || header.readUInt32LE(0) !== LOCAL_SIGNATURE) {
+    throw new Error(`Entrée zip illisible: ${entry.entryName}`);
+  }
+  return LOCAL_HEADER_SIZE + header.readUInt16LE(26) + header.readUInt16LE(28);
+}
+
+export function assertSupportedMethod(entry: ZipEntry): void {
+  if (entry.method !== STORED && entry.method !== DEFLATED) {
+    throw new Error(`Compression zip non supportée (${entry.method}): ${entry.entryName}`);
+  }
+}
+
+/**
+ * Writes the compressed bytes of `entry` read from `source` to `target`: the
+ * data goes to a temp file next to the target, its size and CRC are checked,
+ * then it is renamed over the target. With `durable` the temp file is flushed
+ * to disk first, so a power cut never leaves a zero-filled file. A bad entry
+ * leaves the previous target untouched and no temp file behind.
+ */
+export async function writeEntryStream(
+  source: Readable,
+  entry: ZipEntry,
+  target: string,
+  { durable = false }: { durable?: boolean } = {},
+): Promise<void> {
+  assertSupportedMethod(entry);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}-${++tmpCounter}.karamon-tmp`);
+  let crc = 0;
+  let size = 0;
+  const check = new Transform({
+    transform(chunk: Buffer, _enc, done) {
+      crc = zlib.crc32(chunk, crc);
+      size += chunk.length;
+      done(null, chunk);
+    },
+  });
+  try {
+    const out = fs.createWriteStream(tmp);
+    const piped =
+      entry.method === DEFLATED ? pipeline(source, zlib.createInflateRaw(), check, out) : pipeline(source, check, out);
+    await piped.catch((e: unknown) => {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new Error(`Entrée zip corrompue: ${entry.entryName} (${message})`);
+    });
+    if (size !== entry.size) throw new Error(`Entrée zip corrompue: ${entry.entryName}`);
+    if (crc !== entry.crc) throw new Error(`Checksum zip invalide: ${entry.entryName}`);
+    if (durable) fsyncFile(tmp);
+    await fs.promises.rename(tmp, target);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true });
+    throw e;
   }
 }
 
@@ -183,9 +219,27 @@ function readAt(fd: number, position: number, length: number): Buffer {
 }
 
 function readCentralDirectory(fd: number, fileSize: number, label: string): ZipEntry[] {
-  const tailLength = Math.min(fileSize, EOCD_SIZE + MAX_COMMENT);
+  const tailLength = Math.min(fileSize, ZIP_TAIL_SIZE);
   const tailStart = fileSize - tailLength;
   const tail = readAt(fd, tailStart, tailLength);
+  const loc = locateCentralDirectory(tail, tailStart, label, (offset) => readAt(fd, offset, ZIP64_EOCD_SIZE));
+  const cd = readAt(fd, loc.cdOffset, loc.cdSize);
+  if (cd.length !== loc.cdSize) throw new Error(`Archive zip tronquée: ${label}`);
+  return parseCentralDirectory(cd, loc.count, label);
+}
+
+/**
+ * Finds the central directory from the last bytes of a zip (`tail`, which
+ * starts at `tailStart` in the file). `readZip64Record` returns the 56 bytes of
+ * the ZIP64 end record at an absolute offset; it is only called for ZIP64 files
+ * whose record is not already inside `tail`.
+ */
+export function locateCentralDirectory(
+  tail: Buffer,
+  tailStart: number,
+  label: string,
+  readZip64Record: (offset: number) => Buffer,
+): CentralDirectoryLocation {
   let eocd = -1;
   for (let i = tail.length - EOCD_SIZE; i >= 0; i--) {
     if (tail.readUInt32LE(i) === EOCD_SIGNATURE) {
@@ -200,20 +254,25 @@ function readCentralDirectory(fd: number, fileSize: number, label: string): ZipE
   let cdOffset = tail.readUInt32LE(eocd + 16);
 
   if (count === U16_MAX || cdSize === U32_MAX || cdOffset === U32_MAX) {
-    const locator = eocd - 20;
+    const locator = eocd - ZIP64_LOCATOR_SIZE;
     if (locator >= 0 && tail.readUInt32LE(locator) === ZIP64_LOCATOR_SIGNATURE) {
-      const z64 = readAt(fd, Number(tail.readBigUInt64LE(locator + 8)), 56);
-      if (z64.length === 56 && z64.readUInt32LE(0) === ZIP64_EOCD_SIGNATURE) {
+      const recordOffset = Number(tail.readBigUInt64LE(locator + 8));
+      const inTail = recordOffset - tailStart;
+      const z64 =
+        inTail >= 0 && inTail + ZIP64_EOCD_SIZE <= tail.length
+          ? tail.subarray(inTail, inTail + ZIP64_EOCD_SIZE)
+          : readZip64Record(recordOffset);
+      if (z64.length === ZIP64_EOCD_SIZE && z64.readUInt32LE(0) === ZIP64_EOCD_SIGNATURE) {
         count = Number(z64.readBigUInt64LE(32));
         cdSize = Number(z64.readBigUInt64LE(40));
         cdOffset = Number(z64.readBigUInt64LE(48));
       }
     }
   }
+  return { count, cdSize, cdOffset };
+}
 
-  const cd = readAt(fd, cdOffset, cdSize);
-  if (cd.length !== cdSize) throw new Error(`Archive zip tronquée: ${label}`);
-
+export function parseCentralDirectory(cd: Buffer, count: number, label: string): ZipEntry[] {
   const entries: ZipEntry[] = [];
   let p = 0;
   for (let i = 0; i < count; i++) {

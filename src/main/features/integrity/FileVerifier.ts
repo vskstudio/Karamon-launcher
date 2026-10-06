@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import { hasValidZipEnd, isArchiveName } from './ZipTail.ts';
 
@@ -15,7 +16,9 @@ export interface ExpectedFile {
 interface HashRecord {
   size: number;
   mtimeMs: number;
-  sha1: string;
+  sha1?: string;
+  /** CRC-32 of the content, as zip archives record it. */
+  crc?: number;
 }
 
 export interface FileVerifierOptions {
@@ -72,6 +75,44 @@ export class FileVerifier {
     }
   }
 
+  /**
+   * True when the file on disk has exactly this content, judged by size and the
+   * CRC-32 a zip records for each entry: lets a sync skip the entries of a
+   * remote archive that are already installed. Cached by size + mtime like SHA-1.
+   * A mismatch is not « damaged »: the file may just be an older version.
+   */
+  async matchesZipEntry(filePath: string, size: number, crc: number): Promise<boolean> {
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      return false;
+    }
+    if (!stat.isFile() || stat.size !== size) return false;
+    // Zero-filled after a crash, same size and mtime: the cached CRC would lie.
+    if (isArchiveName(filePath) && !hasValidZipEnd(filePath)) return false;
+    const records = this.load();
+    const key = this.key(filePath);
+    const known = records[key];
+    const fresh = !this.force && known && known.size === stat.size && known.mtimeMs === stat.mtimeMs;
+    if (fresh && typeof known.crc === 'number') return known.crc === crc;
+    const actual = await crc32File(filePath);
+    records[key] = { ...(fresh ? known : {}), size: stat.size, mtimeMs: stat.mtimeMs, crc: actual };
+    this.dirty = true;
+    return actual === crc;
+  }
+
+  /** Records the CRC of a file just written from a zip entry, so the next sync skips it without rereading it. */
+  remember(filePath: string, crc: number): void {
+    try {
+      const stat = fs.statSync(filePath);
+      this.load()[this.key(filePath)] = { size: stat.size, mtimeMs: stat.mtimeMs, crc };
+      this.dirty = true;
+    } catch {
+      /* best-effort cache */
+    }
+  }
+
   private async check(filePath: string, stat: fs.Stats, expected: ExpectedFile): Promise<boolean> {
     if (typeof expected.size === 'number' && stat.size !== expected.size) return false;
     const archiveOk = !isArchiveName(filePath) || hasValidZipEnd(filePath);
@@ -86,11 +127,12 @@ export class FileVerifier {
     const records = this.load();
     const key = this.key(filePath);
     const known = records[key];
-    if (!this.force && !rehash && known && known.size === stat.size && known.mtimeMs === stat.mtimeMs) {
+    const fresh = known && known.size === stat.size && known.mtimeMs === stat.mtimeMs;
+    if (!this.force && !rehash && fresh && known.sha1) {
       return known.sha1;
     }
     const sha1 = await sha1File(filePath);
-    records[key] = { size: stat.size, mtimeMs: stat.mtimeMs, sha1 };
+    records[key] = { ...(fresh && !rehash ? known : {}), size: stat.size, mtimeMs: stat.mtimeMs, sha1 };
     this.dirty = true;
     return sha1;
   }
@@ -121,5 +163,15 @@ export function sha1File(filePath: string): Promise<string> {
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('error', reject);
     stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+export function crc32File(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let crc = 0;
+    const stream = fs.createReadStream(filePath, { highWaterMark: 1 << 20 });
+    stream.on('data', (chunk) => (crc = zlib.crc32(chunk as Buffer, crc)));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(crc));
   });
 }
