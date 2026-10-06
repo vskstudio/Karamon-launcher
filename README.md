@@ -50,7 +50,7 @@ Un plantage du PC pendant une écriture peut laisser un fichier de la bonne tail
 
 | Tag | Rôle |
 |---|---|
-| `launcher-vX.Y.Z` | Installeur Windows / macOS / Linux. Marqué **Latest** pour l'auto-update. |
+| `launcher-vX.Y.Z` | Installeur Windows / macOS / Linux. Publié en pré-release, puis marqué **Latest** à la main pour l'auto-update. |
 | `pack-vX.Y.Z` | Historique de l'ancien circuit du pack (jusqu'à 0.5.86). Plus alimenté. |
 
 Le tag `pack-latest`, lu par les launchers jusqu'à 2.0.10, n'existe plus. Depuis 2.0.11, le pack vient uniquement de `https://karamon.fr/downloads/`.
@@ -76,7 +76,13 @@ npm run build:dist:mac    # macOS
 npm run build:dist:linux  # Linux (AppImage)
 ```
 
-Publier le launcher: il suffit de pousser sur `main`. Tout push qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante, et les launchers installés la récupèrent (vérif toutes les 30 min, installée à la fermeture sur Windows et Linux, annoncée avec un lien vers le `.dmg` sur macOS). Avant de publier, la release vérifie que chaque `url:` et `path:` des `latest*.yml` désigne un fichier publié et qu'aucun nom de fichier ne contient d'espace. Pour forcer une version précise, pousser un tag:
+Publier le launcher: tout push sur `main` qui touche au launcher (`src/`, `assets/`, `package.json`...) publie automatiquement la version patch suivante **en pré-release**. Les launchers installés ne la voient pas: electron-updater ne lit que la release marquée Latest. Une fois la pré-release testée et validée, la passer en Latest:
+
+```bash
+gh release edit launcher-vX.Y.Z --repo vskstudio/Karamon-launcher --prerelease=false --latest
+```
+
+Les launchers installés la récupèrent alors (vérif toutes les 30 min, installée à la fermeture sur Windows et Linux, annoncée avec un lien vers le `.dmg` sur macOS). Avant de publier, la release vérifie que chaque `url:` et `path:` des `latest*.yml` désigne un fichier publié et qu'aucun nom de fichier ne contient d'espace. Pour forcer une version précise, pousser un tag:
 
 ```bash
 git tag launcher-v2.1.0

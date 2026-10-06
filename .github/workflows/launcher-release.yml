@@ -172,5 +172,16 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --target "${GITHUB_SHA}" \
             --title "Karamon Launcher ${{ needs.version.outputs.version }}" \
-            --latest \
+            --prerelease \
+            --latest=false \
             --notes-file release-notes.md
+
+      - name: Promotion à faire à la main
+        run: |
+          {
+            echo "Pré-release launcher-v${{ needs.version.outputs.version }} publiée. Les joueurs ne la reçoivent pas encore."
+            echo ""
+            echo "Après validation, la passer en Latest :"
+            echo ""
+            echo '    gh release edit launcher-v${{ needs.version.outputs.version }} --repo ${{ github.repository }} --prerelease=false --latest'
+          } >> "$GITHUB_STEP_SUMMARY"
