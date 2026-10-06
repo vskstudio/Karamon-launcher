@@ -1,0 +1,51 @@
+#panel-settings { overflow-y: auto; }
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+  padding-bottom: 72px;
+}
+
+.settings-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.settings-stack { display: flex; flex-direction: column; gap: 18px; }
+
+.settings-memory { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.settings-memory__value { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.settings-memory__total { font-size: 12px; color: var(--dim); }
+.settings-memory__scale { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0 4px; font-size: 12px; color: var(--dim); }
+
+.settings-divider { height: 1px; margin: 18px -20px; background: var(--border); }
+.settings-memory ~ .ui-field__hint { display: block; margin-top: 6px; }
+#panel-settings .ui-field + .ui-input { margin-top: 8px; }
+
+.settings-version { display: flex; align-items: center; gap: 14px; }
+.settings-version__logo { width: 32px; height: 32px; object-fit: contain; flex: none; }
+.settings-version__text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.settings-version__name { font-weight: 600; }
+.settings-version__status { font-size: 12px; color: var(--dim); }
+.settings-version__status--ok { color: var(--green); }
+.settings-version__status--error { color: var(--red); }
+
+.settings-savebar {
+  position: fixed;
+  left: calc(var(--sidebar-w) + 50%);
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transform: translateX(calc(-50% - var(--sidebar-w) / 2));
+  animation: ui-rise 0.18s var(--ease);
+}
+.settings-savebar[hidden] { display: none; }
+
+@media (max-width: 1100px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); }
+}

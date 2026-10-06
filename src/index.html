@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="renderer.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -53,7 +54,7 @@
       </button>
       <button class="nav-btn" data-panel="mods">
         <i data-lucide="package" class="nav-icon"></i>
-        <span>Mods</span>
+        <span>Pack</span>
       </button>
       <button class="nav-btn" data-panel="tools">
         <i data-lucide="wrench" class="nav-icon"></i>
@@ -93,8 +94,8 @@
         <span id="update-msg"></span>
       </div>
       <div class="update-bar-right">
-        <button class="btn-update-install" id="btn-install-update">Redémarrer</button>
-        <button class="btn-update-later"   id="btn-dismiss-update">Plus tard</button>
+        <button class="ui-btn ui-btn--primary ui-btn--sm" id="btn-install-update" type="button">Redémarrer</button>
+        <button class="ui-btn ui-btn--ghost ui-btn--sm" id="btn-dismiss-update" type="button">Plus tard</button>
       </div>
     </div>
 
@@ -156,187 +157,11 @@
       </div>
     </section>
 
-    <section class="panel" id="panel-mods">
-      <div class="page-header">
-        <h2>Pack</h2>
-        <p>Synchronisez vos mods, resource packs et shader packs avec le serveur Karamon</p>
-      </div>
-      <div class="card">
-        <div class="card-actions">
-          <button class="btn-primary" id="btn-sync-mods">
-            <i data-lucide="refresh-cw" class="btn-icon"></i>
-            Mettre à jour le pack
-          </button>
-          <button class="btn-ghost" id="btn-open-mods-folder">
-            <i data-lucide="folder-open" class="btn-icon"></i>
-            Ouvrir le dossier
-          </button>
-          <button class="btn-ghost" id="btn-repair-pack">
-            <i data-lucide="hammer" class="btn-icon"></i>
-            Réparer
-          </button>
-        </div>
-      </div>
-      <div class="mods-list" id="mods-list">
-        <p class="empty-hint">Synchronisez le pack pour afficher la liste.</p>
-      </div>
-    </section>
-
-    <section class="panel" id="panel-tools">
-      <div class="page-header">
-        <h2>Outils</h2>
-        <p>Sauvegardes et diagnostic</p>
-      </div>
-      <div class="tools-body">
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Sauvegardes (saves + config)</h3>
-          <div class="card-actions">
-            <button class="btn-primary" id="btn-backup-now">Sauvegarder maintenant</button>
-            <span class="field-hint">Les 10 dernières sauvegardes sont conservées.</span>
-          </div>
-          <div id="backup-list" class="backup-list"></div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Rapports de crash</h3>
-          <div id="crash-list" class="crash-list">
-            <p class="empty-hint">Chargement…</p>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <section class="panel" id="panel-screenshots">
-      <div class="page-header">
-        <h2>Captures</h2>
-        <p>Vos screenshots Minecraft (touche F2 en jeu)</p>
-      </div>
-      <div class="screenshots-grid" id="screenshots-grid">
-        <p class="empty-hint">Chargement…</p>
-      </div>
-    </section>
-
-    <section class="panel" id="panel-shop">
-      <div class="page-header page-header--split">
-        <div>
-          <h2>Boutique</h2>
-          <p>Les Lumis se dépensent dans le menu Karamon en jeu. Le paiement se fait sur karamon.fr.</p>
-        </div>
-        <button class="btn-ghost" id="btn-open-shop" type="button">Ouvrir karamon.fr</button>
-      </div>
-      <div class="shop-body">
-        <div class="offer-grid" id="shop-offers">
-          <p class="empty-hint">Chargement…</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel" id="panel-settings">
-      <div class="page-header">
-        <h2>Paramètres</h2>
-        <p>Configuration de votre environnement Minecraft</p>
-      </div>
-      <div class="settings-body">
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Chemins</h3>
-          <div class="field">
-            <label>Dossier .minecraft</label>
-            <input type="text" id="cfg-mc-game-dir" />
-            <span class="field-hint">Laisser vide pour utiliser le dossier du launcher</span>
-          </div>
-          <div class="field">
-            <label>Java</label>
-            <div class="field-row">
-              <select id="cfg-java-select" class="select-input">
-                <option value="">Java système (auto)</option>
-              </select>
-              <button type="button" class="btn-ghost btn-mini" id="btn-rescan-java">Rescanner</button>
-            </div>
-            <input type="text" id="cfg-java-path" placeholder="Chemin custom (laisser vide pour utiliser la sélection)" />
-            <span class="field-hint">Java 21+ recommandé pour Minecraft 1.21.</span>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Jeu</h3>
-          <div class="field">
-            <label>RAM allouée (Mo)</label>
-            <input type="number" id="cfg-memory" min="1024" max="32768" step="512" placeholder="12288" />
-            <span class="field-hint" id="ram-hint">Recommandé : 8192 à 12288 Mo (8 à 12 Go)</span>
-          </div>
-          <div class="field">
-            <label>Arguments JVM</label>
-            <select id="cfg-jvm-preset" class="select-input" style="margin-bottom: 6px;"></select>
-            <input type="text" id="cfg-jvm-args" placeholder="-XX:+UseG1GC -XX:MaxGCPauseMillis=50" />
-            <span class="field-hint">Choisissez un preset ou personnalisez les args.</span>
-          </div>
-          <div class="field">
-            <label class="checkbox-label">
-              <span class="checkbox-wrap">
-                <input type="checkbox" id="cfg-close-on-launch" />
-                <span class="checkmark"></span>
-              </span>
-              Fermer le launcher au lancement du jeu
-            </label>
-          </div>
-          <div class="field">
-            <label class="checkbox-label">
-              <span class="checkbox-wrap">
-                <input type="checkbox" id="cfg-dev-mode" />
-                <span class="checkmark"></span>
-              </span>
-              Mode développement (navigateur de serveurs en jeu)
-            </label>
-            <span class="field-hint">Affiche le bouton « Serveurs (dev) » sur l'écran titre pour rejoindre un serveur local ou du réseau. Aussi activable en lançant le launcher avec <code>--dev</code>.</span>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Statistiques</h3>
-          <div class="field">
-            <div class="stats-grid">
-              <div><span class="stat-label">Temps total</span><span class="stat-value" id="cfg-stat-playtime">0 min</span></div>
-              <div><span class="stat-label">Sessions</span><span class="stat-value" id="cfg-stat-sessions">0</span></div>
-              <div><span class="stat-label">Première</span><span class="stat-value" id="cfg-stat-first">Aucune</span></div>
-            </div>
-            <button type="button" class="btn-ghost btn-mini" id="btn-reset-stats" style="margin-top: 12px;">Réinitialiser</button>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Système</h3>
-          <div class="field">
-            <div class="stats-grid" id="sys-info-grid">
-              <div><span class="stat-label">RAM</span><span class="stat-value" id="sys-ram">…</span></div>
-              <div><span class="stat-label">CPU</span><span class="stat-value" id="sys-cpu">…</span></div>
-              <div><span class="stat-label">OS</span><span class="stat-value" id="sys-os">…</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Maintenance</h3>
-          <div class="field">
-            <button class="btn-primary" id="btn-repair-install" type="button">Réparer l'installation</button>
-            <span class="field-hint" id="repair-status">Revérifie chaque fichier du pack, retélécharge ceux qui sont abîmés et répare les fichiers de configuration vides. Utile si le jeu plante au démarrage.</span>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <h3 class="settings-group-title">Mises à jour</h3>
-          <div class="field">
-            <button class="btn-primary" id="btn-check-update" type="button">Vérifier les mises à jour</button>
-            <span class="field-hint" id="update-status">Cliquez pour vérifier la disponibilité d'une mise à jour.</span>
-          </div>
-        </div>
-
-        <button class="btn-primary btn-save" id="btn-save-settings">Enregistrer les paramètres</button>
-
-      </div>
-    </section>
+    <section class="panel page" id="panel-mods"></section>
+    <section class="panel page" id="panel-tools"></section>
+    <section class="panel page" id="panel-screenshots"></section>
+    <section class="panel page" id="panel-shop"></section>
+    <section class="panel page" id="panel-settings"></section>
 
   </main>
 </div>
@@ -358,24 +183,6 @@
   <div class="console-body" id="console-body">
     <div class="console-lines" id="console-lines"></div>
   </div>
-</div>
-
-<div class="toast-container"></div>
-
-<div class="crash-modal" id="crash-modal" aria-hidden="true">
-  <div class="crash-modal-inner">
-    <div class="crash-modal-header">
-      <span id="crash-modal-title"></span>
-      <button class="lightbox-close" id="crash-modal-close" title="Fermer">×</button>
-    </div>
-    <pre class="crash-modal-body" id="crash-modal-body"></pre>
-  </div>
-</div>
-
-<div class="lightbox" id="lightbox" aria-hidden="true">
-  <button class="lightbox-close" id="lightbox-close" title="Fermer">×</button>
-  <img class="lightbox-img" id="lightbox-img" alt="" />
-  <div class="lightbox-caption" id="lightbox-caption"></div>
 </div>
 
 <div class="pokeball-overlay" id="pokeball-overlay" aria-hidden="true">

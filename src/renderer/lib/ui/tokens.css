@@ -1,0 +1,60 @@
+:root {
+  --bg: #0b0a0d;
+  --sunk: #0f0d12;
+  --surface: #121016;
+  --surface-2: #17151c;
+  --surface-3: #1e1b24;
+  --hover: rgba(236, 232, 243, 0.04);
+
+  --border: #24212b;
+  --border-strong: #2f2b38;
+  --border-subtle: #1a1820;
+  --border-hover: #3b3647;
+
+  --text: #ece8f3;
+  --text-2: #b9b3c6;
+  --dim: #7f798d;
+  --dim-2: #5d5868;
+
+  --accent: #e0556c;
+  --accent-hover: #c9425a;
+  --accent-light: #f28ca0;
+  --accent-soft: rgba(224, 85, 108, 0.12);
+  --accent-border: rgba(224, 85, 108, 0.35);
+
+  --quartz: #c4b9dc;
+  --quartz-soft: rgba(196, 185, 220, 0.1);
+
+  --lumis: #b39dff;
+  --lumis-soft: rgba(167, 139, 250, 0.12);
+
+  --green: #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.12);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.12);
+  --red: #f25c4d;
+  --red-soft: rgba(242, 92, 77, 0.12);
+  --red-border: rgba(242, 92, 77, 0.35);
+
+  --scrim: rgba(5, 4, 7, 0.72);
+  --on-accent: #ffffff;
+
+  --r: 10px;
+  --r-sm: 8px;
+  --r-lg: 12px;
+
+  --h-sm: 28px;
+  --h-md: 36px;
+  --h-lg: 44px;
+
+  --font: "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fast: 0.14s;
+
+  --sidebar-w: 72px;
+  --titlebar-h: 40px;
+  --console-h: 220px;
+  --page-x: 40px;
+}

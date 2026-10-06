@@ -1,22 +1,22 @@
 import type { LauncherApi, MinecraftProfile } from '../ipc/contract';
 import { $, $button, $opt } from './util/dom';
-import { Toast } from './components/Toast';
+import { Toast, confirmDialog } from './lib/ui';
 import { ConsoleView } from './components/ConsoleView';
 import { ProgressBar } from './components/ProgressBar';
 import { PlayButton } from './components/PlayButton';
 import { ServerStatusPanel } from './components/ServerStatusPanel';
-import { SettingsForm } from './components/SettingsForm';
 import { Navigation } from './components/Navigation';
 import { WindowControls } from './components/WindowControls';
-import { ModsList } from './components/ModsList';
 import { StatsView } from './components/StatsView';
 import { Konami } from './components/Konami';
-import { ScreenshotsView } from './components/ScreenshotsView';
 import { PlayersSparkline } from './components/PlayersSparkline';
 import { QuickLinks } from './components/QuickLinks';
-import { JvmPresets } from './components/JvmPresets';
-import { ToolsView } from './components/ToolsView';
-import { ShopView } from './components/ShopView';
+import { PackPage } from './pages/PackPage';
+import { ToolsPage } from './pages/ToolsPage';
+import { ScreenshotsPage } from './pages/ScreenshotsPage';
+import { ShopPage } from './pages/ShopPage';
+import { SettingsPage } from './pages/SettingsPage';
+import type { Page } from './pages/Page';
 import { AccountChip } from './components/AccountChip';
 import type { PingResult } from '../ipc/contract';
 
@@ -29,13 +29,11 @@ export class KaramonRenderer {
   private readonly progress: ProgressBar;
   private readonly playButton: PlayButton;
   private readonly serverStatus: ServerStatusPanel;
-  private readonly settings: SettingsForm;
-  private readonly mods: ModsList;
   private readonly stats: StatsView;
-  private readonly screenshots: ScreenshotsView;
   private readonly sparkline: PlayersSparkline;
-  private readonly tools: ToolsView;
-  private readonly shop: ShopView;
+  private readonly pack: PackPage;
+  private readonly settings: SettingsPage;
+  private readonly pages: Record<string, Page>;
   private readonly accountChip: AccountChip;
   private gameRunning = false;
   private actionRunning = false;
@@ -61,18 +59,28 @@ export class KaramonRenderer {
       ping: () => api.pingServer(),
       onResult: (r, prev) => this.onPingResult(r, prev),
     });
-    this.settings = new SettingsForm({
+    this.stats = new StatsView(api);
+    this.pack = new PackPage($('panel-mods'), {
+      api,
+      sync: () => this.syncMods(),
+      repair: () => this.repair(),
+    });
+    this.settings = new SettingsPage($('panel-settings'), {
       api,
       onSaved: () => {
-        Toast.show('Paramètres sauvegardés.', 'ok');
-        this.console.log('Paramètres sauvegardés.', 'ok');
+        Toast.show('Paramètres enregistrés.', 'ok');
+        this.console.log('Paramètres enregistrés.', 'ok');
       },
+      repair: () => this.repair(),
+      onStatsChanged: () => void this.stats.refresh(),
     });
-    this.mods = new ModsList(api, $('mods-list'));
-    this.stats = new StatsView(api);
-    this.screenshots = new ScreenshotsView(api, $('screenshots-grid'));
-    this.tools = new ToolsView(api);
-    this.shop = new ShopView(api);
+    this.pages = {
+      mods: this.pack,
+      tools: new ToolsPage($('panel-tools'), { api, openSettings: () => Navigation.go('settings') }),
+      screenshots: new ScreenshotsPage($('panel-screenshots'), { api }),
+      shop: new ShopPage($('panel-shop'), { api, playerName: () => this.authProfile?.name ?? null }),
+      settings: this.settings,
+    };
     this.accountChip = new AccountChip(
       $('account-chip'),
       () => void this.handleLogout(),
@@ -112,36 +120,24 @@ export class KaramonRenderer {
     });
     $('btn-logs-toggle').addEventListener('click', () => this.console.toggle());
     $('btn-play').addEventListener('click', () => this.play());
-    $('btn-sync-mods').addEventListener('click', () => this.syncMods());
-    $('btn-hero-sync').addEventListener('click', () => this.syncMods());
-    $('btn-open-mods-folder').addEventListener('click', () => this.api.openInstance());
+    $('btn-hero-sync').addEventListener('click', () => void this.syncMods());
     $('btn-folder').addEventListener('click', () => this.api.openInstance());
     $('btn-export-logs').addEventListener('click', (e) => this.exportLogs(e));
     $('btn-clear-logs').addEventListener('click', (e) => {
       e.stopPropagation();
       this.console.clear();
     });
-    $('btn-repair-pack').addEventListener('click', () => this.repair());
-    $('btn-repair-install').addEventListener('click', () => this.repair());
-    $('btn-reset-stats').addEventListener('click', () => this.resetStats());
 
     QuickLinks.render(this.api, $('nav-links'));
-    JvmPresets.attach();
-    this.settings.attach($('btn-save-settings'));
     this.wireIpcEvents();
     this.wireUpdateBar();
     this.wireRepairBar();
-    this.wireCheckUpdateButton();
     Konami.attach(() => this.fireKonami());
     await this.refreshAuthState();
 
     this.console.log('Karamon Launcher démarré.', 'ok');
 
-    await this.settings.load();
-    JvmPresets.syncFromArgs();
-
-    void this.settings.loadSystemInfo();
-    void this.settings.populateJava();
+    void this.settings.load();
     void this.stats.refresh();
 
     const setup = await this.api.setupMinecraft();
@@ -162,12 +158,8 @@ export class KaramonRenderer {
   }
 
   private onPanelChange(panel: string): void {
-    if (panel === 'mods') void this.mods.load();
     if (panel === 'home') void this.stats.refresh();
-    if (panel === 'settings') void this.stats.refresh();
-    if (panel === 'screenshots') void this.screenshots.load();
-    if (panel === 'tools') void this.tools.load();
-    if (panel === 'shop') this.shop.attach();
+    this.pages[panel]?.enter();
   }
 
   private fireKonami(): void {
@@ -189,53 +181,6 @@ export class KaramonRenderer {
         this.console.log('Launcher Minecraft ouvert !', 'ok');
         Toast.show('Launcher Minecraft ouvert !', 'ok');
         void this.stats.refresh();
-      }
-    });
-  }
-
-  private wireCheckUpdateButton(): void {
-    const btn = $button('btn-check-update');
-    const status = $('update-status');
-    const idleLabel = 'Vérifier les mises à jour';
-    let mode: 'check' | 'install' = 'check';
-
-    btn.addEventListener('click', async () => {
-      if (mode === 'install') {
-        this.api.installUpdate();
-        return;
-      }
-      btn.disabled = true;
-      btn.textContent = 'Vérification…';
-      status.textContent = 'Vérification en cours…';
-      const result = await this.api.checkForUpdate();
-      btn.disabled = false;
-      switch (result.status) {
-        case 'no-update':
-          status.textContent = `À jour (v${result.currentVersion}).`;
-          btn.textContent = idleLabel;
-          break;
-        case 'downloading':
-          status.textContent = `Mise à jour ${result.version} en cours de téléchargement...`;
-          btn.textContent = idleLabel;
-          break;
-        case 'downloaded':
-          status.textContent = `Mise à jour ${result.version} prête.`;
-          btn.textContent = 'Installer maintenant';
-          mode = 'install';
-          break;
-        case 'available':
-          status.textContent = `Version ${result.version} disponible : installe le .dmg de la dernière release.`;
-          btn.textContent = 'Télécharger';
-          mode = 'install';
-          break;
-        case 'unsupported':
-          status.textContent = 'Indisponible en mode développement.';
-          btn.textContent = idleLabel;
-          break;
-        case 'error':
-          status.textContent = 'Erreur : ' + result.error;
-          btn.textContent = idleLabel;
-          break;
       }
     });
   }
@@ -296,7 +241,12 @@ export class KaramonRenderer {
 
   private async handleLogout(): Promise<void> {
     if (!this.authProfile) return;
-    const ok = window.confirm(`Se déconnecter de ${this.authProfile.name} ?`);
+    const ok = await confirmDialog({
+      title: `Se déconnecter de ${this.authProfile.name} ?`,
+      text: 'Il faudra te reconnecter avec Microsoft pour jouer.',
+      confirmLabel: 'Se déconnecter',
+      danger: true,
+    });
     if (!ok) return;
     await this.api.authLogout();
     this.authProfile = null;
@@ -328,42 +278,34 @@ export class KaramonRenderer {
     }
   }
 
-  private async syncMods(): Promise<void> {
-    const buttons = [$button('btn-sync-mods'), $button('btn-hero-sync')];
-    buttons.forEach((b) => (b.disabled = true));
+  private async syncMods(): Promise<boolean> {
+    const heroButton = $button('btn-hero-sync');
+    heroButton.disabled = true;
     this.console.log('Synchronisation du pack en cours...', 'info');
     const result = await this.api.syncMods();
-    buttons.forEach((b) => (b.disabled = false));
+    heroButton.disabled = false;
     if (result.ok) {
       this.console.log('Pack synchronisé avec succès.', 'ok');
-      Toast.show('Pack mis à jour !', 'ok');
-      this.mods.invalidate();
-      void this.mods.load(true);
-    } else {
-      this.console.log('Erreur sync pack: ' + result.error, 'error');
-      Toast.show(result.error, 'error');
+      Toast.show('Pack mis à jour.', 'ok');
+      void this.pack.reload();
+      return true;
     }
+    this.console.log('Erreur sync pack: ' + result.error, 'error');
+    Toast.show(result.error, 'error');
+    return false;
   }
 
-  private async repair(): Promise<void> {
-    const buttons = [$button('btn-repair-pack'), $button('btn-repair-install')];
-    const status = $('repair-status');
-    buttons.forEach((b) => (b.disabled = true));
-    status.textContent = 'Vérification de chaque fichier en cours…';
+  private async repair(): Promise<boolean> {
     this.console.log("Réparation de l'installation en cours...", 'info');
     const result = await this.api.repair();
-    buttons.forEach((b) => (b.disabled = false));
     if (result.ok) {
-      status.textContent = result.summary;
       this.console.log(result.summary, 'ok');
       Toast.show(result.summary, 'ok');
-      this.mods.invalidate();
-      void this.mods.load(true);
-    } else {
-      status.textContent = 'Erreur : ' + result.error;
-      this.console.log('Erreur réparation: ' + result.error, 'error');
-      Toast.show(result.error, 'error');
+      return true;
     }
+    this.console.log('Erreur réparation: ' + result.error, 'error');
+    Toast.show(result.error, 'error');
+    return false;
   }
 
   private wireRepairBar(): void {
@@ -384,11 +326,6 @@ export class KaramonRenderer {
       }
       bar.classList.add('show');
     });
-  }
-
-  private async resetStats(): Promise<void> {
-    await this.stats.reset();
-    Toast.show('Statistiques réinitialisées.', 'ok');
   }
 
   private async exportLogs(e: Event): Promise<void> {
