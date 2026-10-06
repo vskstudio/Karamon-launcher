@@ -149,7 +149,14 @@ export class KaramonRenderer {
     this.console.log('Setup: ' + setup.details, setup.ok ? 'ok' : 'warn');
 
     await this.serverStatus.refresh();
-    setInterval(() => this.serverStatus.refresh(), KaramonRenderer.SERVER_PING_INTERVAL_MS);
+    // No status ping while the game runs or the window is minimized/hidden.
+    setInterval(() => {
+      if (this.gameRunning || document.hidden) return;
+      void this.serverStatus.refresh();
+    }, KaramonRenderer.SERVER_PING_INTERVAL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !this.gameRunning) void this.serverStatus.refresh();
+    });
 
     this.console.log('Prêt.', 'ok');
   }

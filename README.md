@@ -46,6 +46,11 @@ Un plantage du PC pendant une écriture peut laisser un fichier de la bonne tail
 - **Réparer l'installation** (Paramètres → Maintenance) : revérifie chaque fichier sans le cache, réinstalle ceux qui sont abîmés et répare les configs.
 - **Après un plantage au démarrage** (sortie en erreur dans les 2 premières minutes) : si le rapport de crash ou `logs/latest.log` montrent une corruption (`zip END header not found`, `ZipException`, `Error analyzing [`, `\u0000` dans une erreur JSON), la réparation se lance seule et le launcher propose de relancer.
 
+### Journal et activité en jeu
+
+- **Journal du launcher** : `logs/launcher.log` dans le dossier de données du launcher (`%APPDATA%\.karamon-launcher`, `~/Library/Application Support/.karamon-launcher`, `~/.config/.karamon-launcher` ; bouton « dossier de données » dans les paramètres). Il contient les messages d'état, les erreurs de mise à jour, les exceptions non gérées et les plantages de la fenêtre. Une copie tournée (`launcher.old.log`), 1 Mo chacune au plus ; les jetons sont masqués. C'est le fichier à demander à un joueur qui signale un bug.
+- **Pendant que Minecraft tourne**, le launcher ne vérifie plus les mises à jour, ne pingue plus le serveur (ni pour l'accueil, ni pour Discord) et reprend à la fermeture du jeu. Le ping de l'accueil s'arrête aussi quand la fenêtre est réduite.
+
 ## Releases
 
 | Tag | Rôle |

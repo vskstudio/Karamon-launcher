@@ -47,6 +47,7 @@ import { TokenStore } from './features/auth/TokenStore';
 import { GameLauncher } from './features/minecraft/GameLauncher';
 import { WindowManager } from './WindowManager';
 import { repairSummary } from './features/integrity/RepairSummary';
+import { FileLog } from './shared/FileLog';
 
 const SERVER_PING_TIMEOUT_MS = 5000;
 const CLOSE_DELAY_MS = 2000;
@@ -67,8 +68,10 @@ export class KaramonApp {
   private readonly minecraft: MinecraftLauncher;
 
   private readonly window: WindowManager;
+  private readonly fileLog = new FileLog(this.paths.logsDir);
   private readonly updater = new AutoUpdater({
     onReady: (info) => this.window.send(Channels.eventUpdateReady, info),
+    log: (level, msg) => this.fileLog.write(level, `[Mise à jour] ${msg}`),
   });
   private readonly stats = new PlayStats(this.paths.dataDir);
   private readonly screenshots = new Screenshots();
@@ -122,6 +125,17 @@ export class KaramonApp {
   }
 
   start(): void {
+    this.fileLog.info(`Karamon Launcher ${app.getVersion()} démarré (${process.platform} ${process.arch}, Electron ${process.versions.electron})`);
+    process.on('uncaughtException', (e) => this.fileLog.error('Exception non gérée', e));
+    process.on('unhandledRejection', (e) => this.fileLog.error('Promesse rejetée non gérée', e));
+    app.on('render-process-gone', (_e, _wc, details) =>
+      this.fileLog.error(`Fenêtre du launcher plantée (${details.reason}, code ${details.exitCode})`),
+    );
+    app.on('child-process-gone', (_e, details) => {
+      if (details.reason !== 'clean-exit') {
+        this.fileLog.warn(`Processus ${details.type} arrêté (${details.reason}, code ${details.exitCode})`);
+      }
+    });
     app.whenReady().then(() => {
       Screenshots.registerProtocol(() => Screenshots.dirFor(this.currentInstanceDir()));
       this.registerIpc();
@@ -146,7 +160,16 @@ export class KaramonApp {
   }
 
   private statusEmitter() {
-    return (msg: string): void => this.window.send(Channels.eventStatus, msg);
+    return (msg: string): void => {
+      this.fileLog.info(msg);
+      this.window.send(Channels.eventStatus, msg);
+    };
+  }
+
+  /** Background work stops while Minecraft runs, and resumes when it closes. */
+  private setGameRunning(running: boolean): void {
+    this.updater.setPaused(running);
+    this.discord.setPingPaused(running);
   }
 
   private progressEmitter() {
@@ -347,6 +370,8 @@ export class KaramonApp {
         onProgress,
         onLog: (line) => this.window.send(Channels.eventStatus, line),
         onExit: (code, corruption) => {
+          this.setGameRunning(false);
+          this.fileLog.info(`Minecraft fermé (code ${code})${corruption.length ? `, corruption: ${corruption.join(', ')}` : ''}`);
           this.stats.endSession();
           this.discord.setMenu();
           this.window.send(Channels.eventGameState, { running: false });
@@ -359,6 +384,7 @@ export class KaramonApp {
       });
       this.stats.startSession();
       this.discord.setPlaying();
+      this.setGameRunning(true);
       this.window.send(Channels.eventGameState, { running: true });
       onStatus('Minecraft lancé !');
       if (cfg.closeLauncherOnGameStart) setTimeout(() => this.window.close(), CLOSE_DELAY_MS);

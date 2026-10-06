@@ -50,6 +50,22 @@ export class DiscordRpc {
     // live player count. Pushing here would replace that line with the address.
   }
 
+  /**
+   * While Minecraft runs, the launcher stops pinging the server for the player
+   * count: the game shows it itself. Reconnection to Discord keeps going, it is
+   * a local socket and costs nothing.
+   */
+  setPingPaused(paused: boolean): void {
+    if (paused) {
+      if (this.pingTimer) clearInterval(this.pingTimer);
+      this.pingTimer = null;
+      return;
+    }
+    if (this.pingTimer || this.destroyed) return;
+    void this.refreshPlayerCount();
+    this.pingTimer = setInterval(() => void this.refreshPlayerCount(), PING_INTERVAL_MS);
+  }
+
   async destroy(): Promise<void> {
     this.destroyed = true;
     if (this.retryTimer) clearInterval(this.retryTimer);
