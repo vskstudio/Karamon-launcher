@@ -11,7 +11,7 @@ if (!exe) {
   process.exit(2);
 }
 const PORT = 9333;
-const DEADLINE = Date.now() + 60_000;
+const DEADLINE = Date.now() + (process.env.SMOKE_SYNC === '1' ? 15 * 60_000 : 60_000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const child = spawn(exe, ['--no-sandbox', `--remote-debugging-port=${PORT}`], {
@@ -77,6 +77,32 @@ const broken = state.images.filter((i) => !i.ok);
 if (state.images.length === 0) fail('aucune image locale dans la page');
 if (broken.length) fail('images non chargées: ' + broken.map((i) => i.src).join(', '));
 if (!state.hasPlay) fail('page vide');
+
+// SMOKE_SYNC=1: real pack sync against karamon.fr from the packaged app, twice.
+// The first run installs the pack; the second must download nothing.
+if (process.env.SMOKE_SYNC === '1') {
+  const SYNC = `(async () => {
+    const lines = [];
+    window.launcher.onStatus((m) => lines.push(m));
+    const t0 = Date.now();
+    const res = await window.launcher.syncMods();
+    await new Promise((r) => setTimeout(r, 300));
+    return { res, ms: Date.now() - t0, lines: lines.filter((l) => !l.startsWith('+ ')) };
+  })()`;
+  for (const round of [1, 2]) {
+    const out = await evaluate(page.webSocketDebuggerUrl, SYNC).catch((e) => fail(`synchro ${round}: ` + e.message));
+    console.log(`synchro ${round} (${(out.ms / 1000).toFixed(1)} s):`);
+    for (const l of out.lines) console.log('  ' + l);
+    if (!out.res?.ok) fail(`synchro ${round} en échec: ${out.res?.error}`);
+    if (out.lines.some((l) => l.startsWith('Téléchargement partiel impossible'))) {
+      fail(`synchro ${round}: retombée sur le téléchargement complet`);
+    }
+    if (round === 2 && !out.lines.some((l) => l.includes('déjà à jour') || l.includes('déjà installés'))) {
+      fail('synchro 2: le pack aurait dû être à jour');
+    }
+  }
+}
+
 console.log('smoke-test: ok');
 child.kill();
 process.exit(0);

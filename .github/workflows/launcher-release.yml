@@ -104,6 +104,13 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb >/dev/null
           xvfb-run -a -s "-screen 0 1600x900x24" node scripts/smoke-test.mjs dist/linux-unpacked/karamon-launcher
 
+      # Manual runs only: downloads the whole pack (~650 Mo) from karamon.fr.
+      - name: Packaged launcher syncs the real pack twice
+        if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch'
+        env:
+          SMOKE_SYNC: '1'
+        run: xvfb-run -a -s "-screen 0 1600x900x24" node scripts/smoke-test.mjs dist/linux-unpacked/karamon-launcher
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

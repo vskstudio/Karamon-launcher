@@ -5,6 +5,11 @@ export interface ClientOptions {
   resourcePacks: string[];
   shaderPack: string;
   enableShaders: boolean;
+  /**
+   * Raised by the pack when an update must impose its shader choice (shaderPack,
+   * enableShaders, shaderpacks/*.txt) over the player's. 0 when absent.
+   */
+  shaderRevision: number;
 }
 
 export function parseClientOptions(raw: unknown): ClientOptions | null {
@@ -15,10 +20,12 @@ export function parseClientOptions(raw: unknown): ClientOptions | null {
     return null;
   }
   if (typeof value.shaderPack !== 'string' || value.shaderPack.length === 0) return null;
+  const revision = value.shaderRevision;
   return {
     resourcePacks: value.resourcePacks as string[],
     shaderPack: value.shaderPack,
     enableShaders: value.enableShaders !== false,
+    shaderRevision: typeof revision === 'number' && Number.isInteger(revision) && revision > 0 ? revision : 0,
   };
 }
 

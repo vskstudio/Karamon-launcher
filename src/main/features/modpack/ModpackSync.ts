@@ -1,16 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { extractZipToDir, resolveInside } from '../../shared/ZipExtract.ts';
-import { ZipReader } from '../../shared/ZipReader.ts';
+import { commonTopLevelPrefix, extractZipToDir, resolveInside } from '../../shared/ZipExtract.ts';
+import { ZipReader, type ZipEntry } from '../../shared/ZipReader.ts';
+import { RemoteZip } from '../../shared/RemoteZip.ts';
+import { fetchDelta, formatBytes, planDelta, type DeltaFile } from './DeltaPack.ts';
 import { copyFileAtomic, writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import { githubAssetFreshness, packAssetUrl } from '../../shared/GitHubPack.ts';
 import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
 import { applyKaramonBranding } from '../minecraft/BrandingWriter.ts';
+import { ShaderPolicy } from '../minecraft/ShaderChoice.ts';
 import { parseClientOptions, type ClientOptions } from '../../shared/ClientOptions.ts';
 import { installOverrides } from './OverridesInstaller.ts';
-import { FileVerifier, sha1File, type ExpectedFile } from '../integrity/FileVerifier.ts';
+import { FileVerifier, crc32File, sha1File, type ExpectedFile } from '../integrity/FileVerifier.ts';
 
 const CACHE_FILE = '.karamon-sync-cache.json';
 const MODS_ZIP_NAME = 'mods.zip';
@@ -85,6 +88,10 @@ interface CacheData {
   shaderPacksKey?: string;
   shaderPackFolders?: string[];
   overridesKey?: string;
+  /** Folder (relative to the game dir) → CRC-32 of the pack zip it was unpacked from. */
+  extractedCrc?: Record<string, number>;
+  /** Loose files the pack installed in resourcepacks/ and shaderpacks/: the only ones a sync may delete. */
+  shippedFiles?: { resourcepacks?: string[]; shaderpacks?: string[] };
   syncedAt?: number;
 }
 
@@ -121,6 +128,10 @@ export class ModpackSync {
   private readonly optionsWriterFactory: (dir: string) => OptionsWriter;
   private readonly disabledJarPrefixes: string[];
   private readonly fallbackClientOptions: ClientOptions | null;
+  /** Shader choice policy of the sync in progress. */
+  private shaders: ShaderPolicy = new ShaderPolicy('');
+  /** Loose pack files installed, per folder, for the sync in progress (see cleanupPackFiles). */
+  private shipped: { resourcepacks?: string[]; shaderpacks?: string[] } = {};
 
   constructor({
     http,
@@ -194,6 +205,8 @@ export class ModpackSync {
     }
 
     const cache = this.readCache(gameDir);
+    this.shaders = new ShaderPolicy(gameDir);
+    this.shipped = { ...(cache.shippedFiles ?? {}) };
     try {
       const assetsKey = await this.probeAssetsZip(base);
       if (assetsKey) {
@@ -203,8 +216,27 @@ export class ModpackSync {
       }
     } finally {
       verifier.save();
+      this.shaders.save();
     }
     return { damaged: verifier.damaged };
+  }
+
+  /**
+   * Writes the pack's options: resource pack order every time (pack rule), the
+   * shader choice only when ShaderPolicy says the pack must impose it.
+   */
+  private applyClientOptions(gameDir: string, options: ClientOptions | null, onStatus?: StatusEmitter): void {
+    const writer = this.optionsWriterFactory(gameDir);
+    try {
+      if (options) {
+        writer.forceResourcePacks(options.resourcePacks);
+        const applied = this.shaders.applyChoice(writer, options.shaderPack, options.enableShaders, options.shaderRevision);
+        if (applied && this.shaders.bumped) onStatus?.(`Shader du pack appliqué : ${options.shaderPack}.`);
+      }
+      applyKaramonBranding(gameDir, options?.resourcePacks);
+    } catch {
+      /* non-fatal */
+    }
   }
 
   private async syncLooseFiles(
@@ -223,6 +255,7 @@ export class ModpackSync {
     const modsManifest = await this.fetchOptionalManifest(base, MODS_MANIFEST);
     const overrides = await this.fetchOverridesManifest(base);
     const clientOptions = await this.fetchClientOptions(base, gameDir);
+    this.shaders.setRevision(clientOptions?.shaderRevision ?? 0);
     const jarManifest = modsManifest.present ? modsManifest.entries : undefined;
 
     const modsKnown = ModpackSync.modsKnown(cache, etag);
@@ -248,18 +281,7 @@ export class ModpackSync {
         ModpackSync.dirExists(path.join(gameDir, 'config')) &&
         (await verifier.isIntact(path.join(gameDir, OVERRIDES_ARCHIVE), overrides)));
 
-    const applyOptions = (): void => {
-      const writer = this.optionsWriterFactory(gameDir);
-      try {
-        if (clientOptions) {
-          writer.forceResourcePacks(clientOptions.resourcePacks);
-          writer.ensureShader(clientOptions.shaderPack, clientOptions.enableShaders);
-        }
-        applyKaramonBranding(gameDir, clientOptions?.resourcePacks);
-      } catch {
-        /* non-fatal */
-      }
-    };
+    const applyOptions = (): void => this.applyClientOptions(gameDir, clientOptions, onStatus);
 
     if (modsUpToDate && resourcePacksUpToDate && shaderPacksUpToDate && overridesUpToDate) {
       applyOptions();
@@ -446,6 +468,29 @@ export class ModpackSync {
   }
 
   /**
+   * Where each jar of mods.zip goes: enabled jars to mods/, jars matching a
+   * disabled prefix to mods/mods-disabled/. First occurrence of a name wins.
+   */
+  private jarTargets(entries: ZipEntry[], modsDir: string): { entry: ZipEntry; name: string; target: string; disabled: boolean }[] {
+    const seen = new Set<string>();
+    const out: { entry: ZipEntry; name: string; target: string; disabled: boolean }[] = [];
+    const disabledDir = path.join(modsDir, 'mods-disabled');
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const name = path.basename(entry.entryName);
+      const lower = name.toLowerCase();
+      if (!lower.endsWith('.jar') || seen.has(lower)) continue;
+      seen.add(lower);
+      const disabled = this.isDisabledJar(name);
+      out.push({ entry, name, disabled, target: ModpackSync.safeJoin(disabled ? disabledDir : modsDir, name) });
+    }
+    if (!out.some((j) => !j.disabled)) {
+      throw new Error('mods.zip ne contient aucun .jar');
+    }
+    return out;
+  }
+
+  /**
    * Writes the jars of mods.zip and returns the enabled jar names. With `only`
    * (lowercase names), every jar is still listed but only those are rewritten.
    */
@@ -456,31 +501,19 @@ export class ModpackSync {
     only?: Set<string>,
   ): Promise<string[]> {
     return ZipReader.withAsync(zipPath, async (zip) => {
-      const seen = new Set<string>();
-      const jarNames: string[] = [];
-      const disabledDir = path.join(modsDir, 'mods-disabled');
-      for (const entry of zip.entries) {
-        if (entry.isDirectory) continue;
-        const name = path.basename(entry.entryName);
-        const lower = name.toLowerCase();
-        if (!lower.endsWith('.jar')) continue;
-        if (seen.has(lower)) continue;
-        seen.add(lower);
-        if (this.isDisabledJar(name)) {
+      const jars = this.jarTargets(zip.entries, modsDir);
+      for (const jar of jars) {
+        if (jar.disabled) {
           if (only) continue;
-          await zip.extractTo(entry, ModpackSync.safeJoin(disabledDir, name), { durable: true });
-          onStatus(`Mod client désactivé (Java 21): ${name}`);
+          await zip.extractTo(jar.entry, jar.target, { durable: true });
+          onStatus(`Mod client désactivé (Java 21): ${jar.name}`);
           continue;
         }
-        jarNames.push(name);
-        if (only && !only.has(lower)) continue;
-        await zip.extractTo(entry, ModpackSync.safeJoin(modsDir, name), { durable: true });
-        if (only) onStatus(`Mod réparé: ${name}`);
+        if (only && !only.has(jar.name.toLowerCase())) continue;
+        await zip.extractTo(jar.entry, jar.target, { durable: true });
+        if (only) onStatus(`Mod réparé: ${jar.name}`);
       }
-      if (jarNames.length === 0) {
-        throw new Error('mods.zip ne contient aucun .jar');
-      }
-      return jarNames;
+      return jars.filter((j) => !j.disabled).map((j) => j.name);
     });
   }
 
@@ -593,24 +626,29 @@ export class ModpackSync {
       : [];
     const modsUpToDate = modsKnown && damagedJars.length === 0;
 
-    const applyOptions = (options: ClientOptions | null): void => {
-      const writer = this.optionsWriterFactory(gameDir);
-      try {
-        if (options) {
-          writer.forceResourcePacks(options.resourcePacks);
-          writer.ensureShader(options.shaderPack, options.enableShaders);
-        }
-        applyKaramonBranding(gameDir, options?.resourcePacks);
-      } catch {
-        /* non-fatal */
-      }
-    };
+    const applyOptions = (options: ClientOptions | null): void => this.applyClientOptions(gameDir, options, onStatus);
 
     if (modsUpToDate && assetsUpToDate) {
       applyOptions(this.loadStoredClientOptions(gameDir));
       onStatus('Pack déjà à jour, aucun téléchargement nécessaire.');
       onProgress(1);
       return;
+    }
+
+    try {
+      const done = await this.syncDelta(baseUrl, gameDir, dirs, modsEtag, assetsKey, cache, verifier, {
+        modsUpToDate,
+        assetsUpToDate,
+        snapshot,
+        onStatus,
+        onProgress,
+      });
+      if (done) {
+        applyOptions(done.clientOptions);
+        return;
+      }
+    } catch (e) {
+      onStatus(`Téléchargement partiel impossible (${(e as Error).message}), téléchargement complet...`);
     }
 
     let jarNames: string[] = cache.jarNames ?? [];
@@ -714,6 +752,258 @@ export class ModpackSync {
     onProgress(1);
   }
 
+  /**
+   * Updates the pack by reading mods.zip and assets.zip in place on the server
+   * (HTTP ranges): only the files whose size or CRC differs from the installed
+   * ones are downloaded, straight to their final place. Returns null when the
+   * server cannot do ranged reads (caller falls back to full downloads); throws
+   * if a ranged read breaks midway (caller falls back too).
+   *
+   * Resource and shader packs that ship as zips to unpack into folders, and the
+   * overrides archive, have no file to compare with: they are fetched whenever
+   * the archive's entry changed, otherwise kept.
+   */
+  private async syncDelta(
+    baseUrl: string,
+    gameDir: string,
+    dirs: SyncDirs,
+    modsEtag: string,
+    assetsKey: string,
+    cache: CacheData,
+    verifier: FileVerifier,
+    ctx: {
+      modsUpToDate: boolean;
+      assetsUpToDate: boolean;
+      snapshot: AssetsSnapshot | undefined;
+      onStatus: StatusEmitter;
+      onProgress: ProgressEmitter;
+    },
+  ): Promise<{ clientOptions: ClientOptions | null } | null> {
+    const { onStatus, onProgress } = ctx;
+    onStatus('Comparaison du pack avec les fichiers installés...');
+    let modsZip: RemoteZip;
+    let assetsZip: RemoteZip;
+    try {
+      [modsZip, assetsZip] = await Promise.all([
+        RemoteZip.open(this.http, baseUrl + MODS_ZIP_NAME),
+        RemoteZip.open(this.http, baseUrl + ASSETS_ZIP_NAME),
+      ]);
+    } catch (e) {
+      if ((e as Error).name === 'RangeUnsupportedError') return null;
+      throw e;
+    }
+    // The archives changed between the HEAD probe and now: the full path copes with that.
+    if (modsZip.etag !== modsEtag || assetsZip.etag !== assetsKey) return null;
+    onProgress(0.06);
+
+    const assets = new Map(
+      assetsZip.entries
+        .filter((e) => !e.isDirectory)
+        .map((e) => [ModpackSync.stripTop(assetsZip.entries, e.entryName), e] as const),
+    );
+    const readSmall = async (name: string): Promise<string | null> => {
+      const entry = assets.get(name);
+      if (!entry) return null;
+      const tmp = path.join(gameDir, `.karamon-delta-${process.pid}-${path.basename(name)}`);
+      try {
+        await assetsZip.extractTo(entry, tmp);
+        return fs.readFileSync(tmp, 'utf8');
+      } finally {
+        fs.rmSync(tmp, { force: true });
+      }
+    };
+    const [rpText, spText, modsText, overridesText, optionsText] = await Promise.all([
+      readSmall(RESOURCE_PACKS_MANIFEST),
+      readSmall(SHADER_PACKS_MANIFEST),
+      readSmall(MODS_MANIFEST),
+      readSmall(OVERRIDES_MANIFEST),
+      readSmall(CLIENT_OPTIONS_NAME),
+    ]);
+    const asManifest = (text: string | null, label: string): OptionalManifest =>
+      text === null
+        ? { present: false, key: '', entries: [] }
+        : { present: true, key: ModpackSync.hashText(text), entries: ModpackSync.parseManifest(text, label) };
+    const resourcePacks = asManifest(rpText, RESOURCE_PACKS_MANIFEST);
+    const shaderPacks = asManifest(spText, SHADER_PACKS_MANIFEST);
+    const modsManifest = asManifest(modsText, MODS_MANIFEST);
+    let overrides = ModpackSync.absentOverrides();
+    if (overridesText !== null) {
+      try {
+        overrides = ModpackSync.parseOverridesManifest(overridesText);
+      } catch {
+        /* treated as absent, like the full path */
+      }
+    }
+    let clientOptions: ClientOptions | null = this.fallbackClientOptions;
+    if (optionsText !== null) {
+      try {
+        clientOptions = parseClientOptions(JSON.parse(optionsText)) ?? this.fallbackClientOptions;
+      } catch {
+        /* fallback */
+      }
+    }
+
+    const files: DeltaFile[] = [];
+    const jars = this.jarTargets(modsZip.entries, dirs.mods);
+    for (const jar of jars) files.push({ entry: jar.entry, target: jar.target });
+
+    // Unpacked folders: refetched only when their source zip changed (CRC), or the folder is gone.
+    const extractedCrc: Record<string, number> = {};
+    // Shader settings: the player's edits are kept (ShaderPolicy decides).
+    const settings: DeltaFile[] = [];
+    const folderKey = (folder: string): string => path.relative(gameDir, folder).replace(/\\/g, '/');
+    const groupFiles = (manifest: OptionalManifest, dir: string, prefix: string): void => {
+      for (const item of manifest.entries) {
+        const entry = assets.get(prefix + item.name);
+        if (!entry) throw new Error(`Asset manquant dans assets.zip: ${item.name}`);
+        if (!item.extract) {
+          const target = ModpackSync.safeJoin(dir, item.name);
+          if (this.isShaderSettings(dir, item.name)) {
+            settings.push({ entry, target });
+            continue;
+          }
+          files.push({ entry, target });
+          continue;
+        }
+        const folder = ModpackSync.safeJoin(dir, ModpackSync.folderNameFor(item.name));
+        const key = folderKey(folder);
+        extractedCrc[key] = entry.crc;
+        if (cache.extractedCrc?.[key] === entry.crc && ModpackSync.dirExists(folder)) continue;
+        files.push({ entry, target: folder, always: true, unpack: true });
+      }
+    };
+    groupFiles(resourcePacks, dirs.resourcepacks, 'resourcepacks/');
+    groupFiles(shaderPacks, dirs.shaderpacks, 'shaderpacks/');
+    this.shaders.setRevision(clientOptions?.shaderRevision ?? 0);
+    for (const file of settings) {
+      if (!(await this.shaders.keepSettings(file.target, file.entry.crc))) files.push({ ...file, always: true });
+    }
+    const overridesArchive = path.join(gameDir, OVERRIDES_ARCHIVE);
+    if (overrides.present) {
+      const entry = assets.get(overrides.name);
+      if (!entry) throw new Error(`Asset manquant dans assets.zip: ${overrides.name}`);
+      files.push({ entry, target: overridesArchive });
+    }
+
+    const modsPlan = await planDelta(modsZip, files.filter((f) => modsZip.entries.includes(f.entry)), verifier);
+    const assetsPlan = await planDelta(assetsZip, files.filter((f) => !modsZip.entries.includes(f.entry)), verifier);
+    const total = modsPlan.bytes + assetsPlan.bytes;
+    const count = modsPlan.needed.length + assetsPlan.needed.length;
+    onStatus(
+      count === 0
+        ? 'Tous les fichiers du pack sont déjà installés.'
+        : `${count} fichier(s) à mettre à jour, ${formatBytes(total)} à télécharger ` +
+            `(${formatBytes(modsPlan.keptBytes + assetsPlan.keptBytes)} déjà installés).`,
+    );
+
+    // Folders extracted from a pack zip: the zip goes to a temp file, then is unpacked.
+    const unpack = new Map<DeltaFile, string>();
+    for (const file of assetsPlan.needed) {
+      if (!file.unpack) continue;
+      const tmp = ModpackSync.safeJoin(
+        path.dirname(file.target),
+        `.karamon-extract-${process.pid}-${Date.now()}-${path.basename(file.target)}.zip`,
+      );
+      unpack.set(file, file.target);
+      file.target = tmp;
+    }
+    let modsBytes = 0;
+    let assetsBytes = 0;
+    const report = (): void => onProgress(0.08 + 0.85 * (total > 0 ? (modsBytes + assetsBytes) / total : 1));
+    const overridesChanged = assetsPlan.needed.some((f) => f.target === overridesArchive);
+    try {
+      await Promise.all([
+        fetchDelta(modsZip, modsPlan, verifier, (p) => {
+          modsBytes = p * modsPlan.bytes;
+          report();
+        }, (f) => onStatus(`+ ${path.basename(f.target)}`)),
+        fetchDelta(assetsZip, assetsPlan, verifier, (p) => {
+          assetsBytes = p * assetsPlan.bytes;
+          report();
+        }, (f) => {
+          if (!unpack.has(f)) onStatus(`+ ${path.basename(f.target)}`);
+        }),
+      ]);
+      for (const [file, folder] of unpack) {
+        fs.rmSync(folder, { recursive: true, force: true });
+        await extractZipToDir(file.target, folder, { stripCommonTopLevelFolder: true, durable: true });
+        onStatus(`+ ${path.basename(folder)}/`);
+      }
+    } finally {
+      for (const file of unpack.keys()) fs.rmSync(file.target, { force: true });
+    }
+
+    const jarNames = jars.filter((j) => !j.disabled).map((j) => j.name);
+    this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
+    this.cleanupPackFiles(dirs.resourcepacks, resourcePacks.entries, onStatus, 'Resource pack supprimé');
+    this.cleanupOrphanedFolders(
+      dirs.resourcepacks,
+      cache.resourcePackFolders,
+      ModpackSync.extractedFolders(resourcePacks.entries),
+      onStatus,
+      'Resource pack supprimé',
+    );
+    this.cleanupPackFiles(dirs.shaderpacks, shaderPacks.entries, onStatus, 'Shader pack supprimé');
+    this.cleanupOrphanedFolders(
+      dirs.shaderpacks,
+      cache.shaderPackFolders,
+      ModpackSync.extractedFolders(shaderPacks.entries),
+      onStatus,
+      'Shader pack supprimé',
+    );
+
+    let overridesSummary = '';
+    if (overrides.present && (overridesChanged || cache.overridesKey !== overrides.key || !ctx.assetsUpToDate)) {
+      onStatus('Installation des configs du pack...');
+      const result = installOverrides(overridesArchive, gameDir);
+      overridesSummary = `, ${result.written} fichier(s) de config`;
+      onStatus(`Configs du pack: ${result.written} écrit(s), ${result.kept} conservé(s).`);
+    }
+    this.storeClientOptions(gameDir, clientOptions);
+
+    const jarManifest = modsManifest.present ? modsManifest.entries : undefined;
+    const still = await this.damagedJars(dirs.mods, jarNames, jarManifest, verifier);
+    if (still.length > 0) {
+      throw new Error(`${still.join(', ')} ne correspond(ent) pas au manifeste du pack`);
+    }
+
+    const installed: AssetsSnapshot = {
+      resourcePacks: resourcePacks.entries,
+      shaderPacks: shaderPacks.entries,
+      overridesPresent: overrides.present,
+      overridesKey: overrides.key,
+      overridesSize: overrides.present ? overrides.size : undefined,
+      overridesSha1: overrides.sha1,
+    };
+    this.writeCache(gameDir, {
+      modsEtag,
+      jarNames,
+      modsManifest: jarManifest,
+      assetsKey,
+      assetsSnapshot: installed,
+      resourcePacksKey: ModpackSync.hashEntries(resourcePacks.entries),
+      resourcePackFolders: ModpackSync.extractedFolders(resourcePacks.entries),
+      shaderPacksKey: ModpackSync.hashEntries(shaderPacks.entries),
+      shaderPackFolders: ModpackSync.extractedFolders(shaderPacks.entries),
+      overridesKey: overrides.key,
+      extractedCrc,
+      syncedAt: Date.now(),
+    });
+    onProgress(0.98);
+    onStatus(
+      `Pack synchronisé: ${jarNames.length} mods, ${resourcePacks.entries.length} resource packs, ` +
+        `${shaderPacks.entries.length} shaders${overridesSummary} (${formatBytes(total)} téléchargés).`,
+    );
+    onProgress(1);
+    return { clientOptions };
+  }
+
+  /** Name of an entry of a zip whose entries all sit in one top folder, without that folder. */
+  private static stripTop(entries: ZipEntry[], name: string): string {
+    const prefix = commonTopLevelPrefix(entries);
+    return prefix ? name.slice(prefix.length) : name;
+  }
+
   private async assetsIntact(
     dirs: SyncDirs,
     gameDir: string,
@@ -755,6 +1045,7 @@ export class ModpackSync {
       const overrides = this.readOverridesManifestFile(path.join(extractDir, OVERRIDES_MANIFEST));
       const clientOptions = this.readClientOptionsFile(path.join(extractDir, CLIENT_OPTIONS_NAME));
       this.storeClientOptions(gameDir, clientOptions);
+      this.shaders.setRevision(clientOptions?.shaderRevision ?? 0);
 
       if (resourcePacks.present) {
         await this.installManifestGroupFromDir(
@@ -885,13 +1176,7 @@ export class ModpackSync {
         await this.installFileFromDir(entry, destDir, sourceDir, verifier, onStatus);
       }
     }
-    this.cleanupExtras(
-      destDir,
-      manifest.entries.filter((e) => !e.extract).map((e) => e.name),
-      '.zip',
-      onStatus,
-      cleanupLabel,
-    );
+    this.cleanupPackFiles(destDir, manifest.entries, onStatus, cleanupLabel);
     this.cleanupOrphanedFolders(
       destDir,
       previousFolders,
@@ -909,13 +1194,21 @@ export class ModpackSync {
     onStatus: StatusEmitter,
   ): Promise<void> {
     const target = ModpackSync.safeJoin(destDir, entry.name);
-    if (await verifier.isIntact(target, entry)) return;
     const src = ModpackSync.safeJoin(sourceDir, entry.name);
+    if (this.isShaderSettings(destDir, entry.name)) {
+      const packCrc = fs.existsSync(src) ? await crc32File(src) : null;
+      if (await this.shaders.keepSettings(target, packCrc)) return;
+    } else if (await verifier.isIntact(target, entry)) return;
     if (!fs.existsSync(src)) {
       throw new Error(`Asset manquant dans assets.zip: ${entry.name}`);
     }
     copyFileAtomic(src, target);
     onStatus(`+ ${entry.name}`);
+  }
+
+  /** shaderpacks/*.txt: the per-shader settings the player edits in game. */
+  private isShaderSettings(destDir: string, name: string): boolean {
+    return path.basename(destDir) === 'shaderpacks' && ShaderPolicy.isSettingsFile(name);
   }
 
   private async installAndExtractFromDir(
@@ -1006,12 +1299,17 @@ export class ModpackSync {
   /**
    * Loose files: size, zip end record and SHA-1 when published. Extracted
    * packs (`extract: true`) can't be hashed once unpacked: their folder must exist.
+   * Shader settings files (shaderpacks/*.txt) only need to exist: the player
+   * edits them in game, and a different content is their choice, not damage.
    */
   private async allEntriesIntact(dir: string, entries: ManifestEntry[], verifier: FileVerifier): Promise<boolean> {
     let intact = true;
+    const settingsDir = path.basename(dir) === 'shaderpacks';
     for (const entry of entries) {
       if (entry.extract) {
         if (!ModpackSync.dirExists(path.join(dir, ModpackSync.folderNameFor(entry.name)))) intact = false;
+      } else if (settingsDir && ShaderPolicy.isSettingsFile(entry.name)) {
+        if (!fs.existsSync(path.join(dir, entry.name))) intact = false;
       } else if (!(await verifier.isIntact(path.join(dir, entry.name), entry))) {
         intact = false;
       }
@@ -1060,13 +1358,7 @@ export class ModpackSync {
       onProgress(progressStart + progressSpan);
     }
 
-    this.cleanupExtras(
-      destDir,
-      manifest.entries.filter((e) => !e.extract).map((e) => e.name),
-      '.zip',
-      onStatus,
-      cleanupLabel,
-    );
+    this.cleanupPackFiles(destDir, manifest.entries, onStatus, cleanupLabel);
 
     this.cleanupOrphanedFolders(
       destDir,
@@ -1132,7 +1424,10 @@ export class ModpackSync {
     onStatus: StatusEmitter,
   ): Promise<void> {
     const target = ModpackSync.safeJoin(destDir, entry.name);
-    if (await verifier.isIntact(target, entry)) return;
+    if (this.isShaderSettings(destDir, entry.name)) {
+      // No pack version to compare with before downloading: the player's file wins.
+      if (await this.shaders.keepSettings(target, null)) return;
+    } else if (await verifier.isIntact(target, entry)) return;
     const url = packAssetUrl(baseUrl, entry.name, urlPrefix);
     await this.http.download(url, target, { label: entry.name, expectedSha1: entry.sha1 });
     onStatus(`+ ${entry.name}`);
@@ -1191,6 +1486,32 @@ export class ModpackSync {
     }
   }
 
+  /**
+   * Removes the loose files (zips, shader settings) that an earlier pack
+   * version installed in `dir` and the current one no longer ships. Files the
+   * pack never installed (a shader or resource pack the player added) stay.
+   */
+  private cleanupPackFiles(dir: string, entries: ManifestEntry[], onStatus: StatusEmitter, label: string): void {
+    const group = path.basename(dir) === 'shaderpacks' ? 'shaderpacks' : 'resourcepacks';
+    const current = entries.filter((e) => !e.extract).map((e) => e.name);
+    const currentLc = new Set(current.map((n) => n.toLowerCase()));
+    const previous = this.shipped[group];
+    // First sync with this launcher: no record yet, nothing is known to be ours.
+    for (const name of previous ?? []) {
+      if (currentLc.has(name.toLowerCase())) continue;
+      let file: string;
+      try {
+        file = ModpackSync.safeJoin(dir, name);
+      } catch {
+        continue;
+      }
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
+      fs.rmSync(file, { force: true });
+      onStatus(`${label}: ${name}`);
+    }
+    this.shipped[group] = current;
+  }
+
   private cleanupExtras(
     dir: string,
     keptNames: string[],
@@ -1216,8 +1537,15 @@ export class ModpackSync {
   }
 
   private writeCache(gameDir: string, data: CacheData): void {
+    // Records shared by every sync path: kept even when a path does not set them.
+    const previous = this.readCache(gameDir);
+    const full: CacheData = {
+      ...data,
+      shippedFiles: this.shipped,
+      extractedCrc: data.extractedCrc ?? previous.extractedCrc,
+    };
     try {
-      writeFileAtomic(path.join(gameDir, CACHE_FILE), JSON.stringify(data));
+      writeFileAtomic(path.join(gameDir, CACHE_FILE), JSON.stringify(full));
     } catch {
       /* best-effort cache */
     }
