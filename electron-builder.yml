@@ -46,6 +46,7 @@ files:
   - "dist/main.cjs"
   - "dist/preload.cjs"
   - "dist/renderer.js"
+  - "dist/renderer.css"
   - "dist/index.html"
   - "dist/styles.css"
   - "dist/pack.json"
