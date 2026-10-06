@@ -154,7 +154,7 @@ export class JavaProvisioner {
       await execFileP('tar', ['-xzf', archivePath, '-C', root]);
       return;
     }
-    extractZipToDir(archivePath, root);
+    await extractZipToDir(archivePath, root);
   }
 
   private static javaExecutable(): string {

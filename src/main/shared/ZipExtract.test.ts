@@ -18,13 +18,13 @@ function writeZipWithoutDataDescriptor(dir: string, name: string, content: strin
   return zipPath;
 }
 
-test('extrait une archive dont le bit de descripteur est posé sans descripteur', () => {
+test('extrait une archive dont le bit de descripteur est posé sans descripteur', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zipextract-'));
   const zipPath = writeZipWithoutDataDescriptor(dir, 'mods/karamon.jar', 'contenu du jar');
   const dest = path.join(dir, 'out');
 
   assert.throws(() => new AdmZip(zipPath).getEntries()[0].getData(), /descriptor/i);
-  extractZipToDir(zipPath, dest);
+  await extractZipToDir(zipPath, dest);
 
   assert.equal(fs.readFileSync(path.join(dest, 'mods', 'karamon.jar'), 'utf8'), 'contenu du jar');
   fs.rmSync(dir, { recursive: true, force: true });

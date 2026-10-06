@@ -112,7 +112,7 @@ export class LibraryDownloader {
       const jarPath = resolveInside(librariesDir, classifier.path, lib.name);
       if (!fs.existsSync(jarPath)) continue;
       const exclude = lib.extract?.exclude ?? ['META-INF/'];
-      extractZipToDir(jarPath, nativesDir, { exclude });
+      await extractZipToDir(jarPath, nativesDir, { exclude });
     }
   }
 

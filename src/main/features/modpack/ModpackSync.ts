@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import AdmZip from 'adm-zip';
-import { extractZipToDir, readEntryData, resolveInside } from '../../shared/ZipExtract.ts';
+import { extractZipToDir, resolveInside } from '../../shared/ZipExtract.ts';
+import { ZipReader } from '../../shared/ZipReader.ts';
 import { copyFileAtomic, writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import { githubAssetFreshness, packAssetUrl } from '../../shared/GitHubPack.ts';
@@ -287,7 +287,7 @@ export class ModpackSync {
         onProgress(0.62);
         if (!modsKnown) {
           onStatus('Extraction des mods...');
-          jarNames = this.extractJars(zipPath, dirs.mods, onStatus);
+          jarNames = await this.extractJars(zipPath, dirs.mods, onStatus);
           this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
         }
         await this.repairJars({
@@ -454,34 +454,34 @@ export class ModpackSync {
     modsDir: string,
     onStatus: StatusEmitter,
     only?: Set<string>,
-  ): string[] {
-    const zipBuffer = fs.readFileSync(zipPath);
-    const zip = new AdmZip(zipBuffer);
-    const seen = new Set<string>();
-    const jarNames: string[] = [];
-    const disabledDir = path.join(modsDir, 'mods-disabled');
-    for (const entry of zip.getEntries()) {
-      if (entry.isDirectory) continue;
-      const name = path.basename(entry.entryName);
-      const lower = name.toLowerCase();
-      if (!lower.endsWith('.jar')) continue;
-      if (seen.has(lower)) continue;
-      seen.add(lower);
-      if (this.isDisabledJar(name)) {
-        if (only) continue;
-        writeFileAtomic(ModpackSync.safeJoin(disabledDir, name), readEntryData(zipBuffer, entry));
-        onStatus(`Mod client désactivé (Java 21): ${name}`);
-        continue;
+  ): Promise<string[]> {
+    return ZipReader.withAsync(zipPath, async (zip) => {
+      const seen = new Set<string>();
+      const jarNames: string[] = [];
+      const disabledDir = path.join(modsDir, 'mods-disabled');
+      for (const entry of zip.entries) {
+        if (entry.isDirectory) continue;
+        const name = path.basename(entry.entryName);
+        const lower = name.toLowerCase();
+        if (!lower.endsWith('.jar')) continue;
+        if (seen.has(lower)) continue;
+        seen.add(lower);
+        if (this.isDisabledJar(name)) {
+          if (only) continue;
+          await zip.extractTo(entry, ModpackSync.safeJoin(disabledDir, name), { durable: true });
+          onStatus(`Mod client désactivé (Java 21): ${name}`);
+          continue;
+        }
+        jarNames.push(name);
+        if (only && !only.has(lower)) continue;
+        await zip.extractTo(entry, ModpackSync.safeJoin(modsDir, name), { durable: true });
+        if (only) onStatus(`Mod réparé: ${name}`);
       }
-      jarNames.push(name);
-      if (only && !only.has(lower)) continue;
-      writeFileAtomic(ModpackSync.safeJoin(modsDir, name), readEntryData(zipBuffer, entry));
-      if (only) onStatus(`Mod réparé: ${name}`);
-    }
-    if (jarNames.length === 0) {
-      throw new Error('mods.zip ne contient aucun .jar');
-    }
-    return jarNames;
+      if (jarNames.length === 0) {
+        throw new Error('mods.zip ne contient aucun .jar');
+      }
+      return jarNames;
+    });
   }
 
   /**
@@ -514,7 +514,7 @@ export class ModpackSync {
         timeoutMs: ZIP_DOWNLOAD_TIMEOUT_MS,
       });
     }
-    this.extractJars(ctx.zipPath, ctx.modsDir, ctx.onStatus, ModpackSync.lowerSet(damaged));
+    await this.extractJars(ctx.zipPath, ctx.modsDir, ctx.onStatus, ModpackSync.lowerSet(damaged));
     const still = await this.damagedJars(ctx.modsDir, damaged, ctx.manifest, ctx.verifier);
     if (still.length > 0) {
       ctx.onStatus(`Attention: ${still.join(', ')} ne correspond(ent) pas au manifeste du pack.`);
@@ -664,7 +664,7 @@ export class ModpackSync {
       if (!modsKnown) {
         onStatus('Extraction des mods...');
         onProgress(0.75);
-        jarNames = this.extractJars(modsZipPath, dirs.mods, onStatus);
+        jarNames = await this.extractJars(modsZipPath, dirs.mods, onStatus);
         this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
       }
       if (!assetsUpToDate) {
@@ -747,7 +747,7 @@ export class ModpackSync {
     try {
       onStatus('Extraction des assets...');
       fs.rmSync(extractDir, { recursive: true, force: true });
-      extractZipToDir(zipPath, extractDir, { stripCommonTopLevelFolder: true });
+      await extractZipToDir(zipPath, extractDir, { stripCommonTopLevelFolder: true });
 
       const resourcePacks = this.readOptionalManifestFile(path.join(extractDir, RESOURCE_PACKS_MANIFEST));
       const shaderPacks = this.readOptionalManifestFile(path.join(extractDir, SHADER_PACKS_MANIFEST));
@@ -880,7 +880,7 @@ export class ModpackSync {
     }
     for (const entry of manifest.entries) {
       if (entry.extract) {
-        this.installAndExtractFromDir(entry, destDir, sourceDir, forceReExtract, onStatus);
+        await this.installAndExtractFromDir(entry, destDir, sourceDir, forceReExtract, onStatus);
       } else {
         await this.installFileFromDir(entry, destDir, sourceDir, verifier, onStatus);
       }
@@ -918,13 +918,13 @@ export class ModpackSync {
     onStatus(`+ ${entry.name}`);
   }
 
-  private installAndExtractFromDir(
+  private async installAndExtractFromDir(
     entry: ManifestEntry,
     destDir: string,
     sourceDir: string,
     forceReExtract: boolean,
     onStatus: StatusEmitter,
-  ): void {
+  ): Promise<void> {
     const folderName = ModpackSync.folderNameFor(entry.name);
     const folderPath = ModpackSync.safeJoin(destDir, folderName);
     if (!forceReExtract && ModpackSync.dirExists(folderPath)) return;
@@ -933,7 +933,7 @@ export class ModpackSync {
       throw new Error(`Asset manquant dans assets.zip: ${entry.name}`);
     }
     fs.rmSync(folderPath, { recursive: true, force: true });
-    extractZipToDir(src, folderPath, { stripCommonTopLevelFolder: true, durable: true });
+    await extractZipToDir(src, folderPath, { stripCommonTopLevelFolder: true, durable: true });
     onStatus(`+ ${folderName}/`);
   }
 
@@ -1157,7 +1157,7 @@ export class ModpackSync {
     try {
       await this.http.download(url, tmpZip, { label: entry.name, expectedSha1: entry.sha1 });
       fs.rmSync(folderPath, { recursive: true, force: true });
-      extractZipToDir(tmpZip, folderPath, { stripCommonTopLevelFolder: true, durable: true });
+      await extractZipToDir(tmpZip, folderPath, { stripCommonTopLevelFolder: true, durable: true });
       onStatus(`+ ${folderName}/`);
     } finally {
       fs.rmSync(tmpZip, { force: true });
