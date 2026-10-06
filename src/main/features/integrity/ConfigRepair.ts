@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import AdmZip from 'adm-zip';
+import { ZipReader } from '../../shared/ZipReader.ts';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import { resolveInside } from '../../shared/ZipExtract.ts';
 import { normalizeOverridePath } from '../modpack/OverridesInstaller.ts';
@@ -161,13 +161,15 @@ function readPackFiles(overridesZip: string | null, wanted: string[]): Map<strin
   if (!overridesZip || !fs.existsSync(overridesZip)) return files;
   const want = new Set(wanted);
   try {
-    for (const entry of new AdmZip(overridesZip).getEntries()) {
-      if (entry.isDirectory) continue;
-      const rel = normalizeOverridePath(entry.entryName);
-      if (!want.has(rel)) continue;
-      const data = entry.getData();
-      if (!isAllNul(data)) files.set(rel, data);
-    }
+    ZipReader.with(overridesZip, (zip) => {
+      for (const entry of zip.entries) {
+        if (entry.isDirectory) continue;
+        const rel = normalizeOverridePath(entry.entryName);
+        if (!want.has(rel)) continue;
+        const data = zip.read(entry);
+        if (!isAllNul(data)) files.set(rel, data);
+      }
+    });
   } catch {
     /* unreadable archive: nothing to restore from */
   }

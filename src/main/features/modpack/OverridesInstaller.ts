@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import AdmZip from 'adm-zip';
+import { ZipReader } from '../../shared/ZipReader.ts';
 // Explicit extension so node --experimental-strip-types can run the unit test; esbuild bundles it fine.
 import { resolveInside } from '../../shared/ZipExtract.ts';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
@@ -41,33 +41,34 @@ export function installOverrides(
   gameDir: string,
   forcePrefixes = OVERRIDES_FORCE_PREFIXES,
 ): OverridesResult {
-  const zip = new AdmZip(zipPath);
   const root = path.resolve(gameDir);
   let written = 0;
   let kept = 0;
-  for (const entry of zip.getEntries()) {
-    if (entry.isDirectory) continue;
-    const rel = normalizeOverridePath(entry.entryName);
-    if (!rel || OVERRIDES_SKIP_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
-    const target = resolveInside(root, rel, entry.entryName);
-    const force = isForcedOverride(rel, forcePrefixes);
-    if (!force && fs.existsSync(target)) {
-      kept++;
-      continue;
-    }
-    const data = entry.getData();
-    if (force && fs.existsSync(target)) {
-      try {
-        if (fs.readFileSync(target).equals(data)) {
-          kept++;
-          continue;
-        }
-      } catch {
-        /* rewrite below */
+  ZipReader.with(zipPath, (zip) => {
+    for (const entry of zip.entries) {
+      if (entry.isDirectory) continue;
+      const rel = normalizeOverridePath(entry.entryName);
+      if (!rel || OVERRIDES_SKIP_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
+      const target = resolveInside(root, rel, entry.entryName);
+      const force = isForcedOverride(rel, forcePrefixes);
+      if (!force && fs.existsSync(target)) {
+        kept++;
+        continue;
       }
+      const data = zip.read(entry);
+      if (force && fs.existsSync(target)) {
+        try {
+          if (fs.readFileSync(target).equals(data)) {
+            kept++;
+            continue;
+          }
+        } catch {
+          /* rewrite below */
+        }
+      }
+      writeFileAtomic(target, data);
+      written++;
     }
-    writeFileAtomic(target, data);
-    written++;
-  }
+  });
   return { written, kept };
 }
