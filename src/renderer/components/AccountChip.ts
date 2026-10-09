@@ -1,12 +1,13 @@
 import type { MinecraftProfile } from '../../ipc/contract';
+import { playerAvatar, type SkinUrlLookup } from './PlayerAvatar';
 
 export class AccountChip {
   constructor(
     private readonly root: HTMLElement,
-    private readonly onLogoutClick: () => void,
-    private readonly skinUrl: (profileId: string) => Promise<string | null>,
+    onClick: () => void,
+    private readonly skinUrl: SkinUrlLookup,
   ) {
-    this.root.addEventListener('click', () => this.onLogoutClick());
+    this.root.addEventListener('click', () => onClick());
   }
 
   render(profile: MinecraftProfile | null): void {
@@ -17,39 +18,14 @@ export class AccountChip {
     }
     this.root.style.display = '';
     this.root.classList.add('signed-in');
-    this.root.title = `${profile.name}, cliquer pour se déconnecter`;
+    this.root.title =
+      profile.kind === 'offline'
+        ? `${profile.name} (sans compte Microsoft), cliquer pour gérer les comptes`
+        : `${profile.name}, cliquer pour gérer les comptes`;
     this.root.replaceChildren(
-      this.avatar(profile.id),
+      playerAvatar(profile, this.skinUrl, 'chip-avatar'),
       AccountChip.label(profile.name),
     );
-  }
-
-  /** The face and hat layer cut from the player's own skin, or Crafatar's render if Mojang has none. */
-  private avatar(profileId: string): HTMLElement {
-    const wrapper = document.createElement('span');
-    wrapper.className = 'chip-avatar';
-    void this.skinUrl(profileId).then((url) => {
-      if (url) {
-        const face = document.createElement('span');
-        face.className = 'chip-face';
-        const layer = `url("${url}")`;
-        face.style.backgroundImage = `${layer}, ${layer}`;
-        wrapper.replaceChildren(face);
-      } else {
-        wrapper.replaceChildren(AccountChip.crafatar(profileId));
-      }
-    });
-    return wrapper;
-  }
-
-  private static crafatar(profileId: string): HTMLElement {
-    const img = document.createElement('img');
-    img.alt = '';
-    img.src = `https://crafatar.com/avatars/${encodeURIComponent(profileId)}?size=48&overlay`;
-    img.addEventListener('error', () => {
-      img.style.display = 'none';
-    });
-    return img;
   }
 
   private static label(name: string): HTMLElement {

@@ -5,11 +5,12 @@ import path from 'path';
 import { app } from 'electron/main';
 import { Paths } from '../../shared/Paths';
 import type { HttpClient } from '../../shared/HttpClient';
-import type { AuthSession } from '../auth/AuthSession';
+import type { ActiveSession, AuthSession } from '../auth/AuthSession';
 import { VersionResolver, type MojangVersion } from './VersionResolver';
 import { LibraryDownloader } from './LibraryDownloader';
 import { AssetDownloader } from './AssetDownloader';
 import { ArgumentResolver } from './ArgumentResolver';
+import { launchIdentity } from './LaunchIdentity';
 
 export interface GameLauncherOptions {
   paths: Paths;
@@ -153,7 +154,7 @@ export class GameLauncher {
     return version;
   }
 
-  private buildArgs(version: MojangVersion, spec: LaunchSpec, session: { profile: { id: string; name: string }; accessToken: string }): string[] {
+  private buildArgs(version: MojangVersion, spec: LaunchSpec, session: ActiveSession): string[] {
     const cpEntries = this.libraries.classpath(version.libraries ?? [], this.opts.paths.librariesDir);
     const clientJarPath = path.join(
       this.opts.paths.versionsDir,
@@ -169,12 +170,7 @@ export class GameLauncher {
     if (spec.devMode) userJvm.push(DevMode.JVM_FLAG);
 
     const vars = {
-      authPlayerName: session.profile.name,
-      authUuid: GameLauncher.formatUuid(session.profile.id),
-      authAccessToken: session.accessToken,
-      authXuid: '',
-      clientId: '',
-      userType: 'msa',
+      ...launchIdentity(session),
       versionName: version.id,
       versionType: version.type ?? 'release',
       gameDir: spec.gameDir,
@@ -190,11 +186,5 @@ export class GameLauncher {
     if (!version.mainClass) throw new Error('Version sans mainClass: JSON corrompu');
 
     return [...heapArgs, ...userJvm, ...jvm, version.mainClass, ...game];
-  }
-
-  private static formatUuid(raw: string): string {
-    if (raw.includes('-')) return raw;
-    if (raw.length !== 32) return raw;
-    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
   }
 }

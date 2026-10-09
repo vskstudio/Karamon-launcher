@@ -162,18 +162,28 @@ export interface ShopOffer {
   currency: string;
 }
 
+/** `offline`: a player without a Minecraft licence, protected by a Karamon password asked in game. */
+export type AccountKind = 'microsoft' | 'offline';
+
 export interface MinecraftProfile {
   id: string;
   name: string;
+  kind: AccountKind;
 }
 
 export type AuthLoginResult =
   | { ok: true; profile: MinecraftProfile }
   | { ok: false; error: string };
 
-export type AuthSessionResult =
-  | { signedIn: true; profile: MinecraftProfile }
-  | { signedIn: false };
+export interface AuthSessionResult {
+  /** The account that plays, or null when signed out. */
+  active: MinecraftProfile | null;
+  /** Every account the launcher remembers, the active one included. */
+  accounts: MinecraftProfile[];
+}
+
+/** `taken`: a Mojang account owns the name; `unknown`: Mojang could not be asked. */
+export type NameCheckResult = 'free' | 'taken' | 'unknown';
 
 export const Channels = {
   windowMinimize: 'window:minimize',
@@ -217,6 +227,9 @@ export const Channels = {
   skinUrl: 'skin:url',
 
   authLogin: 'auth:login',
+  authLoginOffline: 'auth:login-offline',
+  authCheckName: 'auth:check-name',
+  authSwitch: 'auth:switch',
   authLogout: 'auth:logout',
   authGetSession: 'auth:get-session',
 
@@ -256,9 +269,12 @@ export interface IpcInvokeContract {
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
   [Channels.shopOffers]: { req: void; res: ShopOffer[] };
-  [Channels.skinUrl]: { req: string; res: string | null };
+  [Channels.skinUrl]: { req: MinecraftProfile; res: string | null };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
-  [Channels.authLogout]: { req: void; res: void };
+  [Channels.authLoginOffline]: { req: string; res: AuthLoginResult };
+  [Channels.authCheckName]: { req: string; res: NameCheckResult };
+  [Channels.authSwitch]: { req: string; res: AuthSessionResult };
+  [Channels.authLogout]: { req: void; res: AuthSessionResult };
   [Channels.authGetSession]: { req: void; res: AuthSessionResult };
 }
 
@@ -317,10 +333,13 @@ export interface LauncherApi {
   deleteBackup(name: string): Promise<BackupListResult>;
 
   listShopOffers(): Promise<ShopOffer[]>;
-  skinUrl(profileId: string): Promise<string | null>;
+  skinUrl(profile: MinecraftProfile): Promise<string | null>;
 
   authLogin(): Promise<AuthLoginResult>;
-  authLogout(): Promise<void>;
+  authLoginOffline(name: string): Promise<AuthLoginResult>;
+  authCheckName(name: string): Promise<NameCheckResult>;
+  authSwitch(accountId: string): Promise<AuthSessionResult>;
+  authLogout(): Promise<AuthSessionResult>;
   authGetSession(): Promise<AuthSessionResult>;
 
   onStatus(cb: (msg: string) => void): void;
