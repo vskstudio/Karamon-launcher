@@ -8,7 +8,8 @@ import {
   Channels,
   type AppConfigUpdate,
   type AuthLoginResult,
-  type AuthSessionResult,
+  type MinecraftProfile,
+  type NameCheckResult,
   type ExportLogsResult,
   type JavaCandidate,
   type LaunchResult,
@@ -44,6 +45,9 @@ import { ShopCatalog } from './features/shop/ShopCatalog';
 import { SkinLookup } from './features/auth/SkinLookup';
 import { AuthSession } from './features/auth/AuthSession';
 import { TokenStore } from './features/auth/TokenStore';
+import { AccountStore } from './features/auth/AccountStore';
+import { mojangNameStatus } from './features/auth/OfflineAccount';
+import { OFFLINE_NAME_TAKEN, isValidOfflineName, offlineNameProblem } from '../shared/OfflineName';
 import { GameLauncher } from './features/minecraft/GameLauncher';
 import { PotatoMode } from './features/potato/PotatoMode';
 import { lowEndReasons, potatoMemoryCapMb, type GpuDevice } from './features/potato/PotatoSettings';
@@ -63,7 +67,10 @@ export class KaramonApp {
   private readonly fabric: FabricInstaller;
   private readonly profile = new LauncherProfile(Paths.minecraftLauncherDir());
   private readonly modpackSync: ModpackSync;
-  private readonly auth = new AuthSession(new TokenStore(this.paths.authCache));
+  private readonly auth = new AuthSession(
+    new TokenStore(this.paths.authCache),
+    new AccountStore(this.paths.accountsFile),
+  );
   private readonly gameLauncher: GameLauncher;
   private readonly javaDetector = new JavaDetector();
   private readonly javaProvisioner = new JavaProvisioner(this.paths, this.http, this.javaDetector);
@@ -233,11 +240,14 @@ export class KaramonApp {
     ipcMain.handle(Channels.backupDelete, (_e, name: string) => this.backup.delete(name));
 
     ipcMain.handle(Channels.shopOffers, () => this.shop.offers());
-    ipcMain.handle(Channels.skinUrl, (_e, profileId: string) => this.skins.skinUrl(String(profileId)));
+    ipcMain.handle(Channels.skinUrl, (_e, profile: MinecraftProfile) => this.skins.skinFor(profile));
 
     ipcMain.handle(Channels.authLogin, () => this.authLogin());
+    ipcMain.handle(Channels.authLoginOffline, (_e, name: string) => this.authLoginOffline(String(name)));
+    ipcMain.handle(Channels.authCheckName, (_e, name: string) => this.authCheckName(String(name)));
+    ipcMain.handle(Channels.authSwitch, (_e, accountId: string) => this.auth.switchTo(String(accountId)));
     ipcMain.handle(Channels.authLogout, () => this.auth.logout());
-    ipcMain.handle(Channels.authGetSession, () => this.authGetSession());
+    ipcMain.handle(Channels.authGetSession, () => this.auth.state());
   }
 
   private async authLogin(): Promise<AuthLoginResult> {
@@ -249,9 +259,25 @@ export class KaramonApp {
     }
   }
 
-  private authGetSession(): AuthSessionResult {
-    const profile = this.auth.cachedProfile();
-    return profile ? { signedIn: true, profile } : { signedIn: false };
+  /** A player without a Minecraft licence. A name Mojang knows is refused: the server would refuse it too. */
+  private async authLoginOffline(name: string): Promise<AuthLoginResult> {
+    const problem = offlineNameProblem(name);
+    if (problem) return { ok: false, error: problem };
+    if ((await mojangNameStatus(name)) === 'taken') {
+      return { ok: false, error: OFFLINE_NAME_TAKEN };
+    }
+    try {
+      const profile = this.auth.loginOffline(name);
+      this.fileLog.info(`Compte sans licence enregistré : ${profile.name} (${profile.id})`);
+      return { ok: true, profile };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  private async authCheckName(name: string): Promise<NameCheckResult> {
+    if (!isValidOfflineName(name)) return 'unknown';
+    return await mojangNameStatus(name);
   }
 
   private async openExternal(url: string): Promise<void> {

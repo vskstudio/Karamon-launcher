@@ -1,5 +1,5 @@
 import path from 'path';
-import { RuleEvaluator } from './RuleEvaluator';
+import { RuleEvaluator } from './RuleEvaluator.ts';
 import type { RawArgument, MojangVersion } from './VersionResolver';
 
 export interface ArgumentVars {

@@ -40,7 +40,7 @@ export class TokenStore {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
       if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
       const refreshToken = safeStorage.decryptString(Buffer.from(raw.refreshTokenEnc, 'base64'));
-      return { refreshToken, profile: raw.profile };
+      return { refreshToken, profile: { id: raw.profile.id, name: raw.profile.name, kind: 'microsoft' } };
     } catch {
       return null;
     }

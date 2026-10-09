@@ -52,6 +52,6 @@ export class MinecraftAuth {
     if (!data.id || !data.name) {
       throw new Error('Profil Minecraft invalide');
     }
-    return { id: data.id, name: data.name };
+    return { id: data.id, name: data.name, kind: 'microsoft' };
   }
 }

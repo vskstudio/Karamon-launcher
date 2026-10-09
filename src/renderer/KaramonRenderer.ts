@@ -1,6 +1,6 @@
-import type { LauncherApi, MinecraftProfile } from '../ipc/contract';
+import type { AuthSessionResult, LauncherApi, MinecraftProfile } from '../ipc/contract';
 import { $, $button, $opt } from './util/dom';
-import { Toast, confirmDialog } from './lib/ui';
+import { Toast } from './lib/ui';
 import { ConsoleView } from './components/ConsoleView';
 import { ProgressBar } from './components/ProgressBar';
 import { PlayButton } from './components/PlayButton';
@@ -18,6 +18,7 @@ import { ShopPage } from './pages/ShopPage';
 import { SettingsPage } from './pages/SettingsPage';
 import type { Page } from './pages/Page';
 import { AccountChip } from './components/AccountChip';
+import { AccountDialog } from './components/AccountDialog';
 import type { PingResult } from '../ipc/contract';
 
 export class KaramonRenderer {
@@ -35,6 +36,7 @@ export class KaramonRenderer {
   private readonly settings: SettingsPage;
   private readonly pages: Record<string, Page>;
   private readonly accountChip: AccountChip;
+  private readonly accountDialog: AccountDialog;
   private gameRunning = false;
   private actionRunning = false;
   private authProfile: MinecraftProfile | null = null;
@@ -81,11 +83,14 @@ export class KaramonRenderer {
       shop: new ShopPage($('panel-shop'), { api, playerName: () => this.authProfile?.name ?? null }),
       settings: this.settings,
     };
-    this.accountChip = new AccountChip(
-      $('account-chip'),
-      () => void this.handleLogout(),
-      (profileId) => api.skinUrl(profileId),
-    );
+    const skinUrl = (profile: MinecraftProfile) => api.skinUrl(profile);
+    this.accountDialog = new AccountDialog({
+      api,
+      skinUrl,
+      loginMicrosoft: () => this.handleLogin(),
+      onChanged: (state, message) => this.applyAuthState(state, message),
+    });
+    this.accountChip = new AccountChip($('account-chip'), () => void this.accountDialog.open(), skinUrl);
   }
 
   private onPingResult(r: PingResult, prev: 'online' | 'offline' | 'unknown'): void {
@@ -213,10 +218,17 @@ export class KaramonRenderer {
   }
 
   private async refreshAuthState(): Promise<void> {
-    const session = await this.api.authGetSession();
-    this.authProfile = session.signedIn ? session.profile : null;
+    this.applyAuthState(await this.api.authGetSession());
+  }
+
+  private applyAuthState(state: AuthSessionResult, message?: string): void {
+    this.authProfile = state.active;
     this.accountChip.render(this.authProfile);
     this.refreshPlayButton();
+    if (message) {
+      Toast.show(message, 'ok');
+      this.console.log(message, 'ok');
+    }
   }
 
   private async handleLogin(): Promise<void> {
@@ -226,10 +238,7 @@ export class KaramonRenderer {
     try {
       const result = await this.api.authLogin();
       if (result.ok) {
-        this.authProfile = result.profile;
-        this.accountChip.render(this.authProfile);
-        Toast.show(`Connecté en tant que ${result.profile.name}.`, 'ok');
-        this.console.log(`Connecté : ${result.profile.name}`, 'ok');
+        this.applyAuthState(await this.api.authGetSession(), `Connecté en tant que ${result.profile.name}.`);
       } else {
         Toast.show(result.error, 'error');
         this.console.log('Erreur connexion: ' + result.error, 'error');
@@ -240,26 +249,10 @@ export class KaramonRenderer {
     }
   }
 
-  private async handleLogout(): Promise<void> {
-    if (!this.authProfile) return;
-    const ok = await confirmDialog({
-      title: `Se déconnecter de ${this.authProfile.name} ?`,
-      text: 'Il faudra te reconnecter avec Microsoft pour jouer.',
-      confirmLabel: 'Se déconnecter',
-      danger: true,
-    });
-    if (!ok) return;
-    await this.api.authLogout();
-    this.authProfile = null;
-    this.accountChip.render(null);
-    this.refreshPlayButton();
-    Toast.show('Déconnecté.', 'ok');
-  }
-
   private async play(): Promise<void> {
     if (this.actionRunning) return;
     if (!this.authProfile) {
-      void this.handleLogin();
+      void this.accountDialog.open();
       return;
     }
     if (this.gameRunning) {

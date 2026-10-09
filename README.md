@@ -14,7 +14,7 @@
 
 ---
 
-Le launcher installe Minecraft, Fabric, Java et tous les mods du serveur, puis te connecte à `play.karamon.fr`. Tu n'as rien à configurer : tu te connectes avec ton compte Microsoft et tu cliques sur Jouer.
+Le launcher installe Minecraft, Fabric, Java et tous les mods du serveur, puis te connecte à `play.karamon.fr`. Tu n'as rien à configurer : tu te connectes avec ton compte Microsoft, ou avec un simple pseudo si tu n'as pas de licence Minecraft, et tu cliques sur Jouer.
 
 ## Installer
 
@@ -37,11 +37,20 @@ Chaque release contient un fichier `checksums.txt` si tu veux vérifier ce que t
 
 ## Premier lancement
 
-1. Ouvre Karamon Launcher et connecte-toi avec ton compte Microsoft (celui de Minecraft Java).
+1. Ouvre Karamon Launcher et connecte-toi avec ton compte Microsoft (celui de Minecraft Java), ou choisis « Jouer sans compte Microsoft » (voir plus bas).
 2. Laisse le launcher préparer le jeu. La première fois, il télécharge environ 650 Mo de mods et de ressources, et installe Java 21 s'il ne le trouve pas.
 3. Clique sur Jouer.
 
 Les fois suivantes, il ne télécharge que ce qui a changé depuis ta dernière partie. Une mise à jour du pack pèse en général quelques dizaines de Mo.
+
+## Jouer sans compte Microsoft
+
+Sans licence Minecraft, clique sur Jouer, puis « Jouer sans compte Microsoft », et choisis un pseudo de 3 à 16 caractères (lettres sans accent, chiffres et `_`). Un pseudo qui appartient déjà à un compte Minecraft officiel est refusé par le serveur : le launcher te prévient avant.
+
+- Ton compte Karamon est protégé par un mot de passe : le jeu te le demande à chaque connexion au serveur (la première fois, tu le choisis).
+- Ton skin vient d'Ely.by ou de TLauncher si ton pseudo y en a un. Sinon, choisis-le en jeu avec `/skin`.
+
+Le launcher retient tes comptes. Clique sur ton pseudo en haut à droite pour passer d'un compte à l'autre ou te déconnecter.
 
 ## Ce que fait le launcher
 

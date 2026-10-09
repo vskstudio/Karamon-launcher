@@ -4,6 +4,7 @@ import os from 'os';
 export class Paths {
   readonly dataDir: string;
   readonly authCache: string;
+  readonly accountsFile: string;
   readonly configFile: string;
   readonly versionsDir: string;
   readonly librariesDir: string;
@@ -15,6 +16,7 @@ export class Paths {
   constructor(rootDir: string) {
     this.dataDir = rootDir;
     this.authCache = path.join(rootDir, 'auth.json');
+    this.accountsFile = path.join(rootDir, 'accounts.json');
     this.configFile = path.join(rootDir, 'config.json');
     this.versionsDir = path.join(rootDir, 'versions');
     this.librariesDir = path.join(rootDir, 'libraries');
