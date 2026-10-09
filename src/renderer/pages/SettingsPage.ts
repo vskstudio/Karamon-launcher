@@ -66,6 +66,10 @@ export class SettingsPage implements Page {
   private readonly gameDir: HTMLInputElement;
   private readonly closeOnLaunch: Toggle;
   private readonly devMode: Toggle;
+  private readonly potatoMode: Toggle;
+  private potatoBadge: HTMLElement = h('span');
+  private readonly potatoMemory = h('li');
+  private potatoHintDismissed = false;
 
   private readonly statPlaytime = stat('Temps de jeu');
   private readonly statSessions = stat('Sessions');
@@ -140,6 +144,13 @@ export class SettingsPage implements Page {
 
     this.closeOnLaunch = toggle({ label: 'Fermer le launcher au lancement du jeu', onChange: () => this.markDirty() });
     this.devMode = toggle({ label: 'Mode développement', onChange: () => this.markDirty() });
+    this.potatoMode = toggle({
+      label: 'Mode PC modeste',
+      onChange: () => {
+        this.renderMemory();
+        this.markDirty();
+      },
+    });
 
     this.updateButton = button({
       label: 'Vérifier les mises à jour',
@@ -163,7 +174,14 @@ export class SettingsPage implements Page {
       h(
         'div',
         { className: 'settings-layout' },
-        h('div', { className: 'settings-col' }, this.memoryCard(), this.behaviourCard(), this.maintenanceCard()),
+        h(
+          'div',
+          { className: 'settings-col' },
+          this.memoryCard(),
+          this.potatoCard(),
+          this.behaviourCard(),
+          this.maintenanceCard(),
+        ),
         h('div', { className: 'settings-col' }, this.javaCard(), this.systemCard(), this.activityCard(), this.versionCard()),
       ),
       this.saveBar,
@@ -214,6 +232,34 @@ export class SettingsPage implements Page {
         h('div', { className: 'settings-divider' }),
         presetField.root,
         this.jvmArgs,
+      ],
+    }).root;
+  }
+
+  private potatoCard(): HTMLElement {
+    const changes = h(
+      'ul',
+      { className: 'settings-potato__list' },
+      h('li', { text: 'Shaders coupés à chaque lancement. Tu peux les rallumer en jeu, ton shader reste sélectionné.' }),
+      h('li', {
+        text: 'Graphismes au minimum : distance de rendu 6 et simulation 5 (comme le serveur), mode rapide, sans nuages, ombres ni flou des menus, particules minimales, feuilles rapides. Un réglage déjà plus bas n’est jamais remonté.',
+      }),
+      h('li', {
+        text: 'Mods visuels lourds désactivés : Voxy (vue lointaine), Particular, Particle Rain et Sound Physics. Ils ne servent qu’à l’affichage et au son, le serveur ne les demande pas.',
+      }),
+      this.potatoMemory,
+    );
+    return card({
+      title: 'Mode PC modeste',
+      actions: [this.potatoBadge],
+      flush: true,
+      body: [
+        settingRow({
+          label: 'Activer le mode PC modeste',
+          hint: 'Pour les petites configs. Quand tu le coupes, tes réglages et les mods reviennent comme avant.',
+          control: this.potatoMode.root,
+        }),
+        changes,
       ],
     }).root;
   }
@@ -335,6 +381,15 @@ export class SettingsPage implements Page {
     syncRangeFill(this.memoryRange);
     const maxLabel = this.root.querySelector('.settings-memory__max');
     if (maxLabel) maxLabel.textContent = `${Math.round(max / 1024)} Go`;
+
+    const cap = system.potatoMemoryCapMb;
+    this.potatoMemory.textContent =
+      cap === null
+        ? 'Mémoire : ton réglage est gardé.'
+        : `Mémoire limitée à ${SettingsPage.formatGo(cap)} au plus (ton PC a ${totalGo} Go de RAM), pour laisser de la place au système. Un réglage plus bas est gardé.`;
+    const suggested = system.lowEndReasons.length > 0;
+    this.potatoBadge.replaceWith((this.potatoBadge = suggested ? badge('Conseillé pour ce PC', 'amber') : h('span')));
+    if (suggested) this.potatoBadge.title = system.lowEndReasons.join(', ');
   }
 
   private applyConfig(config: AppConfig): void {
@@ -345,6 +400,9 @@ export class SettingsPage implements Page {
     this.gameDir.value = config.mcGameDir ?? '';
     this.closeOnLaunch.input.checked = config.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = config.devMode ?? false;
+    this.potatoMode.input.checked = config.potatoMode ?? false;
+    this.potatoHintDismissed = config.potatoHintDismissed ?? false;
+    this.renderMemory();
   }
 
   private setMemory(mb: number): void {
@@ -377,6 +435,12 @@ export class SettingsPage implements Page {
     } else if (mb > RECOMMENDED_MAX_MB) {
       label = 'Généreux';
       tone = 'green';
+    }
+    const cap = this.system?.potatoMemoryCapMb ?? null;
+    if (this.potatoMode.input.checked && cap !== null && cap < mb) {
+      label = 'Mode PC modeste';
+      tone = 'amber';
+      hint = `Mode PC modeste actif : le jeu démarre avec ${SettingsPage.formatGo(cap)} tant qu’il reste allumé.`;
     }
     this.memoryBadge.replaceWith((this.memoryBadge = badge(label, tone)));
     this.memoryHint.textContent = hint;
@@ -417,6 +481,7 @@ export class SettingsPage implements Page {
       mcGameDir: this.gameDir.value.trim(),
       closeLauncherOnGameStart: this.closeOnLaunch.input.checked,
       devMode: this.devMode.input.checked,
+      potatoMode: this.potatoMode.input.checked,
     };
   }
 
@@ -443,12 +508,19 @@ export class SettingsPage implements Page {
     this.gameDir.value = this.saved.mcGameDir ?? '';
     this.closeOnLaunch.input.checked = this.saved.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = this.saved.devMode ?? false;
+    this.potatoMode.input.checked = this.saved.potatoMode ?? false;
+    this.renderMemory();
     void this.populateJava();
     this.markDirty();
   }
 
   private async save(): Promise<void> {
-    const updates = this.collect();
+    const updates: AppConfigUpdate = this.collect();
+    // Answering in the settings counts as answering the suggestion.
+    if (updates.potatoMode !== this.saved?.potatoMode && !this.potatoHintDismissed) {
+      updates.potatoHintDismissed = true;
+      this.potatoHintDismissed = true;
+    }
     try {
       await withBusy(this.saveButton, 'Enregistrement…', () => this.api.saveConfig(updates));
     } catch (error) {

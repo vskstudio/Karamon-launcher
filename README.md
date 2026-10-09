@@ -55,6 +55,19 @@ Le launcher se met à jour lui-même. Sur Windows et Linux, la nouvelle version 
 
 Tu y trouveras aussi la liste des mods installés, tes captures d'écran, les sauvegardes de tes mondes et les rapports de crash.
 
+## Mode PC modeste
+
+Pour les petites configs, active « Mode PC modeste » dans les paramètres. Le launcher te le propose une fois si ton PC a 8 Go de RAM ou moins, seulement une carte graphique Intel intégrée, ou 4 threads ou moins. Il ne l'active jamais tout seul.
+
+Tant qu'il est actif, avant chaque lancement :
+
+- les shaders sont coupés. Ton shader reste sélectionné, et tu peux les rallumer en jeu jusqu'au lancement suivant ;
+- les graphismes sont baissés : distance de rendu 6 et simulation 5 (comme le serveur), mode rapide, sans occlusion ambiante, nuages, ombres d'entités ni flou des menus, particules minimales, pas de mélange des biomes ni de mipmaps, entités affichées moins loin, feuilles et météo rapides dans Sodium. Un réglage que tu as déjà mis plus bas n'est jamais remonté ;
+- quatre mods qui ne servent qu'à l'image et au son, et que le serveur ne demande pas, sont désactivés : Voxy, Particular, Particle Rain et Sound Physics Remastered ;
+- si ton PC a 8 Go de RAM ou moins, le jeu démarre avec 3 Go au plus (2 à 2,5 Go sur 4 à 6 Go de RAM), avec des réglages de mémoire légers si tu n'as pas choisi les tiens.
+
+Quand tu le coupes, tes réglages d'avant et les mods reviennent. Un réglage que tu as changé toi-même pendant que le mode était actif reste comme tu l'as mis. Les mods désactivés restent vérifiés par « Réparer l'installation » : ils sont gardés en `.jar.disabled` et ne sont pas retéléchargés.
+
 ## Un problème ?
 
 Commence par « Réparer l'installation » dans les paramètres. Si ça ne suffit pas, ouvre une [issue](https://github.com/vskstudio/Karamon-launcher/issues) en décrivant ce qui se passe et joins le fichier `logs/launcher.log`, qui se trouve dans le dossier du launcher :

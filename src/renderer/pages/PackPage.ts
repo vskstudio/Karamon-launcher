@@ -151,7 +151,7 @@ export class PackPage implements Page {
           row({
             leading: h('span', { className: 'pack-initial', text: PackPage.initial(mod.name) }),
             title: PackPage.displayName(mod.name),
-            sub: mod.name,
+            sub: mod.disabled ? `${mod.name} · désactivé` : mod.name,
             meta: formatSize(mod.size),
           }),
         ),

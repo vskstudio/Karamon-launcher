@@ -380,3 +380,64 @@ test('sync keeps the overrides archive so configs can be restored', async () => 
   assert.ok(ModpackSync.overridesArchive(game));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('a parked jar is verified and repaired as <name>.disabled, never put back as .jar', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-parked-'));
+  const pack = path.join(dir, 'pack');
+  const game = path.join(dir, 'game');
+  fs.mkdirSync(pack, { recursive: true });
+  const demo = jarBytes('demo');
+  const voxy = jarBytes('voxy');
+  const modsZip = path.join(pack, 'mods.zip');
+  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': demo, 'voxy-0.2.jar': voxy });
+  const assetsZip = path.join(pack, 'assets.zip');
+  zipFiles(assetsZip, {
+    'client-options.json': JSON.stringify({ resourcePacks: ['vanilla'], shaderPack: 'none', enableShaders: false }),
+    'mods-manifest.json': JSON.stringify([
+      { name: 'demo-mod-1.0.0.jar', size: demo.length, sha1: sha1(demo) },
+      { name: 'voxy-0.2.jar', size: voxy.length, sha1: sha1(voxy) },
+    ]),
+    'resourcepacks-manifest.json': '[]',
+    'shaderpacks-manifest.json': '[]',
+  });
+  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
+  const downloads: string[] = [];
+  const http = fakeHttp({ 'mods.zip': modsZip, 'assets.zip': assetsZip }, [
+    { name: 'mods.zip', size: fs.statSync(modsZip).size },
+    { name: 'assets.zip', size: fs.statSync(assetsZip).size },
+  ]);
+  const download = http.download.bind(http);
+  http.download = (async (url: string, dest: string) => {
+    downloads.push(decodeURIComponent(url.split('/').pop() ?? ''));
+    await download(url, dest);
+  }) as HttpClient['download'];
+  const sync = new ModpackSync({
+    http,
+    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
+    parkedJars: () => ['VOXY-0.2.jar'],
+  });
+  const mods = path.join(game, 'mods');
+  const parked = path.join(mods, 'voxy-0.2.jar.disabled');
+
+  await sync.sync(base, game, () => undefined, () => undefined);
+  assert.deepEqual(fs.readFileSync(parked), voxy);
+  assert.equal(fs.existsSync(path.join(mods, 'voxy-0.2.jar')), false);
+  assert.deepEqual(ModpackSync.packJars(game), new Set(['demo-mod-1.0.0.jar', 'voxy-0.2.jar']));
+  assert.deepEqual(ModpackSync.listMods(game), [
+    { name: 'demo-mod-1.0.0.jar', size: demo.length },
+    { name: 'voxy-0.2.jar', size: voxy.length, disabled: true },
+  ]);
+
+  downloads.length = 0;
+  const statuses: string[] = [];
+  await sync.sync(base, game, (msg) => statuses.push(msg), () => undefined);
+  assert.deepEqual(downloads, []);
+  assert.equal(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
+
+  fs.writeFileSync(parked, Buffer.alloc(voxy.length));
+  const report = await sync.sync(base, game, () => undefined, () => undefined, { verifyAll: true });
+  assert.deepEqual(report.damaged, ['mods/voxy-0.2.jar.disabled']);
+  assert.deepEqual(fs.readFileSync(parked), voxy);
+  assert.equal(fs.existsSync(path.join(mods, 'voxy-0.2.jar')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

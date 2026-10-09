@@ -256,3 +256,32 @@ test('retombe sur le téléchargement complet si le serveur ignore Range', async
   assert.ok(fs.existsSync(path.join(game, 'resourcepacks', 'Karamon UI', 'pack.mcmeta')));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('mode PC modeste : un mod parqué reste en .disabled, rien n’est retéléchargé, une MAJ du pack le garde parqué', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-delta-'));
+  const game = path.join(dir, 'game');
+  const jars = { 'big-1.0.jar': jar('big', 200), 'voxy-0.2.jar': jar('voxy', 400) };
+  const files = pack(jars);
+  const { http, sent } = server(files);
+  let parked: string[] = [];
+  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d), parkedJars: () => parked });
+  await run(sync, game);
+  const mods = path.join(game, 'mods');
+
+  // The mode parks voxy after the sync, as PotatoMode does.
+  fs.renameSync(path.join(mods, 'voxy-0.2.jar'), path.join(mods, 'voxy-0.2.jar.disabled'));
+  parked = ['voxy-0.2.jar'];
+  sent.bytes = 0;
+  assert.equal((await run(sync, game)).at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
+  assert.equal(sent.bytes, 0);
+
+  // Pack update touching another jar: voxy stays parked and is not downloaded again.
+  files.set('mods.zip', pack({ ...jars, 'big-1.1.jar': jar('big', 200) }).get('mods.zip')!);
+  sent.bytes = 0;
+  const lines = await run(sync, game);
+  // 200 Ko for big-1.1, plus zip directories; voxy (400 Ko) is not fetched.
+  assert.ok(sent.bytes < 340 * 1024, `${sent.bytes} octets`);
+  assert.ok(!lines.some((l) => l.includes('voxy')), lines.join(' | '));
+  assert.deepEqual(fs.readdirSync(mods).sort(), ['big-1.0.jar', 'big-1.1.jar', 'voxy-0.2.jar.disabled']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

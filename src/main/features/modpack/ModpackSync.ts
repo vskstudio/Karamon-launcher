@@ -37,6 +37,12 @@ const CLIENT_OPTIONS_CACHE = '.karamon-client-options.json';
 const PARALLEL_DOWNLOADS = 8;
 const ZIP_DOWNLOAD_TIMEOUT_MS = 1200000;
 const SHA1_HEX = /^[0-9a-f]{40}$/i;
+/**
+ * A pack jar the player's settings keep switched off (mode PC modeste) lives in
+ * mods/ as `<name>.jar.disabled`: Fabric skips it, and the sync verifies and
+ * repairs that file instead of putting the `.jar` back.
+ */
+export const PARKED_JAR_SUFFIX = '.disabled';
 
 export type StatusEmitter = (msg: string) => void;
 export type ProgressEmitter = (fraction: number) => void;
@@ -121,6 +127,8 @@ export interface ModpackSyncOptions {
   optionsWriterFactory: (dir: string) => OptionsWriter;
   disabledJarPrefixes?: string[];
   fallbackClientOptions?: ClientOptions | null;
+  /** Pack jars kept as `<name>.disabled` in this game folder (see PARKED_JAR_SUFFIX). */
+  parkedJars?: (gameDir: string) => Iterable<string>;
 }
 
 export class ModpackSync {
@@ -128,6 +136,9 @@ export class ModpackSync {
   private readonly optionsWriterFactory: (dir: string) => OptionsWriter;
   private readonly disabledJarPrefixes: string[];
   private readonly fallbackClientOptions: ClientOptions | null;
+  private readonly parkedJars: (gameDir: string) => Iterable<string>;
+  /** Lowercase names of the jars parked for the sync in progress. */
+  private parked = new Set<string>();
   /** Shader choice policy of the sync in progress. */
   private shaders: ShaderPolicy = new ShaderPolicy('');
   /** Loose pack files installed, per folder, for the sync in progress (see cleanupPackFiles). */
@@ -138,11 +149,23 @@ export class ModpackSync {
     optionsWriterFactory,
     disabledJarPrefixes,
     fallbackClientOptions,
+    parkedJars,
   }: ModpackSyncOptions) {
     this.http = http;
     this.optionsWriterFactory = optionsWriterFactory;
     this.disabledJarPrefixes = (disabledJarPrefixes ?? []).map((prefix) => prefix.toLowerCase());
     this.fallbackClientOptions = fallbackClientOptions ?? null;
+    this.parkedJars = parkedJars ?? (() => []);
+  }
+
+  /** Enabled jars of the pack as last installed (lowercase), or null before the first sync. */
+  static packJars(gameDir: string): Set<string> | null {
+    try {
+      const cache = JSON.parse(fs.readFileSync(path.join(gameDir, CACHE_FILE), 'utf8')) as CacheData;
+      return Array.isArray(cache.jarNames) ? ModpackSync.lowerSet(cache.jarNames) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** The pack's overrides archive as last installed, or null if none is kept. */
@@ -151,20 +174,22 @@ export class ModpackSync {
     return fs.existsSync(file) ? file : null;
   }
 
-  static listMods(gameDir: string): { name: string; size: number }[] {
+  static listMods(gameDir: string): { name: string; size: number; disabled?: boolean }[] {
     const dir = path.join(gameDir, 'mods');
+    const parked = '.jar' + PARKED_JAR_SUFFIX;
     try {
       return fs
         .readdirSync(dir)
-        .filter((f) => f.toLowerCase().endsWith('.jar'))
-        .map((name) => {
+        .filter((f) => f.toLowerCase().endsWith('.jar') || f.toLowerCase().endsWith(parked))
+        .map((file) => {
           let size = 0;
           try {
-            size = fs.statSync(path.join(dir, name)).size;
+            size = fs.statSync(path.join(dir, file)).size;
           } catch {
             /* ignore */
           }
-          return { name, size };
+          if (!file.toLowerCase().endsWith(parked)) return { name: file, size };
+          return { name: file.slice(0, -PARKED_JAR_SUFFIX.length), size, disabled: true };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
     } catch {
@@ -205,6 +230,7 @@ export class ModpackSync {
     }
 
     const cache = this.readCache(gameDir);
+    this.parked = this.readParked(gameDir);
     this.shaders = new ShaderPolicy(gameDir);
     this.shipped = { ...(cache.shippedFiles ?? {}) };
     try {
@@ -482,7 +508,10 @@ export class ModpackSync {
       if (!lower.endsWith('.jar') || seen.has(lower)) continue;
       seen.add(lower);
       const disabled = this.isDisabledJar(name);
-      out.push({ entry, name, disabled, target: ModpackSync.safeJoin(disabled ? disabledDir : modsDir, name) });
+      const target = disabled
+        ? ModpackSync.safeJoin(disabledDir, name)
+        : ModpackSync.safeJoin(modsDir, this.installedName(name));
+      out.push({ entry, name, disabled, target });
     }
     if (!out.some((j) => !j.disabled)) {
       throw new Error('mods.zip ne contient aucun .jar');
@@ -519,7 +548,8 @@ export class ModpackSync {
 
   /**
    * Enabled jars that are missing or damaged. Jars moved to mods-disabled are
-   * listed by the manifest too but are never loaded, so they are skipped.
+   * listed by the manifest too but are never loaded, so they are skipped. A
+   * parked jar is checked under its `.disabled` name.
    */
   private async damagedJars(
     modsDir: string,
@@ -531,7 +561,7 @@ export class ModpackSync {
     const damaged: string[] = [];
     for (const name of jarNames) {
       const entry = expected.get(name.toLowerCase());
-      if (!(await verifier.isIntact(path.join(modsDir, name), entry ?? {}))) damaged.push(name);
+      if (!(await verifier.isIntact(path.join(modsDir, this.installedName(name)), entry ?? {}))) damaged.push(name);
     }
     return damaged;
   }
@@ -551,6 +581,19 @@ export class ModpackSync {
     const still = await this.damagedJars(ctx.modsDir, damaged, ctx.manifest, ctx.verifier);
     if (still.length > 0) {
       ctx.onStatus(`Attention: ${still.join(', ')} ne correspond(ent) pas au manifeste du pack.`);
+    }
+  }
+
+  /** File name of a pack jar in mods/: `<name>.disabled` while it is parked. */
+  private installedName(name: string): string {
+    return this.parked.has(name.toLowerCase()) ? name + PARKED_JAR_SUFFIX : name;
+  }
+
+  private readParked(gameDir: string): Set<string> {
+    try {
+      return ModpackSync.lowerSet([...this.parkedJars(gameDir)]);
+    } catch {
+      return new Set();
     }
   }
 
