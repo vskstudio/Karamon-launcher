@@ -1,5 +1,6 @@
 import { DevMode } from '../../shared/DevMode';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import type { AppConfig } from '../../../ipc/contract';
 import {
@@ -10,6 +11,8 @@ import {
 import { repairCorruptConfigs, repairMessage, type ConfigRepairResult } from '../integrity/ConfigRepair';
 import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/CrashDiagnosis';
 import { ServersDat } from './ServersDat';
+import { PotatoMode, potatoSummary, type PotatoReport } from '../potato/PotatoMode';
+import { potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
 import type { GameLauncher } from './GameLauncher';
 import type { JavaProvisioner } from '../java/JavaProvisioner';
 
@@ -109,6 +112,7 @@ export class MinecraftLauncher {
     );
 
     events.onStatus('Synchronisation du pack...');
+    this.potatoBeforeSync(gameDir, config, events.onStatus);
     await this.modpackSync.sync(
       this.downloadsBaseUrl,
       gameDir,
@@ -116,13 +120,20 @@ export class MinecraftLauncher {
       (p) => events.onProgress(0.1 + p * 0.25),
     );
     this.repairConfigs(gameDir, events.onStatus);
+    this.potatoAfterSync(gameDir, config, events.onStatus);
+    const jvm = MinecraftLauncher.jvmSettings(config, os.totalmem() / 1024 / 1024);
+    if (jvm.memoryMb < config.memoryMb) {
+      events.onStatus(
+        `Mode PC modeste : le jeu démarre avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire (réglage : ${MinecraftLauncher.go(config.memoryMb)}).`,
+      );
+    }
 
     let spawnedAt = Date.now();
     await this.gameLauncher.launch(
       {
         javaPath,
-        memoryMb: config.memoryMb,
-        jvmArgs: config.jvmArgs,
+        memoryMb: jvm.memoryMb,
+        jvmArgs: jvm.jvmArgs,
         gameDir,
         devMode: DevMode.enabled(config.devMode),
       },
@@ -148,7 +159,9 @@ export class MinecraftLauncher {
   ): Promise<void> {
     const gameDir = this.instanceDir(config);
     this.prepareGameDir(gameDir, config, onStatus);
+    this.potatoBeforeSync(gameDir, config, onStatus);
     await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress);
+    this.potatoAfterSync(gameDir, config, onStatus);
   }
 
   /** Full verification: rehash every pack file, reinstall the damaged ones, repair configs. */
@@ -160,11 +173,62 @@ export class MinecraftLauncher {
     if (this.isRunning()) throw new Error("Ferme Minecraft avant de réparer l'installation.");
     const gameDir = this.instanceDir(config);
     this.prepareGameDir(gameDir, config, onStatus);
+    this.potatoBeforeSync(gameDir, config, onStatus);
     const sync = await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress, {
       verifyAll: true,
     });
     const configs = this.repairConfigs(gameDir, onStatus);
+    this.potatoAfterSync(gameDir, config, onStatus);
     return { damaged: sync.damaged, configs };
+  }
+
+  /**
+   * Applies the mode PC modeste to the game folder right away (mode on) or puts
+   * back what it changed (mode off). Not while the game runs: its jars are open.
+   */
+  applyPotatoMode(config: AppConfig, onStatus: StatusEmitter): void {
+    if (this.isRunning()) {
+      onStatus('Mode PC modeste : appliqué au prochain lancement du jeu.');
+      return;
+    }
+    const gameDir = this.instanceDir(config);
+    const report = PotatoMode.reconcile(gameDir, config.potatoMode);
+    MinecraftLauncher.reportPotato(config.potatoMode, report, onStatus, true);
+  }
+
+  /** Heap and JVM arguments the game starts with. The mode only lowers the heap and adds GC flags. */
+  static jvmSettings(config: AppConfig, totalMemMb: number): { memoryMb: number; jvmArgs: string } {
+    if (!config.potatoMode) return { memoryMb: config.memoryMb, jvmArgs: config.jvmArgs };
+    return {
+      memoryMb: potatoMemoryMb(totalMemMb, config.memoryMb),
+      jvmArgs: [...potatoJvmArgs(config.jvmArgs), config.jvmArgs.trim()].filter(Boolean).join(' '),
+    };
+  }
+
+  /** Mode off: the parked mods and settings come back before the sync verifies the pack. */
+  private potatoBeforeSync(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
+    if (config.potatoMode) return;
+    MinecraftLauncher.reportPotato(false, PotatoMode.restore(gameDir), onStatus);
+  }
+
+  /** Mode on: after the sync (which may rewrite iris.properties or add a jar), lower everything again. */
+  private potatoAfterSync(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
+    if (!config.potatoMode) return;
+    MinecraftLauncher.reportPotato(true, PotatoMode.apply(gameDir), onStatus);
+  }
+
+  private static reportPotato(
+    enabled: boolean,
+    report: PotatoReport,
+    onStatus: StatusEmitter,
+    always = enabled,
+  ): void {
+    if (always || report.settings.length > 0 || report.mods.length > 0) onStatus(potatoSummary(enabled, report));
+    for (const error of report.errors) onStatus(`Mode PC modeste, fichier ignoré : ${error}`);
+  }
+
+  private static go(mb: number): string {
+    return `${(mb / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Go`;
   }
 
   private repairConfigs(gameDir: string, onStatus: StatusEmitter): ConfigRepairResult {

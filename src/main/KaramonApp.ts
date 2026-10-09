@@ -45,6 +45,8 @@ import { SkinLookup } from './features/auth/SkinLookup';
 import { AuthSession } from './features/auth/AuthSession';
 import { TokenStore } from './features/auth/TokenStore';
 import { GameLauncher } from './features/minecraft/GameLauncher';
+import { PotatoMode } from './features/potato/PotatoMode';
+import { lowEndReasons, potatoMemoryCapMb, type GpuDevice } from './features/potato/PotatoSettings';
 import { WindowManager } from './WindowManager';
 import { repairSummary } from './features/integrity/RepairSummary';
 import { FileLog } from './shared/FileLog';
@@ -95,6 +97,7 @@ export class KaramonApp {
       optionsWriterFactory: (dir) => new OptionsWriter(dir),
       disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
       fallbackClientOptions: this.pack.clientOptions,
+      parkedJars: (dir) => PotatoMode.parkedJars(dir),
     });
     this.gameLauncher = new GameLauncher({
       paths: this.paths,
@@ -186,8 +189,11 @@ export class KaramonApp {
 
     ipcMain.handle(Channels.configGet, () => this.config.get());
     ipcMain.handle(Channels.configSet, (_e, updates: AppConfigUpdate) => {
+      const before = this.config.get();
       this.config.set(updates);
-      return this.config.get();
+      const after = this.config.get();
+      if (after.potatoMode !== before.potatoMode) this.minecraft.applyPotatoMode(after, this.statusEmitter());
+      return after;
     });
 
     ipcMain.handle(Channels.minecraftSetup, () => this.setupMinecraft());
@@ -258,15 +264,31 @@ export class KaramonApp {
     return { dir, mods: ModpackSync.listMods(this.minecraft.instanceDir(this.config.get())) };
   }
 
-  private getSystemInfo(): SystemInfo {
+  private async getSystemInfo(): Promise<SystemInfo> {
+    const totalMemMb = Math.round(os.totalmem() / 1024 / 1024);
+    const cpuCount = os.cpus().length;
     return {
-      totalMemMb: Math.round(os.totalmem() / 1024 / 1024),
+      totalMemMb,
       freeMemMb: Math.round(os.freemem() / 1024 / 1024),
-      cpuCount: os.cpus().length,
+      cpuCount,
       platform: process.platform,
       arch: process.arch,
       appVersion: app.getVersion(),
+      lowEndReasons: lowEndReasons({ totalMemMb, cpuCount, gpus: await KaramonApp.gpuDevices() }),
+      potatoMemoryCapMb: potatoMemoryCapMb(totalMemMb),
     };
+  }
+
+  /** GPUs Chromium sees (vendor ids only); empty when it can't tell. */
+  private static async gpuDevices(): Promise<GpuDevice[]> {
+    try {
+      const info = (await app.getGPUInfo('basic')) as { gpuDevice?: { vendorId?: unknown; deviceId?: unknown }[] };
+      return (info.gpuDevice ?? [])
+        .filter((gpu) => typeof gpu.vendorId === 'number')
+        .map((gpu) => ({ vendorId: gpu.vendorId as number, deviceId: gpu.deviceId as number | undefined }));
+    } catch {
+      return [];
+    }
   }
 
   private async getJavaList(): Promise<JavaCandidate[]> {

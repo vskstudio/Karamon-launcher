@@ -10,6 +10,10 @@ export interface AppConfig {
   jvmArgs: string;
   closeLauncherOnGameStart: boolean;
   devMode: boolean;
+  /** Mode PC modeste: no shaders, low video settings, heavy visual mods off, capped memory. */
+  potatoMode: boolean;
+  /** The suggestion to turn it on was shown and answered. */
+  potatoHintDismissed: boolean;
   server: ServerInfo;
 }
 
@@ -75,6 +79,8 @@ export type UpdateCheckResult =
 export interface ModEntry {
   name: string;
   size: number;
+  /** Kept as `<name>.disabled` (mode PC modeste). */
+  disabled?: boolean;
 }
 
 export interface ModsListResult {
@@ -89,6 +95,10 @@ export interface SystemInfo {
   platform: string;
   arch: string;
   appVersion: string;
+  /** Why this PC looks modest ("8 Go de RAM", "carte graphique intégrée"…); empty when it does not. */
+  lowEndReasons: string[];
+  /** Memory the mode PC modeste starts the game with at most, or null when it keeps the setting. */
+  potatoMemoryCapMb: number | null;
 }
 
 export interface JavaCandidate {

@@ -139,6 +139,7 @@ export class KaramonRenderer {
 
     void this.settings.load();
     void this.stats.refresh();
+    void this.suggestPotatoMode();
 
     const setup = await this.api.setupMinecraft();
     this.console.log('Instance: ' + setup.path, setup.ok ? 'ok' : 'warn');
@@ -326,6 +327,27 @@ export class KaramonRenderer {
       }
       bar.classList.add('show');
     });
+  }
+
+  /** Once, on a PC that looks modest: offers the mode PC modeste. Never turns it on by itself. */
+  private async suggestPotatoMode(): Promise<void> {
+    const [config, system] = await Promise.all([this.api.getConfig(), this.api.systemInfo()]);
+    if (config.potatoMode || config.potatoHintDismissed || system.lowEndReasons.length === 0) return;
+    const bar = $('potato-bar');
+    $('potato-msg').textContent =
+      `Ton PC semble modeste (${system.lowEndReasons.join(', ')}). Le mode PC modeste coupe les shaders et allège le jeu.`;
+    const answer = async (potatoMode: boolean): Promise<void> => {
+      bar.classList.remove('show');
+      await this.api.saveConfig(potatoMode ? { potatoMode, potatoHintDismissed: true } : { potatoHintDismissed: true });
+      await this.settings.load();
+      if (potatoMode) {
+        Toast.show('Mode PC modeste activé. Tu peux le couper dans les paramètres.', 'ok');
+        this.console.log('Mode PC modeste activé.', 'ok');
+      }
+    };
+    $('btn-potato-enable').addEventListener('click', () => void answer(true));
+    $('btn-potato-dismiss').addEventListener('click', () => void answer(false));
+    bar.classList.add('show');
   }
 
   private async exportLogs(e: Event): Promise<void> {
