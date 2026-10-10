@@ -44,6 +44,8 @@ const api: LauncherApi = {
 
   listShopOffers: () => ipcRenderer.invoke(Channels.shopOffers),
   skinUrl: (profile) => ipcRenderer.invoke(Channels.skinUrl, profile),
+  skinOfflineSet: (request) => ipcRenderer.invoke(Channels.skinOfflineSet, request),
+  skinOfflineReset: (name) => ipcRenderer.invoke(Channels.skinOfflineReset, name),
 
   authLogin: () => ipcRenderer.invoke(Channels.authLogin),
   authLoginOffline: (name) => ipcRenderer.invoke(Channels.authLoginOffline, name),

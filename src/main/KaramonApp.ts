@@ -9,6 +9,8 @@ import {
   type AppConfigUpdate,
   type AuthLoginResult,
   type MinecraftProfile,
+  type OfflineSkinRequest,
+  type OfflineSkinResult,
   type NameCheckResult,
   type ExportLogsResult,
   type JavaCandidate,
@@ -47,6 +49,7 @@ import { AuthSession } from './features/auth/AuthSession';
 import { TokenStore } from './features/auth/TokenStore';
 import { AccountStore } from './features/auth/AccountStore';
 import { mojangNameStatus } from './features/auth/OfflineAccount';
+import { resetSkin, saveSkin, savedSkinDataUrl } from './features/auth/OfflineSkin';
 import { OFFLINE_NAME_TAKEN, isValidOfflineName, offlineNameProblem } from '../shared/OfflineName';
 import { GameLauncher } from './features/minecraft/GameLauncher';
 import { PotatoMode } from './features/potato/PotatoMode';
@@ -248,7 +251,17 @@ export class KaramonApp {
     ipcMain.handle(Channels.backupDelete, (_e, name: string) => this.backup.delete(name));
 
     ipcMain.handle(Channels.shopOffers, () => this.shop.offers());
-    ipcMain.handle(Channels.skinUrl, (_e, profile: MinecraftProfile) => this.skins.skinFor(profile));
+    ipcMain.handle(Channels.skinUrl, (_e, profile: MinecraftProfile) =>
+      (profile.kind === 'offline' && savedSkinDataUrl(this.currentInstanceDir(), profile.name)) || this.skins.skinFor(profile),
+    );
+    ipcMain.handle(Channels.skinOfflineSet, (_e, req: OfflineSkinRequest) =>
+      this.writeOfflineSkin(() =>
+        saveSkin(this.currentInstanceDir(), String(req?.name), Buffer.from(String(req?.png ?? ''), 'base64'), req?.model === 'slim' ? 'slim' : 'classic'),
+      ),
+    );
+    ipcMain.handle(Channels.skinOfflineReset, (_e, name: string) =>
+      this.writeOfflineSkin(() => resetSkin(this.currentInstanceDir(), String(name))),
+    );
 
     ipcMain.handle(Channels.authLogin, () => this.authLogin());
     ipcMain.handle(Channels.authLoginOffline, (_e, name: string) => this.authLoginOffline(String(name)));
@@ -256,6 +269,15 @@ export class KaramonApp {
     ipcMain.handle(Channels.authSwitch, (_e, accountId: string) => this.auth.switchTo(String(accountId)));
     ipcMain.handle(Channels.authLogout, () => this.auth.logout());
     ipcMain.handle(Channels.authGetSession, () => this.auth.state());
+  }
+
+  private writeOfflineSkin(write: () => void): OfflineSkinResult {
+    try {
+      write();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   }
 
   private async authLogin(): Promise<AuthLoginResult> {
