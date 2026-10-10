@@ -1,6 +1,6 @@
 {
   "id": "karamon-client",
-  "version": "0.5.2",
+  "version": "0.8.68",
   "minecraft": "1.21.1",
   "loader": "fabric",
   "loaderVersion": "0.18.4",
@@ -13,5 +13,5 @@
     "name": "COBBLEVERSE 1.7.42"
   },
   "cdnBaseUrl": "https://karamon.fr/downloads/",
-  "notes": "Pack 0.5.2: nouveau mod Karamon Admin (touche J, /admin). Logo Karamon a la bonne taille, nouveau fond de menu. Configs du pack (overrides.zip) synchronisees par le launcher 2.0.5+."
+  "notes": "Pack 0.8.46: bouton Offrir sur toute la boutique (choix d un joueur connecte). Pack 0.8.45: Lootr (coffres des Terres d Aurore, un loot par joueur) et onglet Classement des guildes. Pack 0.8.44: Ailes d'Aurore, Couronne d'étoiles, Ailes de constellation, Couronne de fleurs et Masque du Bienfaiteur dans la garde-robe. Pack 0.8.43: Calendrier de l'Avent et Hiver de Gladys en décembre. Pack 0.8.42: la Nuit des Spectres arrive le 24 octobre. Pack 0.8.41: boutiques d'événement dans le menu K. Pack 0.8.40: points de hauts faits dans le profil. Pack 0.8.39: petites retouches de l ecran du casino. Pack 0.8.38: la Fondation des guildes dans l onglet Communaute. Pack 0.8.37: Badges d or dans les statistiques du profil. Pack 0.8.36: onglet Communaute des quetes (objectifs de guilde et objectif communautaire). Pack 0.8.35: bonus 3/3, serie de jours, changement de quete et rattrapage du dimanche dans les quetes. Pack 0.8.34: tableau de contrats (Quetes, Contrats). Pack 0.8.33: onglet Reputations du profil (rangs des 5 factions et leurs recompenses). Pack 0.8.32: bouton Suivre des quetes journalieres dans le journal. Pack 0.8.31: vitrine des Fragments d Etoile dans le profil (aussi sur le profil des autres). Pack 0.8.30: points de voyage des Terres d Aurore (menu K, Teleportation). Pack 0.8.29: Comptoir de l Observatoire (boutique en Eclats). Pack 0.8.28: Eclats d Etoile dans le profil. Pack 0.8.27: titres (sous le pseudo en jeu, onglet Titres du profil). Pack 0.8.26: quetes a etapes (ecran de quete, journal et suivi a l ecran avec le texte de l etape, quetes verrouillees). Pack 0.7.2: les warps ont leur propre categorie dans le menu K (ce monde / tous). 0.7.1: icone du monde dans la barre du haut (Pokedex au spawn, Safari Ball au Safari, Poke Ball ailleurs), Bonbon Stats Max corrige."
 }

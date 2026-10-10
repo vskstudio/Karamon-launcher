@@ -187,5 +187,29 @@
     "side": "client",
     "required": true,
     "extract": true
+  },
+  {
+    "id": "untitled-punchies",
+    "name": "Untitled Punchies",
+    "file": "Untitled Punchies v1.1.zip",
+    "source": {
+      "type": "modrinth",
+      "project": "untitled-punchies",
+      "version": "hjmQDDlS",
+      "sha1": "661ed0131be789e449820e88a61e5453ec5a9f39"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "rgb-block-outline",
+    "name": "RGB Block Outline",
+    "file": "RGB Block Outline.zip",
+    "source": {
+      "type": "local",
+      "path": "content/resourcepacks/rgb-block-outline"
+    },
+    "side": "client",
+    "required": false
   }
 ]

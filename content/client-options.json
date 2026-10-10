@@ -2,6 +2,8 @@
   "resourcePacks": [
     "vanilla",
     "fabric",
+    "punchy:punchy",
+    "file/Untitled Punchies v1.1.zip",
     "cobbreeding:pasturefix",
     "highlight:highlight_extended",
     "betterbeds:fancyconnectedbeds",
@@ -32,6 +34,6 @@
     "file/bushy-leaves-1-6-5.zip",
     "file/Karamon UI"
   ],
-  "shaderPack": "COBBLEVERSE - Shaders",
+  "shaderPack": "KARAMON - Shader",
   "enableShaders": true
 }

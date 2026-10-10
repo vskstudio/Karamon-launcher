@@ -92,6 +92,17 @@
     "required": true
   },
   {
+    "id": "karamon-weapon",
+    "name": "Karamon Weapon",
+    "file": "karamon-weapon-1.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "local://mod/karamon-weapon/build/libs/karamon-weapon-1.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
     "id": "bluemap",
     "name": "BlueMap",
     "file": "bluemap-5.7-fabric.jar",
@@ -104,13 +115,13 @@
     "required": true
   },
   {
-    "id": "simple-voice-chat",
-    "name": "Simple Voice Chat",
-    "file": "voicechat-fabric-1.21.1-2.6.23.jar",
+    "id": "plasmo-voice",
+    "name": "Plasmo Voice",
+    "file": "plasmovoice-fabric-1.21.1-2.1.17.jar",
     "source": {
       "type": "modrinth",
-      "project": "simple-voice-chat",
-      "version": "IuO0uiwO"
+      "project": "plasmo-voice",
+      "version": "6Q2QmcUp"
     },
     "side": "both",
     "required": true
@@ -141,7 +152,7 @@
   },
   {
     "id": "cobblelagclear",
-    "name": "CobbleLagClear",
+    "name": "KaramonLagClear",
     "file": "cobblelagclear-0.1.0.jar",
     "source": {
       "type": "modrinth",
@@ -220,6 +231,164 @@
       "version": "kCFeaaoC"
     },
     "side": "both",
+    "required": true
+  },
+  {
+    "id": "constructionwand",
+    "name": "Construction Wand",
+    "file": "constructionwand-1.0.6+1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "construction-wand-fabric",
+      "version": "gS1dPAYC"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "openblocks-elevator",
+    "name": "OpenBlocks Elevator",
+    "file": "openblocks-1.0.0-1.21_1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "openblocks-elevator-fabric",
+      "version": "MJuQG3gF"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "leashable-collars",
+    "name": "Leashable Collars",
+    "file": "PlayerCollars-1.6.0+1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "leashable-collars",
+      "version": "W8SdljVL"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "mru",
+    "name": "M.R.U",
+    "file": "mru-1.0.19+LTS+1.21.1+fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "mru",
+      "version": "hXVm1N3M"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "sounds",
+    "name": "Sounds",
+    "file": "sounds-2.4.22+lts+1.21.1-fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "sound",
+      "version": "ZpG2rY0c"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "punchy",
+    "name": "Punchy!",
+    "file": "punchy-2.8c-fabric-1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "punchy-fpa",
+      "version": "80B8c9Qd",
+      "sha1": "fcca6d5503597d1175fa9b0d0cae55393f3a214c",
+      "sha512": "5f43eab5784199f8bcd6b9471823f92b56dae64999ea8873309372c2e3239c5424dddaeddb540a42bfd0a19ece34d4cecd61d6d618da27dfa838f7d23ce22108"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "a-good-place",
+    "name": "A Good Place",
+    "file": "a_good_place-1.21-1.2.6-fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "a-good-place",
+      "version": "3xNxyWWQ",
+      "sha1": "f826ac4f448f4c52758230c7ef1f6fa58ea4cafe",
+      "sha512": "4be08f16192ee7996bd62d1deb37aef549562864afcacedc1a85b70987725656e192d42f31d3f3e85f11a5c116a27a73492c573437adca8c2418a7c92ce22d5f"
+    },
+    "side": "client",
+    "required": true
+  },
+  {
+    "id": "mgnflowers",
+    "name": "MGN's Flowers",
+    "file": "mgnflowers-fabric-1.21.1-2.0.0.jar",
+    "source": {
+      "type": "url",
+      "url": "https://mediafilez.forgecdn.net/files/8767/849/mgnflowers-fabric-1.21.1-2.0.0.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "natures-compass",
+    "name": "Nature's Compass",
+    "file": "NaturesCompass-1.21.1-2.6.0-fabric.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "natures-compass",
+      "version": "dtrDpgsF"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "pokeplushies",
+    "name": "PokePlushies",
+    "file": "pokeplushies-1.8.1.jar",
+    "source": {
+      "type": "url",
+      "url": "https://mediafilez.forgecdn.net/files/8827/197/pokeplushies-1.8.1.jar"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "fossilsplus",
+    "name": "Cobblemon Fossils Plus",
+    "file": "fossilsplus-1.2.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "cobblemon-fossils-plus",
+      "version": "ZWcbdPeP"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "lootr",
+    "name": "Lootr",
+    "file": "lootr-fabric-1.21.1-1.11.38.127.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "lootr",
+      "version": "nar56EsW"
+    },
+    "side": "both",
+    "required": true
+  },
+  {
+    "id": "accurate-block-placement-reborn",
+    "name": "Accurate Block Placement Reborn",
+    "file": "AccurateBlockPlacement-Reborn-1.4.6+mc-1.20.5-1.21.1.jar",
+    "source": {
+      "type": "modrinth",
+      "project": "accurate-block-placement-reborn",
+      "version": "WHecDPZ4"
+    },
+    "side": "client",
     "required": true
   }
 ]
