@@ -1,6 +1,6 @@
 import { DevMode } from './shared/DevMode';
 import { app, ipcMain, dialog } from 'electron/main';
-import { shell } from 'electron/common';
+import { clipboard, shell } from 'electron/common';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -234,6 +234,12 @@ export class KaramonApp {
     );
     ipcMain.handle(Channels.crashesDelete, (_e, name: string) =>
       this.crashes.delete(this.currentInstanceDir(), name),
+    );
+    ipcMain.handle(Channels.crashesCopy, (_e, name: string) =>
+      clipboard.writeText(this.crashes.read(this.currentInstanceDir(), name)),
+    );
+    ipcMain.handle(Channels.crashesReveal, (_e, name: string) =>
+      shell.showItemInFolder(this.crashes.reportPath(this.currentInstanceDir(), name)),
     );
     ipcMain.handle(Channels.backupCreate, () =>
       this.backup.create(this.currentInstanceDir()),

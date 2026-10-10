@@ -42,20 +42,20 @@ export class CrashReports {
   }
 
   read(gameDir: string, name: string): string {
-    if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-      throw new Error('Nom invalide');
-    }
-    const full = path.join(gameDir, 'crash-reports', name);
-    return fs.readFileSync(full, 'utf8');
+    return fs.readFileSync(this.reportPath(gameDir, name), 'utf8');
   }
 
   delete(gameDir: string, name: string): CrashReportsListResult {
+    const full = this.reportPath(gameDir, name);
+    if (fs.existsSync(full)) fs.unlinkSync(full);
+    return this.list(gameDir);
+  }
+
+  reportPath(gameDir: string, name: string): string {
     if (name.includes('/') || name.includes('\\') || name.includes('..')) {
       throw new Error('Nom invalide');
     }
-    const full = path.join(gameDir, 'crash-reports', name);
-    if (fs.existsSync(full)) fs.unlinkSync(full);
-    return this.list(gameDir);
+    return path.join(gameDir, 'crash-reports', name);
   }
 
   private static summarize(content: string): string {

@@ -220,6 +220,8 @@ export const Channels = {
   crashesList: 'crashes:list',
   crashesRead: 'crashes:read',
   crashesDelete: 'crashes:delete',
+  crashesCopy: 'crashes:copy',
+  crashesReveal: 'crashes:reveal',
   backupCreate: 'backup:create',
   backupList: 'backup:list',
   backupDelete: 'backup:delete',
@@ -266,6 +268,8 @@ export interface IpcInvokeContract {
   [Channels.crashesList]: { req: void; res: CrashReportsListResult };
   [Channels.crashesRead]: { req: string; res: string };
   [Channels.crashesDelete]: { req: string; res: CrashReportsListResult };
+  [Channels.crashesCopy]: { req: string; res: void };
+  [Channels.crashesReveal]: { req: string; res: void };
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
@@ -329,6 +333,8 @@ export interface LauncherApi {
   listCrashes(): Promise<CrashReportsListResult>;
   readCrash(name: string): Promise<string>;
   deleteCrash(name: string): Promise<CrashReportsListResult>;
+  copyCrash(name: string): Promise<void>;
+  revealCrash(name: string): Promise<void>;
   createBackup(): Promise<BackupEntry>;
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;

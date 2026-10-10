@@ -1,5 +1,5 @@
 import './ToolsPage.css';
-import { DatabaseBackup, FileText, Trash2 } from 'lucide';
+import { Copy, DatabaseBackup, FileText, FolderOpen, Trash2 } from 'lucide';
 import type { BackupEntry, CrashReport, LauncherApi } from '../../ipc/contract';
 import {
   badge,
@@ -229,6 +229,20 @@ export class ToolsPage implements Page {
       actions: [
         button({ label: 'Voir', size: 'sm', onClick: () => void this.openCrash(report) }),
         button({
+          icon: Copy,
+          size: 'sm',
+          variant: 'ghost',
+          title: 'Copier le rapport',
+          onClick: () => void this.copyCrash(report),
+        }),
+        button({
+          icon: FolderOpen,
+          size: 'sm',
+          variant: 'ghost',
+          title: 'Afficher le fichier',
+          onClick: () => void this.revealCrash(report),
+        }),
+        button({
           icon: Trash2,
           size: 'sm',
           variant: 'ghost',
@@ -247,6 +261,23 @@ export class ToolsPage implements Page {
         body: [h('pre', { className: 'ui-code', text: content })],
         wide: true,
       });
+    } catch (error) {
+      Toast.show((error as Error).message, 'error');
+    }
+  }
+
+  private async copyCrash(report: CrashReport): Promise<void> {
+    try {
+      await this.api.copyCrash(report.name);
+      Toast.show('Rapport copié, colle-le sur Discord.', 'ok');
+    } catch (error) {
+      Toast.show((error as Error).message, 'error');
+    }
+  }
+
+  private async revealCrash(report: CrashReport): Promise<void> {
+    try {
+      await this.api.revealCrash(report.name);
     } catch (error) {
       Toast.show((error as Error).message, 'error');
     }
