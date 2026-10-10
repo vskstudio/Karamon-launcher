@@ -50,6 +50,7 @@ import { mojangNameStatus } from './features/auth/OfflineAccount';
 import { OFFLINE_NAME_TAKEN, isValidOfflineName, offlineNameProblem } from '../shared/OfflineName';
 import { GameLauncher } from './features/minecraft/GameLauncher';
 import { PotatoMode } from './features/potato/PotatoMode';
+import { SodiumOff } from './features/sodium/SodiumOff';
 import { lowEndReasons, potatoMemoryCapMb, type GpuDevice } from './features/potato/PotatoSettings';
 import { WindowManager } from './WindowManager';
 import { repairSummary } from './features/integrity/RepairSummary';
@@ -104,7 +105,7 @@ export class KaramonApp {
       optionsWriterFactory: (dir) => new OptionsWriter(dir),
       disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
       fallbackClientOptions: this.pack.clientOptions,
-      parkedJars: (dir) => PotatoMode.parkedJars(dir),
+      parkedJars: (dir) => [...PotatoMode.parkedJars(dir), ...SodiumOff.parkedJars(dir)],
     });
     this.gameLauncher = new GameLauncher({
       paths: this.paths,
@@ -200,6 +201,7 @@ export class KaramonApp {
       this.config.set(updates);
       const after = this.config.get();
       if (after.potatoMode !== before.potatoMode) this.minecraft.applyPotatoMode(after, this.statusEmitter());
+      if (after.disableSodium !== before.disableSodium) this.minecraft.applySodiumOff(after, this.statusEmitter());
       return after;
     });
 

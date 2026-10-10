@@ -13,6 +13,8 @@ import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/
 import { ServersDat } from './ServersDat';
 import { PotatoMode, potatoSummary, type PotatoReport } from '../potato/PotatoMode';
 import { potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
+import { SodiumOff, sodiumSummary } from '../sodium/SodiumOff';
+import type { ParkingReport } from '../modpack/JarParking';
 import type { GameLauncher } from './GameLauncher';
 import type { JavaProvisioner } from '../java/JavaProvisioner';
 
@@ -112,7 +114,7 @@ export class MinecraftLauncher {
     );
 
     events.onStatus('Synchronisation du pack...');
-    this.potatoBeforeSync(gameDir, config, events.onStatus);
+    this.beforeSync(gameDir, config, events.onStatus);
     await this.modpackSync.sync(
       this.downloadsBaseUrl,
       gameDir,
@@ -120,7 +122,7 @@ export class MinecraftLauncher {
       (p) => events.onProgress(0.1 + p * 0.25),
     );
     this.repairConfigs(gameDir, events.onStatus);
-    this.potatoAfterSync(gameDir, config, events.onStatus);
+    this.afterSync(gameDir, config, events.onStatus);
     const jvm = MinecraftLauncher.jvmSettings(config, os.totalmem() / 1024 / 1024);
     if (jvm.memoryMb < config.memoryMb) {
       events.onStatus(
@@ -159,9 +161,9 @@ export class MinecraftLauncher {
   ): Promise<void> {
     const gameDir = this.instanceDir(config);
     this.prepareGameDir(gameDir, config, onStatus);
-    this.potatoBeforeSync(gameDir, config, onStatus);
+    this.beforeSync(gameDir, config, onStatus);
     await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress);
-    this.potatoAfterSync(gameDir, config, onStatus);
+    this.afterSync(gameDir, config, onStatus);
   }
 
   /** Full verification: rehash every pack file, reinstall the damaged ones, repair configs. */
@@ -173,12 +175,12 @@ export class MinecraftLauncher {
     if (this.isRunning()) throw new Error("Ferme Minecraft avant de réparer l'installation.");
     const gameDir = this.instanceDir(config);
     this.prepareGameDir(gameDir, config, onStatus);
-    this.potatoBeforeSync(gameDir, config, onStatus);
+    this.beforeSync(gameDir, config, onStatus);
     const sync = await this.modpackSync.sync(this.downloadsBaseUrl, gameDir, onStatus, onProgress, {
       verifyAll: true,
     });
     const configs = this.repairConfigs(gameDir, onStatus);
-    this.potatoAfterSync(gameDir, config, onStatus);
+    this.afterSync(gameDir, config, onStatus);
     return { damaged: sync.damaged, configs };
   }
 
@@ -194,6 +196,15 @@ export class MinecraftLauncher {
     const gameDir = this.instanceDir(config);
     const report = PotatoMode.reconcile(gameDir, config.potatoMode);
     MinecraftLauncher.reportPotato(config.potatoMode, report, onStatus, true);
+  }
+
+  applySodiumOff(config: AppConfig, onStatus: StatusEmitter): void {
+    if (this.isRunning()) {
+      onStatus('Désactiver Sodium : appliqué au prochain lancement du jeu.');
+      return;
+    }
+    const report = SodiumOff.reconcile(this.instanceDir(config), config.disableSodium);
+    MinecraftLauncher.reportSodium(config.disableSodium, report, onStatus, true);
   }
 
   /** Heap and JVM arguments the game starts with. The mode only lowers the heap and adds GC flags. */
@@ -215,6 +226,21 @@ export class MinecraftLauncher {
   private potatoAfterSync(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
     if (!config.potatoMode) return;
     MinecraftLauncher.reportPotato(true, PotatoMode.apply(gameDir), onStatus);
+  }
+
+  private beforeSync(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
+    this.potatoBeforeSync(gameDir, config, onStatus);
+    if (!config.disableSodium) MinecraftLauncher.reportSodium(false, SodiumOff.restore(gameDir), onStatus);
+  }
+
+  private afterSync(gameDir: string, config: AppConfig, onStatus: StatusEmitter): void {
+    this.potatoAfterSync(gameDir, config, onStatus);
+    if (config.disableSodium) MinecraftLauncher.reportSodium(true, SodiumOff.apply(gameDir), onStatus);
+  }
+
+  private static reportSodium(disabled: boolean, report: ParkingReport, onStatus: StatusEmitter, always = false): void {
+    if (always || report.mods.length > 0) onStatus(sodiumSummary(disabled, report));
+    for (const error of report.errors) onStatus(`Désactiver Sodium, fichier ignoré : ${error}`);
   }
 
   private static reportPotato(

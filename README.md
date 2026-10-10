@@ -77,6 +77,12 @@ Tant qu'il est actif, avant chaque lancement :
 
 Quand tu le coupes, tes réglages d'avant et les mods reviennent. Un réglage que tu as changé toi-même pendant que le mode était actif reste comme tu l'as mis. Les mods désactivés restent vérifiés par « Réparer l'installation » : ils sont gardés en `.jar.disabled` et ne sont pas retéléchargés.
 
+## Désactiver Sodium
+
+Si le jeu plante ou reste bloqué au démarrage à cause de Sodium, coche « Désactiver Sodium » dans les paramètres. Sodium est désactivé avec les mods qui en ont besoin pour démarrer : Iris (plus de shaders), Voxy (plus de terrain lointain), Sodium Extra et Reese's Sodium Options. Le jeu tourne avec moins de FPS. Le serveur ne demande pas Sodium, tu peux toujours te connecter.
+
+Décoche l'option pour tout remettre. Comme pour le mode PC modeste, les mods sont gardés en `.jar.disabled` et ne sont pas retéléchargés.
+
 ## Un problème ?
 
 Commence par « Réparer l'installation » dans les paramètres. Si ça ne suffit pas, ouvre une [issue](https://github.com/vskstudio/Karamon-launcher/issues) en décrivant ce qui se passe et joins le fichier `logs/launcher.log`, qui se trouve dans le dossier du launcher :

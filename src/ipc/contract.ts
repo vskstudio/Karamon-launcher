@@ -14,6 +14,7 @@ export interface AppConfig {
   potatoMode: boolean;
   /** The suggestion to turn it on was shown and answered. */
   potatoHintDismissed: boolean;
+  disableSodium: boolean;
   server: ServerInfo;
 }
 

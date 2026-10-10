@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
-import { ModpackSync, PARKED_JAR_SUFFIX } from '../modpack/ModpackSync.ts';
+import { JarParking } from '../modpack/JarParking.ts';
 import { POTATO_MODS, potatoModFor, readModId } from './PotatoMods.ts';
 import {
   IRIS_RULES,
@@ -57,6 +57,11 @@ export interface PotatoReport {
   /** Jars parked (apply) or put back (restore). */
   mods: string[];
   errors: string[];
+}
+
+function isPotatoJar(jarPath: string, fileName: string): boolean {
+  const mod = potatoModFor(fileName);
+  return mod !== null && readModId(jarPath) === mod.id;
 }
 
 export class PotatoMode {
@@ -120,73 +125,12 @@ export class PotatoMode {
     report.settings.push(...written.map((key) => `${target.file}: ${key}`));
   }
 
-  /**
-   * Parks every listed mod still enabled in mods/. Parked jars the pack no
-   * longer ships (a mod update renamed them) are deleted.
-   */
   private static parkMods(gameDir: string, state: PotatoState, report: PotatoReport): void {
-    const modsDir = path.join(gameDir, 'mods');
-    let files: string[];
-    try {
-      files = fs.readdirSync(modsDir);
-    } catch {
-      return;
-    }
-    const pack = ModpackSync.packJars(gameDir);
-    const parked = new Set(state.mods.map((n) => n.toLowerCase()));
-
-    if (pack) {
-      state.mods = state.mods.filter((name) => {
-        if (pack.has(name.toLowerCase())) return true;
-        try {
-          fs.rmSync(path.join(modsDir, name + PARKED_JAR_SUFFIX), { force: true });
-          parked.delete(name.toLowerCase());
-          return false;
-        } catch {
-          return true;
-        }
-      });
-    }
-
-    for (const file of files) {
-      const mod = potatoModFor(file);
-      if (!mod) continue;
-      if (pack && !pack.has(file.toLowerCase())) continue;
-      const jar = path.join(modsDir, file);
-      if (readModId(jar) !== mod.id) continue;
-      try {
-        // A fresh copy from the sync replaces an older parked one.
-        fs.renameSync(jar, jar + PARKED_JAR_SUFFIX);
-      } catch (e) {
-        report.errors.push(`${file}: ${(e as Error).message}`);
-        continue;
-      }
-      if (!parked.has(file.toLowerCase())) {
-        parked.add(file.toLowerCase());
-        state.mods.push(file);
-      }
-      report.mods.push(file);
-    }
+    state.mods = JarParking.park(gameDir, state.mods, isPotatoJar, report);
   }
 
-  /** Renames parked jars back; returns the ones that could not be (kept parked). */
   private static unparkMods(gameDir: string, names: string[], report: PotatoReport): string[] {
-    const modsDir = path.join(gameDir, 'mods');
-    const left: string[] = [];
-    for (const name of names) {
-      const jar = path.join(modsDir, name);
-      const parked = jar + PARKED_JAR_SUFFIX;
-      try {
-        if (fs.existsSync(jar)) fs.rmSync(parked, { force: true });
-        else if (fs.existsSync(parked)) fs.renameSync(parked, jar);
-        else continue; // gone: the next sync downloads it again
-        report.mods.push(name);
-      } catch (e) {
-        report.errors.push(`${name}: ${(e as Error).message}`);
-        left.push(name);
-      }
-    }
-    return left;
+    return JarParking.unpark(gameDir, names, report);
   }
 
   private static readState(gameDir: string): PotatoState {

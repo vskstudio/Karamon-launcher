@@ -66,6 +66,7 @@ export class SettingsPage implements Page {
   private readonly gameDir: HTMLInputElement;
   private readonly closeOnLaunch: Toggle;
   private readonly devMode: Toggle;
+  private readonly disableSodium: Toggle;
   private readonly potatoMode: Toggle;
   private potatoBadge: HTMLElement = h('span');
   private readonly potatoMemory = h('li');
@@ -144,6 +145,7 @@ export class SettingsPage implements Page {
 
     this.closeOnLaunch = toggle({ label: 'Fermer le launcher au lancement du jeu', onChange: () => this.markDirty() });
     this.devMode = toggle({ label: 'Mode développement', onChange: () => this.markDirty() });
+    this.disableSodium = toggle({ label: 'Désactiver Sodium', onChange: () => this.markDirty() });
     this.potatoMode = toggle({
       label: 'Mode PC modeste',
       onChange: () => {
@@ -292,6 +294,11 @@ export class SettingsPage implements Page {
           control: this.closeOnLaunch.root,
         }),
         settingRow({
+          label: 'Désactiver Sodium',
+          hint: "Si le jeu plante ou reste bloqué au démarrage. Coupe aussi Iris (plus de shaders), Voxy (plus de terrain lointain), Sodium Extra et Reese's Sodium Options, donc moins de FPS. Pris en compte au prochain lancement, décoche pour tout remettre.",
+          control: this.disableSodium.root,
+        }),
+        settingRow({
           label: 'Mode développement',
           hint: h(
             'span',
@@ -400,6 +407,7 @@ export class SettingsPage implements Page {
     this.gameDir.value = config.mcGameDir ?? '';
     this.closeOnLaunch.input.checked = config.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = config.devMode ?? false;
+    this.disableSodium.input.checked = config.disableSodium ?? false;
     this.potatoMode.input.checked = config.potatoMode ?? false;
     this.potatoHintDismissed = config.potatoHintDismissed ?? false;
     this.renderMemory();
@@ -481,6 +489,7 @@ export class SettingsPage implements Page {
       mcGameDir: this.gameDir.value.trim(),
       closeLauncherOnGameStart: this.closeOnLaunch.input.checked,
       devMode: this.devMode.input.checked,
+      disableSodium: this.disableSodium.input.checked,
       potatoMode: this.potatoMode.input.checked,
     };
   }
@@ -508,6 +517,7 @@ export class SettingsPage implements Page {
     this.gameDir.value = this.saved.mcGameDir ?? '';
     this.closeOnLaunch.input.checked = this.saved.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = this.saved.devMode ?? false;
+    this.disableSodium.input.checked = this.saved.disableSodium ?? false;
     this.potatoMode.input.checked = this.saved.potatoMode ?? false;
     this.renderMemory();
     void this.populateJava();
