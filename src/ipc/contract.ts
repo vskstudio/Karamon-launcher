@@ -163,6 +163,18 @@ export interface ShopOffer {
   currency: string;
 }
 
+/** A skin for an offline account: the PNG in base64 (64×64 or 64×32, 32 KB at most) and its arm width. */
+export interface OfflineSkinRequest {
+  name: string;
+  png: string;
+  model: 'classic' | 'slim';
+}
+
+export interface OfflineSkinResult {
+  ok: boolean;
+  error?: string;
+}
+
 /** `offline`: a player without a Minecraft licence, protected by a Karamon password asked in game. */
 export type AccountKind = 'microsoft' | 'offline';
 
@@ -226,6 +238,8 @@ export const Channels = {
 
   shopOffers: 'shop:offers',
   skinUrl: 'skin:url',
+  skinOfflineSet: 'skin:offline-set',
+  skinOfflineReset: 'skin:offline-reset',
 
   authLogin: 'auth:login',
   authLoginOffline: 'auth:login-offline',
@@ -271,6 +285,8 @@ export interface IpcInvokeContract {
   [Channels.backupDelete]: { req: string; res: BackupListResult };
   [Channels.shopOffers]: { req: void; res: ShopOffer[] };
   [Channels.skinUrl]: { req: MinecraftProfile; res: string | null };
+  [Channels.skinOfflineSet]: { req: OfflineSkinRequest; res: OfflineSkinResult };
+  [Channels.skinOfflineReset]: { req: string; res: OfflineSkinResult };
   [Channels.authLogin]: { req: void; res: AuthLoginResult };
   [Channels.authLoginOffline]: { req: string; res: AuthLoginResult };
   [Channels.authCheckName]: { req: string; res: NameCheckResult };
@@ -335,6 +351,10 @@ export interface LauncherApi {
 
   listShopOffers(): Promise<ShopOffer[]>;
   skinUrl(profile: MinecraftProfile): Promise<string | null>;
+  /** The skin of an offline account, sent by the game with its next Karamon login. */
+  skinOfflineSet(request: OfflineSkinRequest): Promise<OfflineSkinResult>;
+  /** Back to the Ely.by / TLauncher skin (or Steve) at the next login. */
+  skinOfflineReset(name: string): Promise<OfflineSkinResult>;
 
   authLogin(): Promise<AuthLoginResult>;
   authLoginOffline(name: string): Promise<AuthLoginResult>;

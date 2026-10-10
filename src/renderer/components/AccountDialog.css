@@ -54,3 +54,15 @@
 }
 .account-explain li { display: flex; gap: 10px; align-items: flex-start; }
 .account-explain svg { flex: none; margin-top: 1px; color: var(--quartz); }
+
+.skin-editor { display: flex; gap: 20px; align-items: flex-start; }
+.skin-editor__form { flex: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.skin-preview {
+  width: 96px;
+  height: 192px;
+  flex: none;
+  image-rendering: pixelated;
+  border-radius: var(--r);
+  background: var(--sunk);
+  border: 1px solid var(--border-subtle);
+}
