@@ -61,26 +61,17 @@ export class JavaProvisioner {
     onStatus: StatusEmitter,
     onProgress: ProgressEmitter,
   ): Promise<string> {
-    if (configuredPath) {
-      const major = await this.probeMajor(configuredPath);
-      if (major !== null && major >= REQUIRED_MAJOR) return configuredPath;
-    }
+    // Exactly Java 21: Cobblemon refuses any other version, so a newer Java (26) stops Fabric at launch.
+    if (configuredPath && (await this.probeMajor(configuredPath)) === REQUIRED_MAJOR) return configuredPath;
 
     const managed = this.managedJavaPath();
-    if (managed) {
-      const major = await this.probeMajor(managed);
-      if (major !== null && major >= REQUIRED_MAJOR) return managed;
-    }
+    if (managed && (await this.probeMajor(managed)) === REQUIRED_MAJOR) return managed;
 
     const detected = await this.detector.detect();
     const preferred = detected.find(
       (c) => JavaProvisioner.parseMajor(c.version) === REQUIRED_MAJOR,
     );
     if (preferred) return preferred.path;
-    const compatible = detected.find(
-      (c) => JavaProvisioner.parseMajor(c.version) >= REQUIRED_MAJOR,
-    );
-    if (compatible) return compatible.path;
 
     const platform = ADOPTIUM_PLATFORMS[process.platform];
     if (!platform) {
@@ -137,7 +128,7 @@ export class JavaProvisioner {
       throw new Error(`Extraction terminée mais ${JavaProvisioner.javaExecutable()} introuvable dans le runtime.`);
     }
     const major = await this.probeMajor(javaPath);
-    if (major === null || major < REQUIRED_MAJOR) {
+    if (major !== REQUIRED_MAJOR) {
       throw new Error(`Le runtime extrait n'est pas Java ${REQUIRED_MAJOR} (détecté: ${major ?? '?'}).`);
     }
     onStatus(`Java ${REQUIRED_MAJOR} prêt.`);

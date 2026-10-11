@@ -77,7 +77,12 @@ interface Provisioning {
   paths: Paths;
 }
 
-function provision(dir: string, layout: JreLayout, adoptiumSendsChecksum: boolean): Provisioning {
+function provision(
+  dir: string,
+  layout: JreLayout,
+  adoptiumSendsChecksum: boolean,
+  installed: { path: string; version: string; vendor: string }[] = [],
+): Provisioning {
   const archive = buildJreArchive(dir, layout);
   const checksum = adoptiumSendsChecksum
     ? crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex')
@@ -98,7 +103,7 @@ function provision(dir: string, layout: JreLayout, adoptiumSendsChecksum: boolea
       fs.copyFileSync(archive, dest);
     },
   } as unknown as HttpClient;
-  const detector = { detect: async () => [] } as unknown as JavaDetector;
+  const detector = { detect: async () => installed } as unknown as JavaDetector;
   const paths = new Paths(path.join(dir, 'launcher'));
   const javaPath = asPlatform(layout, () =>
     new JavaProvisioner(paths, http, detector).ensure(undefined, () => {}, () => {}),
@@ -140,6 +145,20 @@ for (const layout of [LINUX_X64, MAC_ARM64]) {
       }),
   );
 }
+
+test(
+  'a newer Java on the PC is not used: Java 21 is downloaded instead (Cobblemon refuses Java 26)',
+  { skip: process.platform === 'win32' },
+  () =>
+    inTempDir(async (dir) => {
+      const run = provision(dir, LINUX_X64, true, [{ path: '/usr/lib/jvm/java-26/bin/java', version: '26', vendor: 'Oracle' }]);
+
+      const javaPath = await run.javaPath;
+
+      assert.equal(javaPath, path.join(run.paths.dataDir, 'runtime', 'jre-21', ...LINUX_X64.javaDir, 'java'));
+      assert.equal(run.downloads.length, 1);
+    }),
+);
 
 test(
   'an Adoptium JRE without a SHA256 checksum is never downloaded',
