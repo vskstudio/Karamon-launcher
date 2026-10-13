@@ -58,6 +58,7 @@ import { lowEndReasons, potatoMemoryCapMb, type GpuDevice } from './features/pot
 import { WindowManager } from './WindowManager';
 import { repairSummary } from './features/integrity/RepairSummary';
 import { FileLog } from './shared/FileLog';
+import { SystemCertificates } from './shared/SystemCertificates';
 
 const SERVER_PING_TIMEOUT_MS = 5000;
 const CLOSE_DELAY_MS = 2000;
@@ -140,6 +141,7 @@ export class KaramonApp {
 
   start(): void {
     this.fileLog.info(`Karamon Launcher ${app.getVersion()} démarré (${process.platform} ${process.arch}, Electron ${process.versions.electron})`);
+    this.trustSystemCertificates();
     process.on('uncaughtException', (e) => this.fileLog.error('Exception non gérée', e));
     process.on('unhandledRejection', (e) => this.fileLog.error('Promesse rejetée non gérée', e));
     app.on('render-process-gone', (_e, _wc, details) =>
@@ -167,6 +169,17 @@ export class KaramonApp {
       this.stats.endSession();
       void this.discord.destroy();
     });
+  }
+
+  private trustSystemCertificates(): void {
+    const report = SystemCertificates.trust();
+    if (report.failure !== undefined) {
+      this.fileLog.error('Certificats racines du système illisibles, seuls ceux de Node sont utilisés', report.failure);
+      return;
+    }
+    const summary = SystemCertificates.describe(report);
+    if (report.rejected > 0) this.fileLog.warn(summary);
+    else this.fileLog.info(summary);
   }
 
   private currentInstanceDir(): string {
