@@ -1,6 +1,6 @@
 import type { AuthSessionResult, MinecraftProfile } from '../../../ipc/contract';
 import { offlineNameProblem } from '../../../shared/OfflineName';
-import { MicrosoftAuth, type MicrosoftToken } from './MicrosoftAuth';
+import { MicrosoftAuth, RefreshRejected, type MicrosoftToken } from './MicrosoftAuth';
 import { XboxAuth } from './XboxAuth';
 import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth';
 import { TokenStore } from './TokenStore';
@@ -95,7 +95,16 @@ export class AuthSession {
   private async refresh(): Promise<ActiveSession> {
     const stored = this.store.load();
     if (!stored) throw new Error('Aucune session stockée, connexion requise');
-    const ms = await this.microsoft.refresh(stored.refreshToken);
+    let ms: MicrosoftToken;
+    try {
+      ms = await this.microsoft.refresh(stored.refreshToken);
+      // Keep the rotated token even if Xbox or Minecraft fails next, or the next refresh is refused
+      this.store.save(ms.refreshToken, stored.profile);
+    } catch (err) {
+      if (!(err instanceof RefreshRejected)) throw err;
+      console.warn(err.message);
+      ms = await this.microsoft.login();
+    }
     return await this.completeChain(ms);
   }
 

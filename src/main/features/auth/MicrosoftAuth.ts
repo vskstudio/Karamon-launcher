@@ -20,6 +20,9 @@ export interface MicrosoftToken {
   expiresAt: number;
 }
 
+/** The stored refresh token is expired or revoked: only a new login fixes it. */
+export class RefreshRejected extends Error {}
+
 export class MicrosoftAuth {
   async login(): Promise<MicrosoftToken> {
     const state = crypto.randomBytes(16).toString('hex');
@@ -41,7 +44,10 @@ export class MicrosoftAuth {
       body: params.toString(),
     });
     if (!res.ok) {
-      throw new Error(`Microsoft a refusé le rafraîchissement (HTTP ${res.status})`);
+      const body = (await res.json().catch(() => ({}))) as { error?: string; error_description?: string };
+      const reason = body.error_description ?? body.error ?? 'sans détail';
+      if (body.error === 'invalid_grant') throw new RefreshRejected(`Microsoft a refusé le rafraîchissement : ${reason}`);
+      throw new Error(`Microsoft a refusé le rafraîchissement (HTTP ${res.status}) : ${reason}`);
     }
     return this.parseTokenResponse((await res.json()) as TokenResponse);
   }
