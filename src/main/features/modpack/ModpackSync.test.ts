@@ -5,7 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { ModpackSync } from './ModpackSync.ts';
+import { ModpackSync, modKey } from './ModpackSync.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
 
@@ -379,4 +379,56 @@ test('sync keeps the overrides archive so configs can be restored', async () => 
   assert.notEqual(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
   assert.ok(ModpackSync.overridesArchive(game));
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('modKey drops the version from a jar name', () => {
+  assert.equal(modKey('BetterThirdPerson-fabric-1.21-1.9.0.jar'), 'betterthirdperson-fabric');
+  assert.equal(modKey('Terralith_1.21.x_v2.5.8.jar'), 'terralith');
+  assert.equal(modKey('3dskinlayers-fabric-1.7.2.jar'), '3dskinlayers-fabric');
+  assert.equal(modKey('Multiworld-Fabric-bundle.jar'), 'multiworld-fabric-bundle');
+});
+
+test('a mod the player turns off stays off across syncs and pack updates', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-'));
+  const pack = path.join(dir, 'pack');
+  const game = path.join(dir, 'game');
+  fs.mkdirSync(pack, { recursive: true });
+  const modsZip = path.join(pack, 'mods.zip');
+  const assets = { name: 'mods.zip', size: 0 };
+  const publish = (btp: string): void => {
+    zipFiles(modsZip, { 'core-1.0.jar': jarBytes('core'), [btp]: jarBytes(btp) });
+    assets.size = fs.statSync(modsZip).size;
+  };
+  publish('betterthirdperson-1.0.jar');
+  const disabled: string[] = [];
+  const sync = new ModpackSync({
+    http: fakeHttp({ 'mods.zip': modsZip }, [assets]),
+    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
+    disabledJarPrefixes: ['oldjava'],
+    disabledMods: () => disabled,
+  });
+  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
+  const mods = path.join(game, 'mods');
+  const off = path.join(mods, 'mods-disabled');
+  await sync.sync(base, game, () => undefined, () => undefined);
+
+  sync.setModEnabled(game, 'betterthirdperson-1.0.jar', false);
+  disabled.push(modKey('betterthirdperson-1.0.jar'));
+  await sync.sync(base, game, () => undefined, () => undefined);
+  assert.equal(fs.existsSync(path.join(mods, 'betterthirdperson-1.0.jar')), false);
+  assert.deepEqual(
+    sync.listMods(game).map((m) => [m.name, m.enabled]),
+    [['betterthirdperson-1.0.jar', false], ['core-1.0.jar', true]],
+  );
+
+  publish('betterthirdperson-2.0.10.jar');
+  await sync.sync(base, game, () => undefined, () => undefined);
+  assert.deepEqual(fs.readdirSync(off), ['betterthirdperson-2.0.10.jar']);
+  assert.equal(fs.existsSync(path.join(mods, 'betterthirdperson-2.0.10.jar')), false);
+
+  sync.setModEnabled(game, 'betterthirdperson-2.0.10.jar', true);
+  disabled.length = 0;
+  await sync.sync(base, game, () => undefined, () => undefined);
+  assert.equal(fs.existsSync(path.join(mods, 'betterthirdperson-2.0.10.jar')), true);
+  assert.throws(() => sync.setModEnabled(game, '../core-1.0.jar', false));
 });

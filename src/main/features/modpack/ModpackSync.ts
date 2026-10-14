@@ -15,6 +15,8 @@ import { FileVerifier, sha1File, type ExpectedFile } from '../integrity/FileVeri
 const CACHE_FILE = '.karamon-sync-cache.json';
 const MODS_ZIP_NAME = 'mods.zip';
 const MODS_ZIP_TMP = '.karamon-mods.zip';
+// Jars kept out of mods/ so Fabric skips them: the pack's Java-incompatible ones and those the player turned off.
+const DISABLED_MODS_DIR = 'mods-disabled';
 // One {name, size, sha1} per jar inside mods.zip. Optional: older packs don't publish it.
 const MODS_MANIFEST = 'mods-manifest.json';
 const ASSETS_ZIP_NAME = 'assets.zip';
@@ -113,24 +115,34 @@ export interface ModpackSyncOptions {
   http: HttpClient;
   optionsWriterFactory: (dir: string) => OptionsWriter;
   disabledJarPrefixes?: string[];
+  /** Mods the player turned off, as modKey() values. */
+  disabledMods?: () => string[];
   fallbackClientOptions?: ClientOptions | null;
+}
+
+/** A jar name without its version, so a mod the player turned off stays off across pack updates. */
+export function modKey(jarName: string): string {
+  return jarName.toLowerCase().replace(/\.jar$/, '').replace(/[-_+ ]v?\d.*$/, '');
 }
 
 export class ModpackSync {
   private readonly http: HttpClient;
   private readonly optionsWriterFactory: (dir: string) => OptionsWriter;
   private readonly disabledJarPrefixes: string[];
+  private readonly disabledMods: () => string[];
   private readonly fallbackClientOptions: ClientOptions | null;
 
   constructor({
     http,
     optionsWriterFactory,
     disabledJarPrefixes,
+    disabledMods,
     fallbackClientOptions,
   }: ModpackSyncOptions) {
     this.http = http;
     this.optionsWriterFactory = optionsWriterFactory;
     this.disabledJarPrefixes = (disabledJarPrefixes ?? []).map((prefix) => prefix.toLowerCase());
+    this.disabledMods = disabledMods ?? (() => []);
     this.fallbackClientOptions = fallbackClientOptions ?? null;
   }
 
@@ -140,24 +152,50 @@ export class ModpackSync {
     return fs.existsSync(file) ? file : null;
   }
 
-  static listMods(gameDir: string): { name: string; size: number }[] {
-    const dir = path.join(gameDir, 'mods');
+  /** Loaded jars, then the ones the player turned off. Jars the pack itself disables are hidden. */
+  listMods(gameDir: string): { name: string; size: number; enabled: boolean }[] {
+    const modsDir = path.join(gameDir, 'mods');
+    const list = (dir: string, enabled: boolean) => {
+      try {
+        return fs
+          .readdirSync(dir)
+          .filter((f) => f.toLowerCase().endsWith('.jar') && !this.isPackDisabledJar(f))
+          .map((name) => {
+            let size = 0;
+            try {
+              size = fs.statSync(path.join(dir, name)).size;
+            } catch {
+              /* ignore */
+            }
+            return { name, size, enabled };
+          });
+      } catch {
+        return [];
+      }
+    };
+    return [...list(modsDir, true), ...list(path.join(modsDir, DISABLED_MODS_DIR), false)].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }
+
+  /** Moves a jar in or out of mods-disabled; the caller records the choice so syncs keep it. */
+  setModEnabled(gameDir: string, name: string, enabled: boolean): void {
+    if (typeof name !== 'string' || path.basename(name) !== name || !name.toLowerCase().endsWith('.jar')) {
+      throw new Error(`Nom de mod invalide: ${name}`);
+    }
+    if (this.isPackDisabledJar(name)) throw new Error(`${name} est désactivé par le pack.`);
+    const modsDir = path.join(gameDir, 'mods');
+    const disabledDir = path.join(modsDir, DISABLED_MODS_DIR);
+    const from = ModpackSync.safeJoin(enabled ? disabledDir : modsDir, name);
+    if (!fs.existsSync(from)) return;
+    fs.mkdirSync(disabledDir, { recursive: true });
     try {
-      return fs
-        .readdirSync(dir)
-        .filter((f) => f.toLowerCase().endsWith('.jar'))
-        .map((name) => {
-          let size = 0;
-          try {
-            size = fs.statSync(path.join(dir, name)).size;
-          } catch {
-            /* ignore */
-          }
-          return { name, size };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
-    } catch {
-      return [];
+      fs.renameSync(from, ModpackSync.safeJoin(enabled ? modsDir : disabledDir, name));
+    } catch (error) {
+      // Windows keeps the jars of a running game locked.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EBUSY' || code === 'EPERM') throw new Error('Fermez Minecraft avant de changer les mods.');
+      throw error;
     }
   }
 
@@ -178,11 +216,12 @@ export class ModpackSync {
 
     const githubKey = await githubAssetFreshness(this.http, zipUrl);
     let headers: Record<string, string | string[] | undefined> = {};
+    let headError = '';
     if (!githubKey) {
       try {
         headers = await this.http.head(zipUrl);
-      } catch {
-        /* GitHub refuse parfois HEAD; on bascule sur la taille */
+      } catch (e) {
+        headError = (e as Error).message;
       }
     }
     const etag =
@@ -190,7 +229,11 @@ export class ModpackSync {
       ModpackSync.extractEtag(headers) ||
       ModpackSync.extractLengthKey(headers);
     if (!etag) {
-      throw new Error('mods.zip indisponible (ETag/Last-Modified manquant)');
+      throw new Error(
+        headError
+          ? `Serveur du pack injoignable, réessaie dans un instant (${headError})`
+          : 'mods.zip indisponible (ETag/Last-Modified manquant)',
+      );
     }
 
     const cache = this.readCache(gameDir);
@@ -288,7 +331,7 @@ export class ModpackSync {
         if (!modsKnown) {
           onStatus('Extraction des mods...');
           jarNames = this.extractJars(zipPath, dirs.mods, onStatus);
-          this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
+          this.cleanupJars(dirs.mods, jarNames, onStatus);
         }
         await this.repairJars({
           zipUrl,
@@ -446,8 +489,9 @@ export class ModpackSync {
   }
 
   /**
-   * Writes the jars of mods.zip and returns the enabled jar names. With `only`
-   * (lowercase names), every jar is still listed but only those are rewritten.
+   * Writes the jars of mods.zip and returns every jar name, disabled ones included,
+   * so a mod turned back on is still verified. With `only` (lowercase names), only
+   * those enabled jars are rewritten.
    */
   private extractJars(
     zipPath: string,
@@ -459,7 +503,7 @@ export class ModpackSync {
     const zip = new AdmZip(zipBuffer);
     const seen = new Set<string>();
     const jarNames: string[] = [];
-    const disabledDir = path.join(modsDir, 'mods-disabled');
+    const disabledDir = path.join(modsDir, DISABLED_MODS_DIR);
     for (const entry of zip.getEntries()) {
       if (entry.isDirectory) continue;
       const name = path.basename(entry.entryName);
@@ -467,13 +511,13 @@ export class ModpackSync {
       if (!lower.endsWith('.jar')) continue;
       if (seen.has(lower)) continue;
       seen.add(lower);
+      jarNames.push(name);
       if (this.isDisabledJar(name)) {
         if (only) continue;
         writeFileAtomic(ModpackSync.safeJoin(disabledDir, name), readEntryData(zipBuffer, entry));
-        onStatus(`Mod client désactivé (Java 21): ${name}`);
+        onStatus(`Mod désactivé: ${name}`);
         continue;
       }
-      jarNames.push(name);
       if (only && !only.has(lower)) continue;
       writeFileAtomic(ModpackSync.safeJoin(modsDir, name), readEntryData(zipBuffer, entry));
       if (only) onStatus(`Mod réparé: ${name}`);
@@ -497,6 +541,7 @@ export class ModpackSync {
     const expected = new Map((manifest ?? []).map((e) => [e.name.toLowerCase(), e]));
     const damaged: string[] = [];
     for (const name of jarNames) {
+      if (this.isDisabledJar(name)) continue;
       const entry = expected.get(name.toLowerCase());
       if (!(await verifier.isIntact(path.join(modsDir, name), entry ?? {}))) damaged.push(name);
     }
@@ -521,9 +566,21 @@ export class ModpackSync {
     }
   }
 
-  private isDisabledJar(name: string): boolean {
+  /** Removes jars the pack no longer ships, and disabled jars left in mods/. */
+  private cleanupJars(modsDir: string, jarNames: string[], onStatus: StatusEmitter): void {
+    const enabled = jarNames.filter((name) => !this.isDisabledJar(name));
+    this.cleanupExtras(modsDir, enabled, '.jar', onStatus, 'Mod supprimé');
+    const disabledDir = path.join(modsDir, DISABLED_MODS_DIR);
+    if (fs.existsSync(disabledDir)) this.cleanupExtras(disabledDir, jarNames, '.jar', () => undefined, '');
+  }
+
+  private isPackDisabledJar(name: string): boolean {
     const lower = name.toLowerCase();
     return this.disabledJarPrefixes.some((prefix) => lower.startsWith(prefix));
+  }
+
+  private isDisabledJar(name: string): boolean {
+    return this.isPackDisabledJar(name) || this.disabledMods().includes(modKey(name));
   }
 
   private async fetchClientOptions(baseUrl: string, gameDir?: string): Promise<ClientOptions | null> {
@@ -665,7 +722,7 @@ export class ModpackSync {
         onStatus('Extraction des mods...');
         onProgress(0.75);
         jarNames = this.extractJars(modsZipPath, dirs.mods, onStatus);
-        this.cleanupExtras(dirs.mods, jarNames, '.jar', onStatus, 'Mod supprimé');
+        this.cleanupJars(dirs.mods, jarNames, onStatus);
       }
       if (!assetsUpToDate) {
         const result = await this.installAssetsFromZip(assetsZipPath, gameDir, dirs, cache, verifier, onStatus);

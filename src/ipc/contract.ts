@@ -10,6 +10,8 @@ export interface AppConfig {
   jvmArgs: string;
   closeLauncherOnGameStart: boolean;
   devMode: boolean;
+  /** Mods the player turned off, by jar name without version. */
+  disabledMods: string[];
   server: ServerInfo;
 }
 
@@ -75,6 +77,7 @@ export type UpdateCheckResult =
 export interface ModEntry {
   name: string;
   size: number;
+  enabled: boolean;
 }
 
 export interface ModsListResult {
@@ -189,6 +192,7 @@ export const Channels = {
   updateCheck: 'update:check',
 
   modsList: 'mods:list',
+  modsSetEnabled: 'mods:set-enabled',
   systemInfo: 'system:info',
   javaList: 'java:list',
   statsGet: 'stats:get',
@@ -232,6 +236,7 @@ export interface IpcInvokeContract {
   [Channels.logsExport]: { req: string; res: ExportLogsResult };
   [Channels.updateCheck]: { req: void; res: UpdateCheckResult };
   [Channels.modsList]: { req: void; res: ModsListResult };
+  [Channels.modsSetEnabled]: { req: { name: string; enabled: boolean }; res: ModsListResult };
   [Channels.systemInfo]: { req: void; res: SystemInfo };
   [Channels.javaList]: { req: void; res: JavaCandidate[] };
   [Channels.statsGet]: { req: void; res: PlayStats };
@@ -292,6 +297,7 @@ export interface LauncherApi {
   checkForUpdate(): Promise<UpdateCheckResult>;
 
   listMods(): Promise<ModsListResult>;
+  setModEnabled(name: string, enabled: boolean): Promise<ModsListResult>;
   systemInfo(): Promise<SystemInfo>;
   listJava(): Promise<JavaCandidate[]>;
   getStats(): Promise<PlayStats>;

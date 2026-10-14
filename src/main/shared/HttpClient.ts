@@ -178,6 +178,10 @@ export class HttpClient {
               return reject(e);
             }
           }
+          // An error page's headers must not pass for the file's (its Content-Length would become the version key).
+          if (res.statusCode && res.statusCode >= 400) {
+            return reject(new Error(`HTTP ${res.statusCode}: ${target}`));
+          }
           resolve(res.headers);
         });
         req.on('error', reject);

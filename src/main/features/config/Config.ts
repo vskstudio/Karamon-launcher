@@ -14,6 +14,7 @@ const DEFAULTS: AppConfig = Object.freeze({
   jvmArgs: '',
   closeLauncherOnGameStart: false,
   devMode: false,
+  disabledMods: [],
   server: { host: 'play.karamon.fr', port: 25565 },
 }) as AppConfig;
 
@@ -68,6 +69,9 @@ export class Config {
         base.closeLauncherOnGameStart,
       ),
       devMode: Config.boolean(updates.devMode, base.devMode),
+      disabledMods: Array.isArray(updates.disabledMods)
+        ? updates.disabledMods.filter((v): v is string => typeof v === 'string').map((v) => v.slice(0, MAX_TEXT_LENGTH))
+        : base.disabledMods,
       server: {
         host: Config.text(updates.server?.host, base.server.host),
         port: Config.number(updates.server?.port, base.server.port),

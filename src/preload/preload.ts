@@ -26,6 +26,7 @@ const api: LauncherApi = {
 
   repair: () => ipcRenderer.invoke(Channels.launchRepair),
   listMods: () => ipcRenderer.invoke(Channels.modsList),
+  setModEnabled: (name, enabled) => ipcRenderer.invoke(Channels.modsSetEnabled, { name, enabled }),
   systemInfo: () => ipcRenderer.invoke(Channels.systemInfo),
   listJava: () => ipcRenderer.invoke(Channels.javaList),
   getStats: () => ipcRenderer.invoke(Channels.statsGet),

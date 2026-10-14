@@ -63,6 +63,13 @@ export class WindowManager {
     return !!this.window && !this.window.isDestroyed();
   }
 
+  focus(): void {
+    if (!this.exists()) return;
+    if (this.window!.isMinimized()) this.window!.restore();
+    this.window!.show();
+    this.window!.focus();
+  }
+
   minimize(): void {
     this.window?.minimize();
   }

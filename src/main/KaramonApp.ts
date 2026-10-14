@@ -27,7 +27,7 @@ import { ServersDat } from './features/minecraft/ServersDat';
 import { OptionsWriter } from './features/minecraft/OptionsWriter';
 import { FabricInstaller } from './features/minecraft/FabricInstaller';
 import { LauncherProfile } from './features/minecraft/LauncherProfile';
-import { ModpackSync } from './features/modpack/ModpackSync';
+import { ModpackSync, modKey } from './features/modpack/ModpackSync';
 import {
   MinecraftLauncher,
   type ServerListSetupResult,
@@ -91,6 +91,7 @@ export class KaramonApp {
       http: this.http,
       optionsWriterFactory: (dir) => new OptionsWriter(dir),
       disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
+      disabledMods: () => this.config.get().disabledMods,
       fallbackClientOptions: this.pack.clientOptions,
     });
     this.gameLauncher = new GameLauncher({
@@ -122,6 +123,12 @@ export class KaramonApp {
   }
 
   start(): void {
+    // A second launch (double-click, or the relaunch after an update) just brings the open window forward.
+    if (!app.requestSingleInstanceLock()) {
+      app.quit();
+      return;
+    }
+    app.on('second-instance', () => this.window.focus());
     app.whenReady().then(() => {
       Screenshots.registerProtocol(() => Screenshots.dirFor(this.currentInstanceDir()));
       this.registerIpc();
@@ -177,6 +184,9 @@ export class KaramonApp {
 
     ipcMain.handle(Channels.launchRepair, () => this.repair());
     ipcMain.handle(Channels.modsList, () => this.listMods());
+    ipcMain.handle(Channels.modsSetEnabled, (_e, req: { name: string; enabled: boolean }) =>
+      this.setModEnabled(req?.name, req?.enabled === true),
+    );
     ipcMain.handle(Channels.systemInfo, () => this.getSystemInfo());
     ipcMain.handle(Channels.javaList, () => this.getJavaList());
     ipcMain.handle(Channels.statsGet, () => this.stats.read());
@@ -232,7 +242,15 @@ export class KaramonApp {
 
   private listMods(): ModsListResult {
     const dir = path.join(this.minecraft.instanceDir(this.config.get()), 'mods');
-    return { dir, mods: ModpackSync.listMods(this.minecraft.instanceDir(this.config.get())) };
+    return { dir, mods: this.modpackSync.listMods(this.minecraft.instanceDir(this.config.get())) };
+  }
+
+  private setModEnabled(name: string, enabled: boolean): ModsListResult {
+    this.modpackSync.setModEnabled(this.minecraft.instanceDir(this.config.get()), name, enabled);
+    const key = modKey(name);
+    const others = this.config.get().disabledMods.filter((k) => k !== key);
+    this.config.set({ disabledMods: enabled ? others : [...others, key] });
+    return this.listMods();
   }
 
   private getSystemInfo(): SystemInfo {

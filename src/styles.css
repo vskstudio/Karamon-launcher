@@ -1063,6 +1063,9 @@ html, body {
   transition: background 0.14s var(--ease);
 }
 .mod-row:last-child { border-bottom: none; }
+label.mod-row { cursor: pointer; }
+.mod-off .mod-name,
+.mod-off .mod-size { opacity: 0.45; text-decoration: line-through; }
 .mod-row:hover { background: var(--red-soft); }
 
 .mod-name {
