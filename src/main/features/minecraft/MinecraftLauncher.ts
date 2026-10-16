@@ -105,7 +105,9 @@ export class MinecraftLauncher {
 
   async launch(config: AppConfig, events: LaunchEvents): Promise<void> {
     const gameDir = this.instanceDir(config);
-    this.prepareGameDir(gameDir, config, events.onStatus);
+    // Another instance already runs on this pack and holds its jars open: launch it as it is.
+    const packInUse = this.isRunning();
+    if (!packInUse) this.prepareGameDir(gameDir, config, events.onStatus);
 
     const javaPath = await this.javaProvisioner.ensure(
       config.javaPath,
@@ -113,16 +115,20 @@ export class MinecraftLauncher {
       (p) => events.onProgress(p * 0.1),
     );
 
-    events.onStatus('Synchronisation du pack...');
-    this.beforeSync(gameDir, config, events.onStatus);
-    await this.modpackSync.sync(
-      this.downloadsBaseUrl,
-      gameDir,
-      events.onStatus,
-      (p) => events.onProgress(0.1 + p * 0.25),
-    );
-    this.repairConfigs(gameDir, events.onStatus);
-    this.afterSync(gameDir, config, events.onStatus);
+    if (packInUse) {
+      events.onStatus('Un autre Minecraft tourne déjà : le pack est lancé sans synchronisation.');
+    } else {
+      events.onStatus('Synchronisation du pack...');
+      this.beforeSync(gameDir, config, events.onStatus);
+      await this.modpackSync.sync(
+        this.downloadsBaseUrl,
+        gameDir,
+        events.onStatus,
+        (p) => events.onProgress(0.1 + p * 0.25),
+      );
+      this.repairConfigs(gameDir, events.onStatus);
+      this.afterSync(gameDir, config, events.onStatus);
+    }
     const jvm = MinecraftLauncher.jvmSettings(config, os.totalmem() / 1024 / 1024);
     if (jvm.memoryMb < config.memoryMb) {
       events.onStatus(

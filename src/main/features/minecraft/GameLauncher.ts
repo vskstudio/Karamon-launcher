@@ -42,7 +42,8 @@ export class GameLauncher {
   private readonly resolver: VersionResolver;
   private readonly libraries: LibraryDownloader;
   private readonly assets: AssetDownloader;
-  private current: ChildProcess | null = null;
+  /** One game per account, keyed by profile id. */
+  private readonly running = new Map<string, ChildProcess>();
 
   constructor(private readonly opts: GameLauncherOptions) {
     this.resolver = new VersionResolver(opts.http, opts.paths);
@@ -51,14 +52,17 @@ export class GameLauncher {
   }
 
   isRunning(): boolean {
-    return this.current !== null && this.current.exitCode === null;
+    return this.running.size > 0;
   }
 
   async launch(spec: LaunchSpec, events: LaunchEvents): Promise<void> {
-    if (this.isRunning()) throw new Error('Le jeu tourne déjà');
-
     events.onStatus('Authentification...');
     const session = await this.opts.auth.getActive();
+    const account = session.profile.id;
+    // The server kicks the first game when the same account joins twice.
+    if (this.running.has(account)) {
+      throw new Error(`${session.profile.name} est déjà en jeu : change de compte pour lancer une autre instance.`);
+    }
 
     events.onStatus('Préparation de la version...');
     const version = await this.installVersion(events);
@@ -77,7 +81,7 @@ export class GameLauncher {
       windowsHide: true,
     });
 
-    this.current = child;
+    this.running.set(account, child);
     child.unref();
 
     child.stdout?.on('data', (chunk: Buffer) => {
@@ -91,11 +95,11 @@ export class GameLauncher {
       }
     });
     child.on('exit', (code) => {
-      this.current = null;
+      this.running.delete(account);
       events.onExit(code);
     });
     child.on('error', (err) => {
-      this.current = null;
+      this.running.delete(account);
       events.onLog(`Erreur Java: ${err.message}`);
       events.onExit(-1);
     });

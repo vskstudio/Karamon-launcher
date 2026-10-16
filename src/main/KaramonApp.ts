@@ -454,6 +454,7 @@ export class KaramonApp {
     const cfg = this.config.get();
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
+    const wasRunning = this.minecraft.isRunning();
     try {
       onProgress(0);
       await this.minecraft.launch(cfg, {
@@ -461,11 +462,14 @@ export class KaramonApp {
         onProgress,
         onLog: (line) => this.window.send(Channels.eventStatus, line),
         onExit: (code, corruption) => {
-          this.setGameRunning(false);
           this.fileLog.info(`Minecraft fermé (code ${code})${corruption.length ? `, corruption: ${corruption.join(', ')}` : ''}`);
-          this.stats.endSession();
-          this.discord.setMenu();
-          this.window.send(Channels.eventGameState, { running: false });
+          // Other instances still play: the session goes on until the last one closes.
+          if (!this.minecraft.isRunning()) {
+            this.setGameRunning(false);
+            this.stats.endSession();
+            this.discord.setMenu();
+            this.window.send(Channels.eventGameState, { running: false });
+          }
           this.window.send(
             Channels.eventStatus,
             code === 0 ? 'Minecraft fermé.' : `Minecraft fermé (code ${code}).`,
@@ -473,7 +477,7 @@ export class KaramonApp {
           if (corruption.length > 0) void this.repairAfterCrash(corruption);
         },
       });
-      this.stats.startSession();
+      if (!wasRunning) this.stats.startSession();
       this.discord.setPlaying();
       this.setGameRunning(true);
       this.window.send(Channels.eventGameState, { running: true });
@@ -484,7 +488,7 @@ export class KaramonApp {
       const msg = (e as Error).message;
       onStatus('Erreur: ' + msg);
       onProgress(0);
-      this.window.send(Channels.eventGameState, { running: false });
+      if (!this.minecraft.isRunning()) this.window.send(Channels.eventGameState, { running: false });
       return { ok: false, error: msg };
     }
   }
