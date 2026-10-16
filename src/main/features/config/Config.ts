@@ -10,6 +10,7 @@ const MAX_PORT = 65535;
 const DEFAULTS: AppConfig = Object.freeze({
   mcGameDir: '',
   memoryMb: 12288,
+  secondInstanceMemoryMb: 6144,
   javaPath: '',
   jvmArgs: '',
   closeLauncherOnGameStart: false,
@@ -64,6 +65,7 @@ export class Config {
     return {
       mcGameDir: Config.text(updates.mcGameDir, base.mcGameDir),
       memoryMb: Config.number(updates.memoryMb, base.memoryMb),
+      secondInstanceMemoryMb: Config.number(updates.secondInstanceMemoryMb, base.secondInstanceMemoryMb),
       javaPath: Config.text(updates.javaPath, base.javaPath),
       jvmArgs: Config.text(updates.jvmArgs, base.jvmArgs),
       closeLauncherOnGameStart: Config.boolean(
@@ -96,16 +98,20 @@ export class Config {
   private static normalize(data: AppConfig): AppConfig {
     const host = data.server.host.trim();
     const port = Math.trunc(data.server.port);
-    const memoryMb = Math.trunc(data.memoryMb);
     return {
       ...data,
-      memoryMb:
-        memoryMb >= MIN_MEMORY_MB && memoryMb <= MAX_MEMORY_MB ? memoryMb : DEFAULTS.memoryMb,
+      memoryMb: Config.memory(data.memoryMb, DEFAULTS.memoryMb),
+      secondInstanceMemoryMb: Config.memory(data.secondInstanceMemoryMb, DEFAULTS.secondInstanceMemoryMb),
       server: {
         host: host || DEFAULTS.server.host,
         port: port > 0 && port <= MAX_PORT ? port : DEFAULTS.server.port,
       },
     };
+  }
+
+  private static memory(value: number, fallback: number): number {
+    const mb = Math.trunc(value);
+    return mb >= MIN_MEMORY_MB && mb <= MAX_MEMORY_MB ? mb : fallback;
   }
 
   private static clone<T>(o: T): T {

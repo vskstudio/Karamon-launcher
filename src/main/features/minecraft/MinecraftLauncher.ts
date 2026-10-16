@@ -129,10 +129,11 @@ export class MinecraftLauncher {
       this.repairConfigs(gameDir, events.onStatus);
       this.afterSync(gameDir, config, events.onStatus);
     }
-    const jvm = MinecraftLauncher.jvmSettings(config, os.totalmem() / 1024 / 1024);
-    if (jvm.memoryMb < config.memoryMb) {
+    const memoryMb = packInUse ? config.secondInstanceMemoryMb : config.memoryMb;
+    const jvm = MinecraftLauncher.jvmSettings({ ...config, memoryMb }, os.totalmem() / 1024 / 1024);
+    if (jvm.memoryMb < memoryMb) {
       events.onStatus(
-        `Mode PC modeste : le jeu démarre avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire (réglage : ${MinecraftLauncher.go(config.memoryMb)}).`,
+        `Mode PC modeste : le jeu démarre avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire (réglage : ${MinecraftLauncher.go(memoryMb)}).`,
       );
     }
 
