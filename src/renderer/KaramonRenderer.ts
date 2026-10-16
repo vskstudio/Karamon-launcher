@@ -255,10 +255,6 @@ export class KaramonRenderer {
       void this.accountDialog.open();
       return;
     }
-    if (this.gameRunning) {
-      Toast.show('Minecraft est déjà en cours.', 'error');
-      return;
-    }
     this.actionRunning = true;
     this.refreshPlayButton();
     this.console.log('Lancement en cours...', 'info');

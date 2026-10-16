@@ -16,7 +16,7 @@ export class PlayButton {
   }
 
   setRunning(): void {
-    this.apply('play-btn running', 'En jeu', '1');
+    this.apply('play-btn running', 'En jeu · Autre compte', '1');
   }
 
   setLoginRequired(): void {
