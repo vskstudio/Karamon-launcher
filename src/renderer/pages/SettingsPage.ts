@@ -40,6 +40,7 @@ export interface SettingsPageOptions {
 }
 
 const DEFAULT_MEMORY_MB = 12288;
+const DEFAULT_SECOND_MEMORY_MB = 6144;
 const MIN_MEMORY_MB = 2048;
 const MEMORY_STEP_MB = 512;
 const RECOMMENDED_MIN_MB = 8192;
@@ -58,6 +59,8 @@ export class SettingsPage implements Page {
   private memoryBadge: HTMLElement = h('span');
   private readonly memoryHint = h('span', { className: 'ui-field__hint' });
   private readonly memoryRange: HTMLInputElement;
+  private readonly secondMemoryRange: HTMLInputElement;
+  private readonly secondMemoryField: Field;
   private readonly presetSelect: HTMLSelectElement;
   private readonly jvmArgs: HTMLInputElement;
   private readonly javaSelect: HTMLSelectElement;
@@ -106,6 +109,19 @@ export class SettingsPage implements Page {
         this.markDirty();
       },
     });
+
+    this.secondMemoryRange = rangeInput({
+      min: MIN_MEMORY_MB,
+      max: 16384,
+      step: MEMORY_STEP_MB,
+      value: DEFAULT_SECOND_MEMORY_MB,
+      label: 'Mémoire du deuxième jeu',
+      onInput: () => {
+        this.renderMemory();
+        this.markDirty();
+      },
+    });
+    this.secondMemoryField = field({ label: 'Deuxième jeu lancé', control: this.secondMemoryRange, hint: '' });
 
     this.presetSelect = selectInput({
       items: JVM_PRESETS.map((preset) => ({ value: preset.id, label: preset.label })),
@@ -231,6 +247,8 @@ export class SettingsPage implements Page {
         this.memoryRange,
         scale,
         this.memoryHint,
+        h('div', { className: 'settings-divider' }),
+        this.secondMemoryField.root,
         h('div', { className: 'settings-divider' }),
         presetField.root,
         this.jvmArgs,
@@ -384,8 +402,10 @@ export class SettingsPage implements Page {
     this.versionLabel.textContent = `Launcher ${system.appVersion}`;
 
     const max = Math.max(RECOMMENDED_MAX_MB, Math.floor(system.totalMemMb / MEMORY_STEP_MB) * MEMORY_STEP_MB);
-    this.memoryRange.max = String(max);
-    syncRangeFill(this.memoryRange);
+    for (const range of [this.memoryRange, this.secondMemoryRange]) {
+      range.max = String(max);
+      syncRangeFill(range);
+    }
     const maxLabel = this.root.querySelector('.settings-memory__max');
     if (maxLabel) maxLabel.textContent = `${Math.round(max / 1024)} Go`;
 
@@ -400,7 +420,7 @@ export class SettingsPage implements Page {
   }
 
   private applyConfig(config: AppConfig): void {
-    this.setMemory(config.memoryMb || DEFAULT_MEMORY_MB);
+    this.setMemory(config.memoryMb || DEFAULT_MEMORY_MB, config.secondInstanceMemoryMb || DEFAULT_SECOND_MEMORY_MB);
     this.jvmArgs.value = config.jvmArgs ?? '';
     this.syncPresetFromArgs();
     this.javaPath.value = config.javaPath ?? '';
@@ -413,9 +433,11 @@ export class SettingsPage implements Page {
     this.renderMemory();
   }
 
-  private setMemory(mb: number): void {
+  private setMemory(mb: number, secondMb: number): void {
     this.memoryRange.value = String(mb);
     syncRangeFill(this.memoryRange);
+    this.secondMemoryRange.value = String(secondMb);
+    syncRangeFill(this.secondMemoryRange);
     this.renderMemory();
   }
 
@@ -454,6 +476,17 @@ export class SettingsPage implements Page {
     this.memoryHint.textContent = hint;
     this.memoryHint.hidden = !hint;
     this.memoryHint.classList.toggle('ui-field__hint--warn', tone !== 'green');
+
+    const secondMb = Number(this.secondMemoryRange.value);
+    const both = mb + secondMb;
+    const tooMuch = total > 0 && both > total;
+    const secondHint = this.secondMemoryField.hint;
+    secondHint.textContent =
+      `${SettingsPage.formatGo(secondMb)} pour un jeu lancé pendant qu’un autre tourne (autre compte). ` +
+      (tooMuch
+        ? `Avec le premier : ${SettingsPage.formatGo(both)}, plus que la RAM de ton PC.`
+        : `Les deux ensemble : ${SettingsPage.formatGo(both)}.`);
+    secondHint.classList.toggle('ui-field__hint--warn', tooMuch);
   }
 
   private syncPresetFromArgs(): void {
@@ -484,6 +517,7 @@ export class SettingsPage implements Page {
   private collect(): AppConfigUpdate {
     return {
       memoryMb: Number(this.memoryRange.value) || DEFAULT_MEMORY_MB,
+      secondInstanceMemoryMb: Number(this.secondMemoryRange.value) || DEFAULT_SECOND_MEMORY_MB,
       jvmArgs: this.jvmArgs.value.trim(),
       javaPath: this.javaPath.value.trim(),
       mcGameDir: this.gameDir.value.trim(),
@@ -510,7 +544,7 @@ export class SettingsPage implements Page {
 
   private revert(): void {
     if (!this.saved) return;
-    this.setMemory(this.saved.memoryMb ?? DEFAULT_MEMORY_MB);
+    this.setMemory(this.saved.memoryMb ?? DEFAULT_MEMORY_MB, this.saved.secondInstanceMemoryMb ?? DEFAULT_SECOND_MEMORY_MB);
     this.jvmArgs.value = this.saved.jvmArgs ?? '';
     this.syncPresetFromArgs();
     this.javaPath.value = this.saved.javaPath ?? '';

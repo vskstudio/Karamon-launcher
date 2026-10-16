@@ -6,6 +6,8 @@ export interface ServerInfo {
 export interface AppConfig {
   mcGameDir: string;
   memoryMb: number;
+  /** Heap of a game launched while another one already runs. */
+  secondInstanceMemoryMb: number;
   javaPath: string;
   jvmArgs: string;
   closeLauncherOnGameStart: boolean;
