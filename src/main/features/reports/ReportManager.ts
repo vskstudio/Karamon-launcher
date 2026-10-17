@@ -22,6 +22,7 @@ export interface ReportManagerOptions {
 
 export class ReportManager {
   private readonly options: ReportManagerOptions;
+  private readonly inFlight = new Map<string, Promise<ReportSendResult>>();
 
   constructor(options: ReportManagerOptions) {
     this.options = options;
@@ -87,7 +88,22 @@ export class ReportManager {
   }
 
   private async deliver(report: LauncherReport): Promise<ReportSendResult> {
-    const state = await this.options.transport.send(report);
+    const id = report.reportId;
+    const pending = this.inFlight.get(id);
+    if (pending) return await pending;
+    const attempt = this.attempt(report).finally(() => this.inFlight.delete(id));
+    this.inFlight.set(id, attempt);
+    return await attempt;
+  }
+
+  private async attempt(report: LauncherReport): Promise<ReportSendResult> {
+    let state: ReportTransportResult;
+    try {
+      state = await this.options.transport.send(report);
+    } catch (error) {
+      this.log(`Envoi du rapport ${shortCode(report)} impossible: ${(error as Error).message}`);
+      state = 'retry';
+    }
     if (state === 'sent') {
       this.options.queue.remove(report.reportId);
       this.log(`Rapport ${shortCode(report)} envoyé.`);

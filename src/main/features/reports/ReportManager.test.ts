@@ -67,6 +67,54 @@ test('limite les doublons automatiques mais jamais le bouton manuel', async () =
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 
+test('un même rapport n’est jamais envoyé deux fois en parallèle', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-manager-'));
+  const queue = new ReportQueue(root);
+  let posts = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const manager = new ReportManager({
+    collector: { collect: async () => { throw new Error('inutile'); } },
+    queue,
+    transport: { send: async () => { posts++; await gate; return 'sent'; } },
+    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    autoSend: () => true,
+    setAutoSend: () => {},
+    requestConsent: () => {},
+  });
+  queue.enqueue({
+    reportId: 'abcdef12-e89b-42d3-a456-426614174000', launcherVersion: '2.1', packVersion: '0.9', os: 'linux', arch: 'x64',
+    javaVersion: '21', ramMb: 8192, trigger: 'crash', summary: ['x'], files: [],
+  }, 'approved');
+  const first = manager.start();
+  const second = manager.start();
+  release();
+  await Promise.all([first, second]);
+  assert.equal(posts, 1);
+  assert.equal(queue.list().length, 0);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('une erreur du transport reste silencieuse et garde le rapport', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-manager-'));
+  const queue = new ReportQueue(root);
+  const manager = new ReportManager({
+    collector: { collect: async ({ trigger, summary }) => ({
+      reportId: 'fedcba98-e89b-42d3-a456-426614174000', launcherVersion: '2.1', packVersion: '0.9', os: 'linux', arch: 'x64',
+      javaVersion: '21', ramMb: 8192, trigger, summary, files: [],
+    }) },
+    queue,
+    transport: { send: async () => { throw new Error('boum'); } },
+    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    autoSend: () => true,
+    setAutoSend: () => {},
+    requestConsent: () => {},
+  });
+  assert.deepEqual(await manager.detect('crash', ['x']), { status: 'queued', code: 'fedcba98' });
+  assert.equal(queue.list('approved').length, 1);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('au démarrage réessaie les approuvés et repropose les consentements', async () => {
   const f = setup();
   f.setTransport('retry');
