@@ -13,7 +13,7 @@ const report: LauncherReport = {
   javaVersion: '21',
   ramMb: 8192,
   trigger: 'manual',
-  summary: 'test',
+  summary: ['test'],
   files: [{ name: 'launcher.log', content: 'bonjour' }],
 };
 
@@ -26,6 +26,7 @@ test('poste le JSON gzip avec les en-têtes du contrat vers la constante unique'
   const result = await new ReportTransport(post).send(report);
   assert.equal(result, 'sent');
   assert.equal(seen?.url, LAUNCHER_REPORTS_URL);
+  assert.equal(LAUNCHER_REPORTS_URL, 'https://karamon.fr/panel/api/launcher/reports');
   assert.equal(seen?.headers['Content-Type'], 'application/json');
   assert.equal(seen?.headers['Content-Encoding'], 'gzip');
   assert.deepEqual(JSON.parse(zlib.gunzipSync(seen!.body).toString('utf8')), report);

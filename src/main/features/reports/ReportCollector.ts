@@ -8,7 +8,8 @@ import type { LauncherReport, ReportFile, ReportTrigger } from './ReportTypes.ts
 const KIB = 1024;
 const MIB = 1024 * KIB;
 export const MAX_REPORT_JSON_BYTES = 5 * MIB;
-const SUMMARY_LENGTH = 240;
+const SUMMARY_MAX_TAGS = 20;
+const SUMMARY_TAG_LENGTH = 200;
 
 export interface ReportCollectorOptions {
   dataDir: string;
@@ -26,7 +27,7 @@ export interface ReportCollectorOptions {
 
 export interface CollectReportInput {
   trigger: ReportTrigger;
-  summary: string;
+  summary: string[];
   gameDir: string;
   ramMb: number;
 }
@@ -55,7 +56,10 @@ export class ReportCollector {
       javaVersion: javaVersion || 'inconnu',
       ramMb: input.ramMb,
       trigger: input.trigger,
-      summary: this.redact(input.summary).slice(0, SUMMARY_LENGTH),
+      summary: input.summary
+        .map((tag) => this.redact(tag).trim().slice(0, SUMMARY_TAG_LENGTH))
+        .filter((tag) => tag.length > 0)
+        .slice(0, SUMMARY_MAX_TAGS),
       files,
       ...(gpu ? { gpu: this.redact(gpu) } : {}),
       ...(playerName ? { playerName } : {}),
@@ -67,7 +71,7 @@ export class ReportCollector {
     const candidates: Array<{ file: string | null; limit: number }> = [
       { file: path.join(this.options.dataDir, 'logs', 'launcher.log'), limit: 256 * KIB },
       { file: path.join(gameDir, 'logs', 'latest.log'), limit: 512 * KIB },
-      { file: newestFile(path.join(gameDir, 'crash-reports'), (name) => name.endsWith('.txt')), limit: MIB },
+      { file: newestFile(path.join(gameDir, 'crash-reports'), (name) => /^crash-.*\.txt$/i.test(name)), limit: MIB },
       { file: newestFile(gameDir, (name) => /^hs_err_pid\d+\.log$/i.test(name)), limit: MIB },
     ];
     const files: ReportFile[] = [];

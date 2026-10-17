@@ -3,8 +3,8 @@ import zlib from 'zlib';
 import { MAX_REPORT_JSON_BYTES } from './ReportCollector.ts';
 import type { LauncherReport } from './ReportTypes.ts';
 
-/** Provisional panel URL; the public hostname must be confirmed before merge. */
-export const LAUNCHER_REPORTS_URL = 'https://panel.karamon.fr/api/launcher/reports';
+/** Seule adresse d'envoi des rapports : route publique du panel Karamon. */
+export const LAUNCHER_REPORTS_URL = 'https://karamon.fr/panel/api/launcher/reports';
 const POST_TIMEOUT_MS = 10_000;
 
 export type ReportTransportResult = 'sent' | 'retry' | 'discard';

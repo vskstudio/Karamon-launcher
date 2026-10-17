@@ -26,3 +26,13 @@ test('the second game memory is saved and read back', () => {
 test('a second game memory out of bounds falls back to 6 Go', () => {
   assert.equal(tempConfig({ secondInstanceMemoryMb: 100 }).get().secondInstanceMemoryMb, 6144);
 });
+
+test('the automatic report consent is disabled for old configs', () => {
+  assert.equal(tempConfig({ memoryMb: 8192 }).get().autoSendReports, false);
+});
+
+test('the automatic report consent is saved and read back', () => {
+  const config = tempConfig();
+  config.set({ autoSendReports: true });
+  assert.equal(config.get().autoSendReports, true);
+});

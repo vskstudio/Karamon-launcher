@@ -15,7 +15,7 @@ export interface LauncherReport {
   ramMb: number;
   gpu?: string;
   trigger: ReportTrigger;
-  summary: string;
+  summary: string[];
   playerName?: string;
   files: ReportFile[];
 }

@@ -18,6 +18,7 @@ const DEFAULTS: AppConfig = Object.freeze({
   potatoMode: false,
   potatoHintDismissed: false,
   disableSodium: false,
+  autoSendReports: false,
   server: { host: 'play.karamon.fr', port: 25565 },
 }) as AppConfig;
 
@@ -76,6 +77,7 @@ export class Config {
       potatoMode: Config.boolean(updates.potatoMode, base.potatoMode),
       potatoHintDismissed: Config.boolean(updates.potatoHintDismissed, base.potatoHintDismissed),
       disableSodium: Config.boolean(updates.disableSodium, base.disableSodium),
+      autoSendReports: Config.boolean(updates.autoSendReports, base.autoSendReports),
       server: {
         host: Config.text(updates.server?.host, base.server.host),
         port: Config.number(updates.server?.port, base.server.port),

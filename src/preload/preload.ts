@@ -38,6 +38,8 @@ const api: LauncherApi = {
   deleteCrash: (name) => ipcRenderer.invoke(Channels.crashesDelete, name),
   copyCrash: (name) => ipcRenderer.invoke(Channels.crashesCopy, name),
   revealCrash: (name) => ipcRenderer.invoke(Channels.crashesReveal, name),
+  sendManualReport: () => ipcRenderer.invoke(Channels.reportsSendManual),
+  answerReportConsent: (answer) => ipcRenderer.invoke(Channels.reportsConsent, answer),
   createBackup: () => ipcRenderer.invoke(Channels.backupCreate),
   listBackups: () => ipcRenderer.invoke(Channels.backupList),
   deleteBackup: (name) => ipcRenderer.invoke(Channels.backupDelete, name),
@@ -68,6 +70,9 @@ const api: LauncherApi = {
   },
   onRepairOffer: (cb) => {
     ipcRenderer.on(Channels.eventRepairOffer, (_e, offer) => cb(offer));
+  },
+  onReportConsent: (cb) => {
+    ipcRenderer.on(Channels.eventReportConsent, (_e, request) => cb(request));
   },
 };
 

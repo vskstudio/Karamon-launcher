@@ -16,7 +16,7 @@ function report(id: string): LauncherReport {
     javaVersion: '21',
     ramMb: 8192,
     trigger: 'crash',
-    summary: `crash ${id}`,
+    summary: [`crash ${id}`],
     files: [],
   };
 }
