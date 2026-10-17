@@ -29,7 +29,7 @@
 
 ---
 
-### Tâche 1 : anonymiseur
+### Task 1 : anonymiseur
 
 **Fichiers :**
 - Créer : `src/main/features/reports/ReportRedactor.ts`
@@ -44,7 +44,7 @@
 - [ ] Relancer le test puis toute la suite.
 - [ ] Committer.
 
-### Tâche 2 : contrat, collecte et limite de taille
+### Task 2 : contrat, collecte et limite de taille
 
 **Fichiers :**
 - Créer : `src/main/features/reports/ReportTypes.ts`
@@ -63,7 +63,7 @@
 - [ ] Relancer les tests ciblés puis la suite.
 - [ ] Committer.
 
-### Tâche 3 : file persistante et transport gzip
+### Task 3 : file persistante et transport gzip
 
 **Fichiers :**
 - Créer : `src/main/features/reports/ReportQueue.ts`
@@ -80,7 +80,7 @@
 - [ ] Vérifier le rouge, implémenter `ReportTransport` et la constante unique `LAUNCHER_REPORTS_URL`, puis vérifier le vert.
 - [ ] Lancer toute la suite et committer.
 
-### Tâche 4 : orchestration, config et IPC
+### Task 4 : orchestration, config et IPC
 
 **Fichiers :**
 - Créer : `src/main/features/reports/ReportManager.ts`
@@ -101,7 +101,7 @@
 - [ ] Brancher preload et IPC KaramonApp, avec journalisation interne et erreurs absorbées.
 - [ ] Relancer tests ciblés puis suite et committer.
 
-### Tâche 5 : déclencheurs typés
+### Task 5 : déclencheurs typés
 
 **Fichiers :**
 - Modifier : `src/main/features/minecraft/MinecraftLauncher.ts`
@@ -119,7 +119,7 @@
 - [ ] Brancher `sync_failed`, `launch_failed`, `crash_early`, `crash` dans KaramonApp.
 - [ ] Relancer tests ciblés puis suite et committer.
 
-### Tâche 6 : consentement, réglage et envoi manuel
+### Task 6 : consentement, réglage et envoi manuel
 
 **Fichiers :**
 - Créer : `src/renderer/features/reports/ReportConsent.ts`
@@ -139,7 +139,7 @@
 - [ ] Brancher SettingsPage, ToolsPage et KaramonRenderer ; garder une seule demande de consentement visible à la fois.
 - [ ] Relancer tests ciblés puis suite et committer.
 
-### Tâche 7 : vérification et PR
+### Task 7 : vérification et PR
 
 **Fichiers :**
 - Modifier : `README.md` uniquement si l'aide publique doit mentionner l'envoi consenti.
