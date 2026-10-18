@@ -19,6 +19,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import type { Page } from './pages/Page';
 import { AccountChip } from './components/AccountChip';
 import { AccountDialog } from './components/AccountDialog';
+import { ReportConsent } from './features/reports/ReportConsent';
 import type { PingResult } from '../ipc/contract';
 
 export class KaramonRenderer {
@@ -91,6 +92,7 @@ export class KaramonRenderer {
       onChanged: (state, message) => this.applyAuthState(state, message),
     });
     this.accountChip = new AccountChip($('account-chip'), () => void this.accountDialog.open(), skinUrl);
+    new ReportConsent(api, (text, tone) => this.console.log(text, tone));
   }
 
   private onPingResult(r: PingResult, prev: 'online' | 'offline' | 'unknown'): void {

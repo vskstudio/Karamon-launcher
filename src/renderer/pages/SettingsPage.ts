@@ -70,6 +70,7 @@ export class SettingsPage implements Page {
   private readonly closeOnLaunch: Toggle;
   private readonly devMode: Toggle;
   private readonly disableSodium: Toggle;
+  private readonly autoSendReports: Toggle;
   private readonly potatoMode: Toggle;
   private potatoBadge: HTMLElement = h('span');
   private readonly potatoMemory = h('li');
@@ -162,6 +163,7 @@ export class SettingsPage implements Page {
     this.closeOnLaunch = toggle({ label: 'Fermer le launcher au lancement du jeu', onChange: () => this.markDirty() });
     this.devMode = toggle({ label: 'Mode développement', onChange: () => this.markDirty() });
     this.disableSodium = toggle({ label: 'Désactiver Sodium', onChange: () => this.markDirty() });
+    this.autoSendReports = toggle({ label: 'Envoyer automatiquement les rapports de problème', onChange: () => this.markDirty() });
     this.potatoMode = toggle({
       label: 'Mode PC modeste',
       onChange: () => {
@@ -208,6 +210,15 @@ export class SettingsPage implements Page {
 
   enter(): void {
     void this.refreshStats();
+    void this.refreshAutoSend();
+  }
+
+  /** "Toujours envoyer" can be ticked from the report dialog: show it, unless the player is editing. */
+  private async refreshAutoSend(): Promise<void> {
+    if (!this.saved || this.changedCount() > 0) return;
+    const config = await this.api.getConfig();
+    this.autoSendReports.input.checked = config.autoSendReports ?? false;
+    this.saved = { ...this.saved, autoSendReports: this.autoSendReports.input.checked };
   }
 
   async load(): Promise<void> {
@@ -315,6 +326,11 @@ export class SettingsPage implements Page {
           label: 'Désactiver Sodium',
           hint: "Si le jeu plante ou reste bloqué au démarrage. Coupe aussi Iris (plus de shaders), Voxy (plus de terrain lointain), Sodium Extra et Reese's Sodium Options, donc moins de FPS. Pris en compte au prochain lancement, décoche pour tout remettre.",
           control: this.disableSodium.root,
+        }),
+        settingRow({
+          label: 'Envoyer automatiquement les rapports de problème',
+          hint: "Après un crash ou un échec de lancement, les logs anonymisés partent à l'équipe Karamon sans te le demander. Décoché, le launcher te pose la question à chaque fois.",
+          control: this.autoSendReports.root,
         }),
         settingRow({
           label: 'Mode développement',
@@ -428,6 +444,7 @@ export class SettingsPage implements Page {
     this.closeOnLaunch.input.checked = config.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = config.devMode ?? false;
     this.disableSodium.input.checked = config.disableSodium ?? false;
+    this.autoSendReports.input.checked = config.autoSendReports ?? false;
     this.potatoMode.input.checked = config.potatoMode ?? false;
     this.potatoHintDismissed = config.potatoHintDismissed ?? false;
     this.renderMemory();
@@ -524,6 +541,7 @@ export class SettingsPage implements Page {
       closeLauncherOnGameStart: this.closeOnLaunch.input.checked,
       devMode: this.devMode.input.checked,
       disableSodium: this.disableSodium.input.checked,
+      autoSendReports: this.autoSendReports.input.checked,
       potatoMode: this.potatoMode.input.checked,
     };
   }
@@ -552,6 +570,7 @@ export class SettingsPage implements Page {
     this.closeOnLaunch.input.checked = this.saved.closeLauncherOnGameStart ?? false;
     this.devMode.input.checked = this.saved.devMode ?? false;
     this.disableSodium.input.checked = this.saved.disableSodium ?? false;
+    this.autoSendReports.input.checked = this.saved.autoSendReports ?? false;
     this.potatoMode.input.checked = this.saved.potatoMode ?? false;
     this.renderMemory();
     void this.populateJava();

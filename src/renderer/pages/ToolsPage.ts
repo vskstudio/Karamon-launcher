@@ -1,5 +1,5 @@
 import './ToolsPage.css';
-import { Copy, DatabaseBackup, FileText, FolderOpen, Trash2 } from 'lucide';
+import { Copy, DatabaseBackup, FileText, FolderOpen, Send, Trash2 } from 'lucide';
 import type { BackupEntry, CrashReport, LauncherApi } from '../../ipc/contract';
 import {
   badge,
@@ -17,6 +17,7 @@ import {
   withBusy,
 } from '../lib/ui';
 import { formatDayTime, formatShortDate, formatSize } from '../util/format';
+import { reportResultMessage } from '../features/reports/ReportMessages';
 import type { Page } from './Page';
 
 export interface ToolsPageOptions {
@@ -40,12 +41,22 @@ export class ToolsPage implements Page {
     flush: true,
     scroll: true,
   });
-  private readonly crashCard = card({ title: 'Rapports de crash', flush: true, scroll: true });
+  private readonly crashCard: ReturnType<typeof card>;
+  private readonly reportResult = h('p', { className: 'tools-report-result', attrs: { role: 'status' } });
 
   constructor(root: HTMLElement, options: ToolsPageOptions) {
     this.root = root;
     this.api = options.api;
     this.openSettings = options.openSettings;
+
+    const sendLogs = button({
+      label: "Envoyer mes logs à l'équipe",
+      size: 'sm',
+      icon: Send,
+      onClick: () => void this.sendLogs(sendLogs),
+    });
+    this.reportResult.hidden = true;
+    this.crashCard = card({ title: 'Rapports de crash', actions: [sendLogs], flush: true, scroll: true });
 
     const backupNow = button({
       label: 'Sauvegarder maintenant',
@@ -193,8 +204,23 @@ export class ToolsPage implements Page {
     }
   }
 
+  /** Manual report: counts as consent for this report only. A failure stays silent. */
+  private async sendLogs(trigger: HTMLButtonElement): Promise<void> {
+    try {
+      const result = await withBusy(trigger, 'Envoi…', () => this.api.sendManualReport());
+      const message = reportResultMessage(result);
+      if (!message) return;
+      this.reportResult.textContent = message.text;
+      this.reportResult.hidden = false;
+      Toast.show(message.text, message.tone);
+    } catch {
+      // Sending a report must never bother the player.
+    }
+  }
+
   private renderCrashes(reports: CrashReport[]): void {
     this.crashCard.body.textContent = '';
+    this.crashCard.body.append(this.reportResult);
     if (reports.length === 0) {
       this.crashCard.body.append(
         emptyState({
