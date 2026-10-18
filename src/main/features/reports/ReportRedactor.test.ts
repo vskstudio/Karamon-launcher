@@ -14,6 +14,21 @@ test('masque les dossiers personnels Windows, macOS et Linux', () => {
   );
 });
 
+test('masque les chemins Windows échappés en JSON ou écrits avec des slashs', () => {
+  const text = String.raw`{"dir":"C:\\Users\\Alice\\AppData"} C:/Users/Bob/.minecraft`;
+  const output = redactReportText(text);
+  assert.ok(!output.includes('Alice'), output);
+  assert.ok(!output.includes('Bob'), output);
+  assert.equal(output, String.raw`{"dir":"C:\\Users\\<user>\\AppData"} C:/Users/<user>/.minecraft`);
+});
+
+test('masque le home injecté qui contient un espace (macOS)', () => {
+  assert.equal(
+    redactReportText('/Users/Jean Dupont/Library/Application Support/Karamon', '/Users/Jean Dupont'),
+    '<user>/Library/Application Support/Karamon',
+  );
+});
+
 test('masque le home injecté même hors des chemins habituels', () => {
   assert.equal(
     redactReportText('/srv/players/alice/game/logs/latest.log', '/srv/players/alice'),

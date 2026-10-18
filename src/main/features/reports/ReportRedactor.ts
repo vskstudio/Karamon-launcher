@@ -11,7 +11,8 @@ export function redactReportText(text: string, homeDir?: string): string {
   }
 
   result = result
-    .replace(/\b[A-Za-z]:\\Users\\[^\\/\r\n]+/gi, (value) => `${value.slice(0, 9)}<user>`)
+    // Windows: plain, JSON-escaped (\\) or forward-slash separators.
+    .replace(/\b([A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/))[^\\/"\r\n]+/gi, (_value, prefix: string) => `${prefix}<user>`)
     .replace(/\/(home|Users)\/[^/\s]+/g, (_value, root: string) => `/${root}/<user>`)
     .replace(/(--accessToken(?:\s+|=))(?:(['"])[\s\S]*?\2|\S+)/gi, `$1${MASKED}`)
     .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, `$1${MASKED}`)
