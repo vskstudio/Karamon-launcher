@@ -14,6 +14,19 @@ interface TokenResponse {
   expires_in?: number;
 }
 
+interface TokenErrorResponse {
+  error?: string;
+}
+
+const EXPIRED_GRANT_ERRORS = new Set(['invalid_grant', 'interaction_required', 'consent_required']);
+
+export class MicrosoftSessionExpired extends Error {
+  constructor() {
+    super('Ta connexion Microsoft a expiré, reconnecte-toi pour jouer.');
+    this.name = 'MicrosoftSessionExpired';
+  }
+}
+
 export interface MicrosoftToken {
   accessToken: string;
   refreshToken: string;
@@ -41,6 +54,8 @@ export class MicrosoftAuth {
       body: params.toString(),
     });
     if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as TokenErrorResponse;
+      if (body.error && EXPIRED_GRANT_ERRORS.has(body.error)) throw new MicrosoftSessionExpired();
       throw new Error(`Microsoft a refusé le rafraîchissement (HTTP ${res.status})`);
     }
     return this.parseTokenResponse((await res.json()) as TokenResponse);
