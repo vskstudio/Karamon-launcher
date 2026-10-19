@@ -279,6 +279,10 @@ export class HttpClient {
               return reject(e);
             }
           }
+          // An error page's headers (Cloudflare 403/5xx) must not pass for the file's ETag/length.
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            return reject(new Error(`HTTP ${res.statusCode} pour ${target}`));
+          }
           resolve(res.headers);
         });
         req.on('error', reject);
