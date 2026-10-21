@@ -47,6 +47,7 @@ import { Backup } from './features/backup/Backup';
 import { ShopCatalog } from './features/shop/ShopCatalog';
 import { SkinLookup } from './features/auth/SkinLookup';
 import { AuthSession } from './features/auth/AuthSession';
+import { MicrosoftSessionExpired } from './features/auth/MicrosoftAuth';
 import { TokenStore } from './features/auth/TokenStore';
 import { AccountStore } from './features/auth/AccountStore';
 import { mojangNameStatus } from './features/auth/OfflineAccount';
@@ -574,7 +575,7 @@ export class KaramonApp {
       onProgress(0);
       if (!this.minecraft.isRunning()) this.window.send(Channels.eventGameState, { running: false });
       this.reportProblem(failureTrigger(e), failureSummary(e));
-      return { ok: false, error: msg };
+      return { ok: false, error: msg, loginRequired: e instanceof MicrosoftSessionExpired };
     }
   }
 

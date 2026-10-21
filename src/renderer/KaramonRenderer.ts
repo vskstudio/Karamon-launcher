@@ -267,6 +267,10 @@ export class KaramonRenderer {
       this.refreshPlayButton();
       this.console.log('Erreur: ' + result.error, 'error');
       Toast.show(result.error, 'error');
+      if (result.loginRequired) {
+        await this.refreshAuthState();
+        void this.accountDialog.open();
+      }
     }
   }
 

@@ -214,11 +214,13 @@ export class ModpackSync {
 
     const githubKey = await githubAssetFreshness(this.http, zipUrl);
     let headers: Record<string, string | string[] | undefined> = {};
+    let headError = '';
     if (!githubKey) {
       try {
         headers = await this.http.head(zipUrl);
-      } catch {
+      } catch (e) {
         /* GitHub refuse parfois HEAD; on bascule sur la taille */
+        headError = e instanceof Error ? e.message : String(e);
       }
     }
     const etag =
@@ -226,7 +228,12 @@ export class ModpackSync {
       ModpackSync.extractEtag(headers) ||
       ModpackSync.extractLengthKey(headers);
     if (!etag) {
-      throw new Error('mods.zip indisponible (ETag/Last-Modified manquant)');
+      // The real cause (DNS, certificate, timeout, blocked GitHub) is what support needs, not the missing header.
+      throw new Error(
+        headError
+          ? `Impossible de joindre le serveur du pack (${headError}). Vérifie ta connexion, ton antivirus ou ton pare-feu.`
+          : 'mods.zip indisponible (ETag/Last-Modified manquant)',
+      );
     }
 
     const cache = this.readCache(gameDir);
