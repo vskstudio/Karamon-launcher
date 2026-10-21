@@ -18,6 +18,7 @@ import {
   type ModsListResult,
   type PingResult,
   type RepairResult,
+  type ReportConsentAnswer,
   type SetupResult,
   type SystemInfo,
 } from '../ipc/contract';
@@ -60,6 +61,11 @@ import { WindowManager } from './WindowManager';
 import { repairSummary } from './features/integrity/RepairSummary';
 import { FileLog } from './shared/FileLog';
 import { SystemCertificates } from './shared/SystemCertificates';
+import { ReportCollector } from './features/reports/ReportCollector';
+import { ReportManager } from './features/reports/ReportManager';
+import { ReportQueue } from './features/reports/ReportQueue';
+import { ReportTransport } from './features/reports/ReportTransport';
+import { failureSummary, failureTrigger, type AutomaticTrigger } from './features/reports/ReportTriggers';
 
 const SERVER_PING_TIMEOUT_MS = 5000;
 const CLOSE_DELAY_MS = 2000;
@@ -95,6 +101,7 @@ export class KaramonApp {
   private readonly shop = new ShopCatalog(this.http);
   private readonly skins = new SkinLookup(this.http);
   private readonly discord: DiscordRpc;
+  private readonly reports: ReportManager;
   private javaCache: JavaCandidate[] | null = null;
   private repairing: Promise<RepairResult> | null = null;
 
@@ -138,6 +145,71 @@ export class KaramonApp {
       pinger: this.serverPing,
       log: (msg) => this.window.send(Channels.eventStatus, msg),
     });
+    this.reports = this.createReportManager();
+  }
+
+  /** Diagnostics sent to the Karamon panel. Never throws into the sync or launch flow. */
+  private createReportManager(): ReportManager {
+    const collector = new ReportCollector({
+      dataDir: this.paths.dataDir,
+      launcherVersion: app.getVersion(),
+      bundledPackVersion: this.pack.version,
+      // No installed pack version is stored locally: the published one is what the sync installs.
+      getPackVersion: () =>
+        Promise.race([
+          this.http.getJson<{ version?: string }>(new URL('pack.json', this.pack.cdnBaseUrl).toString()).then((pack) => pack.version),
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000).unref()),
+        ]),
+      getJavaVersion: async () => {
+        const javaPath = this.config.get().javaPath;
+        const list = await this.getJavaList();
+        return (list.find((java) => java.path === javaPath) ?? list.find((java) => java.version.startsWith('21')) ?? list[0])?.version;
+      },
+      getGpu: () => KaramonApp.gpuLabel(),
+      getPlayerName: () => this.auth.state().active?.name,
+    });
+    return new ReportManager({
+      collector,
+      queue: new ReportQueue(this.paths.dataDir),
+      transport: new ReportTransport(),
+      context: () => ({ gameDir: this.currentInstanceDir(), ramMb: this.config.get().memoryMb }),
+      autoSend: () => this.config.get().autoSendReports,
+      setAutoSend: (value) => this.config.set({ autoSendReports: value }),
+      requestConsent: (request) => this.window.send(Channels.eventReportConsent, request),
+      log: (msg) => this.fileLog.info(`[Rapports] ${msg}`),
+    });
+  }
+
+  /** Automatic report after a problem; a failure only lands in launcher.log. */
+  private reportProblem(trigger: AutomaticTrigger, summary: string[]): void {
+    this.reports
+      .detect(trigger, summary)
+      .then((result) => {
+        if (result.status === 'sent') {
+          this.window.send(Channels.eventStatus, `Rapport envoyé à l'équipe Karamon (code ${result.code}).`);
+        }
+      })
+      .catch((e) => this.fileLog.warn(`[Rapports] ${(e as Error).message}`));
+  }
+
+  /** The latest crash report's cause, when the game wrote one in the last minutes. */
+  private crashSummary(gameDir: string): string[] {
+    try {
+      const recent = this.crashes
+        .list(gameDir)
+        .reports.filter((report) => report.name.startsWith('crash-') && Date.now() - report.mtime < 10 * 60 * 1000)
+        .sort((a, b) => b.mtime - a.mtime)[0];
+      return recent ? [recent.summary] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private static async gpuLabel(): Promise<string | undefined> {
+    const gpus = await KaramonApp.gpuDevices();
+    if (gpus.length === 0) return undefined;
+    const hex = (n: number | undefined): string => (n ?? 0).toString(16).padStart(4, '0');
+    return gpus.map((gpu) => `${hex(gpu.vendorId)}:${hex(gpu.deviceId)}`).join(', ');
   }
 
   start(): void {
@@ -156,7 +228,11 @@ export class KaramonApp {
     app.whenReady().then(() => {
       Screenshots.registerProtocol(() => Screenshots.dirFor(this.currentInstanceDir()));
       this.registerIpc();
-      this.window.create();
+      const win = this.window.create();
+      // Pending reports: retry the approved ones, ask again for the others once the page listens.
+      win.webContents.once('did-finish-load', () => {
+        this.reports.start().catch((e) => this.fileLog.warn(`[Rapports] ${(e as Error).message}`));
+      });
       this.updater.start();
       this.discord.start();
       app.on('activate', () => {
@@ -257,6 +333,10 @@ export class KaramonApp {
     );
     ipcMain.handle(Channels.crashesReveal, (_e, name: string) =>
       shell.showItemInFolder(this.crashes.reportPath(this.currentInstanceDir(), name)),
+    );
+    ipcMain.handle(Channels.reportsSendManual, () => this.reports.sendManual());
+    ipcMain.handle(Channels.reportsConsent, (_e, answer: ReportConsentAnswer) =>
+      this.reports.answerConsent(String(answer?.reportId ?? ''), answer?.send === true, answer?.always === true),
     );
     ipcMain.handle(Channels.backupCreate, () =>
       this.backup.create(this.currentInstanceDir()),
@@ -456,13 +536,14 @@ export class KaramonApp {
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
     const wasRunning = this.minecraft.isRunning();
+    const gameDir = this.minecraft.instanceDir(cfg);
     try {
       onProgress(0);
       await this.minecraft.launch(cfg, {
         onStatus,
         onProgress,
         onLog: (line) => this.window.send(Channels.eventStatus, line),
-        onExit: (code, corruption) => {
+        onExit: (code, corruption, trigger) => {
           this.fileLog.info(`Minecraft fermé (code ${code})${corruption.length ? `, corruption: ${corruption.join(', ')}` : ''}`);
           // Other instances still play: the session goes on until the last one closes.
           if (!this.minecraft.isRunning()) {
@@ -476,6 +557,9 @@ export class KaramonApp {
             code === 0 ? 'Minecraft fermé.' : `Minecraft fermé (code ${code}).`,
           );
           if (corruption.length > 0) void this.repairAfterCrash(corruption);
+          if (trigger) {
+            this.reportProblem(trigger, [`Code de sortie ${code}`, ...corruption, ...this.crashSummary(gameDir)]);
+          }
         },
       });
       if (!wasRunning) this.stats.startSession();
@@ -490,6 +574,7 @@ export class KaramonApp {
       onStatus('Erreur: ' + msg);
       onProgress(0);
       if (!this.minecraft.isRunning()) this.window.send(Channels.eventGameState, { running: false });
+      this.reportProblem(failureTrigger(e), failureSummary(e));
       return { ok: false, error: msg, loginRequired: e instanceof MicrosoftSessionExpired };
     }
   }
@@ -517,6 +602,7 @@ export class KaramonApp {
       const msg = (e as Error).message;
       onStatus('Erreur de synchronisation: ' + msg);
       onProgress(0);
+      this.reportProblem('sync_failed', ['Synchronisation du pack', msg]);
       return { ok: false, error: msg };
     }
   }

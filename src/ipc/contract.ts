@@ -17,6 +17,8 @@ export interface AppConfig {
   /** The suggestion to turn it on was shown and answered. */
   potatoHintDismissed: boolean;
   disableSodium: boolean;
+  /** Le joueur autorise l'envoi automatique des diagnostics après un problème. */
+  autoSendReports: boolean;
   server: ServerInfo;
 }
 
@@ -59,6 +61,25 @@ export type PingResult =
   | { online: false };
 
 export type ExportLogsResult = { ok: boolean; error?: string };
+
+export type LauncherReportTrigger = 'crash_early' | 'crash' | 'sync_failed' | 'launch_failed' | 'manual';
+
+export interface ReportConsentRequest {
+  reportId: string;
+  trigger: LauncherReportTrigger;
+  summary: string[];
+}
+
+export interface ReportConsentAnswer {
+  reportId: string;
+  send: boolean;
+  always: boolean;
+}
+
+export type ReportSendResult = {
+  status: 'sent' | 'queued' | 'skipped' | 'failed';
+  code?: string;
+};
 
 export interface GameState {
   running: boolean;
@@ -236,6 +257,8 @@ export const Channels = {
   crashesDelete: 'crashes:delete',
   crashesCopy: 'crashes:copy',
   crashesReveal: 'crashes:reveal',
+  reportsSendManual: 'reports:send-manual',
+  reportsConsent: 'reports:consent',
   backupCreate: 'backup:create',
   backupList: 'backup:list',
   backupDelete: 'backup:delete',
@@ -257,6 +280,7 @@ export const Channels = {
   eventGameState: 'game:state',
   eventUpdateReady: 'update:ready',
   eventRepairOffer: 'repair:offer',
+  eventReportConsent: 'reports:consent-request',
 } as const;
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels];
@@ -286,6 +310,8 @@ export interface IpcInvokeContract {
   [Channels.crashesDelete]: { req: string; res: CrashReportsListResult };
   [Channels.crashesCopy]: { req: string; res: void };
   [Channels.crashesReveal]: { req: string; res: void };
+  [Channels.reportsSendManual]: { req: void; res: ReportSendResult };
+  [Channels.reportsConsent]: { req: ReportConsentAnswer; res: ReportSendResult };
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
@@ -314,6 +340,7 @@ export interface IpcEventContract {
   [Channels.eventGameState]: GameState;
   [Channels.eventUpdateReady]: UpdateInfo;
   [Channels.eventRepairOffer]: RepairOffer;
+  [Channels.eventReportConsent]: ReportConsentRequest;
 }
 
 export interface LauncherApi {
@@ -353,6 +380,8 @@ export interface LauncherApi {
   deleteCrash(name: string): Promise<CrashReportsListResult>;
   copyCrash(name: string): Promise<void>;
   revealCrash(name: string): Promise<void>;
+  sendManualReport(): Promise<ReportSendResult>;
+  answerReportConsent(answer: ReportConsentAnswer): Promise<ReportSendResult>;
   createBackup(): Promise<BackupEntry>;
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;
@@ -376,6 +405,7 @@ export interface LauncherApi {
   onGameState(cb: (state: GameState) => void): void;
   onUpdateReady(cb: (info: UpdateInfo) => void): void;
   onRepairOffer(cb: (offer: RepairOffer) => void): void;
+  onReportConsent(cb: (request: ReportConsentRequest) => void): void;
 }
 
 declare global {

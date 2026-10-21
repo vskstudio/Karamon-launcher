@@ -17,6 +17,7 @@ import { SodiumOff, sodiumSummary } from '../sodium/SodiumOff';
 import type { ParkingReport } from '../modpack/JarParking';
 import type { GameLauncher } from './GameLauncher';
 import type { JavaProvisioner } from '../java/JavaProvisioner';
+import { LaunchPhaseError, exitTrigger, type LaunchPhase } from '../reports/ReportTriggers';
 
 export interface MinecraftLauncherOptions {
   mcLauncherDir: string;
@@ -35,7 +36,7 @@ export interface LaunchEvents {
   onProgress: ProgressEmitter;
   onLog: (line: string) => void;
   /** `corruption`: reasons a startup crash points at damaged files (empty otherwise). */
-  onExit: (code: number | null, corruption: string[]) => void;
+  onExit: (code: number | null, corruption: string[], trigger: 'crash_early' | 'crash' | null) => void;
 }
 
 export interface RepairReport {
@@ -103,7 +104,17 @@ export class MinecraftLauncher {
     });
   }
 
+  /** Throws a LaunchPhaseError telling whether the pack sync or the game launch failed. */
   async launch(config: AppConfig, events: LaunchEvents): Promise<void> {
+    let phase: LaunchPhase = 'launch';
+    try {
+      await this.launchSteps(config, events, (next) => { phase = next; });
+    } catch (e) {
+      throw e instanceof LaunchPhaseError ? e : new LaunchPhaseError(phase, e);
+    }
+  }
+
+  private async launchSteps(config: AppConfig, events: LaunchEvents, setPhase: (phase: LaunchPhase) => void): Promise<void> {
     const gameDir = this.instanceDir(config);
     // Another instance already runs on this pack and holds its jars open: launch it as it is.
     const packInUse = this.isRunning();
@@ -119,6 +130,7 @@ export class MinecraftLauncher {
       events.onStatus('Un autre Minecraft tourne déjà : le pack est lancé sans synchronisation.');
     } else {
       events.onStatus('Synchronisation du pack...');
+      setPhase('sync');
       this.beforeSync(gameDir, config, events.onStatus);
       await this.modpackSync.sync(
         this.downloadsBaseUrl,
@@ -128,6 +140,7 @@ export class MinecraftLauncher {
       );
       this.repairConfigs(gameDir, events.onStatus);
       this.afterSync(gameDir, config, events.onStatus);
+      setPhase('launch');
     }
     const memoryMb = packInUse ? config.secondInstanceMemoryMb : config.memoryMb;
     const jvm = MinecraftLauncher.jvmSettings({ ...config, memoryMb }, os.totalmem() / 1024 / 1024);
@@ -151,10 +164,11 @@ export class MinecraftLauncher {
         onProgress: (p) => events.onProgress(0.35 + p * 0.65),
         onLog: events.onLog,
         onExit: (code) => {
-          const corruption = isEarlyCrash(code, spawnedAt, Date.now())
+          const endedAt = Date.now();
+          const corruption = isEarlyCrash(code, spawnedAt, endedAt)
             ? detectCorruption(readCrashEvidence(gameDir, spawnedAt))
             : [];
-          events.onExit(code, corruption);
+          events.onExit(code, corruption, exitTrigger(code, spawnedAt, endedAt));
         },
       },
     );
