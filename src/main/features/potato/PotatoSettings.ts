@@ -252,7 +252,7 @@ export function potatoMemoryCapMb(totalMemMb: number): number | null {
   if (!(totalMemMb > 0) || totalMemMb > LOW_RAM_MB) return null;
   if (totalMemMb <= 4608) return 2048;
   if (totalMemMb <= 6656) return 2560;
-  return 3072;
+  return 4096;
 }
 
 /** The heap the game starts with: the player's setting, capped by the mode, never raised. */
