@@ -214,6 +214,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 /** Up to this much RAM counts as "8 Go or less" (Windows reports an 8 Go PC as 7.8 to 8 Go). */
 export const LOW_RAM_MB = 8704;
+export const PACK_MIN_MEMORY_MB = 4096;
 const FEW_THREADS = 4;
 const INTEL = 0x8086;
 const DISCRETE_VENDORS = new Set([0x10de, 0x1002, 0x1022]);
@@ -251,8 +252,7 @@ export function lowEndReasons({ totalMemMb, cpuCount, gpus }: HardwareFacts): st
 export function potatoMemoryCapMb(totalMemMb: number): number | null {
   if (!(totalMemMb > 0) || totalMemMb > LOW_RAM_MB) return null;
   if (totalMemMb <= 4608) return 2048;
-  if (totalMemMb <= 6656) return 2560;
-  return 3072;
+  return PACK_MIN_MEMORY_MB;
 }
 
 /** The heap the game starts with: the player's setting, capped by the mode, never raised. */
