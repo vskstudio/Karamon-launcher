@@ -33,7 +33,7 @@ test('poste le JSON gzip avec les en-têtes du contrat vers la constante unique'
 });
 
 test('classe les réponses pour la file de réessai', async () => {
-  for (const [status, expected] of [[200, 'sent'], [204, 'sent'], [400, 'discard'], [404, 'discard'], [429, 'retry'], [500, 'retry'], [503, 'retry']] as const) {
+  for (const [status, expected] of [[200, 'sent'], [204, 'sent'], [400, 'discard'], [404, 'discard'], [408, 'retry'], [413, 'discard'], [429, 'retry'], [500, 'retry'], [503, 'retry']] as const) {
     const transport = new ReportTransport(async () => status);
     assert.equal(await transport.send(report), expected, `HTTP ${status}`);
   }

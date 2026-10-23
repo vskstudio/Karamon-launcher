@@ -34,7 +34,7 @@ export class ReportTransport {
     try {
       const status = await this.post(LAUNCHER_REPORTS_URL, body, headers);
       if (status >= 200 && status < 300) return 'sent';
-      if (status === 429 || status >= 500) return 'retry';
+      if (status === 408 || status === 429 || status >= 500) return 'retry';
       return 'discard';
     } catch {
       return 'retry';
