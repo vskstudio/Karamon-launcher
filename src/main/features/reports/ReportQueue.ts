@@ -6,6 +6,9 @@ import type { LauncherReport, QueuedReport, ReportQueueState, ReportTrigger } fr
 
 const MAX_PENDING_REPORTS = 3;
 const AUTO_COOLDOWN_MS = 10 * 60 * 1000;
+export const MAX_FAILED_DELIVERIES = 5;
+
+export type FailedDeliveryOutcome = 'counted' | 'dropped' | 'missing';
 
 interface QueueMeta {
   lastAuto: Partial<Record<ReportTrigger, number>>;
@@ -46,7 +49,7 @@ export class ReportQueue {
         if (!item?.report?.reportId || !['awaiting-consent', 'approved'].includes(item.state)) continue;
         if (!state || item.state === state) items.push(item);
       } catch {
-        // A broken queue entry cannot be sent safely; ignore it.
+        continue;
       }
     }
     return items.sort((a, b) => a.createdAt - b.createdAt);
@@ -57,6 +60,19 @@ export class ReportQueue {
     if (!item) return null;
     this.remove(reportId);
     return this.enqueue(item.report, 'approved', item.createdAt);
+  }
+
+  recordFailedDelivery(reportId: string): FailedDeliveryOutcome {
+    const item = this.list().find((candidate) => candidate.report.reportId === reportId);
+    if (!item) return 'missing';
+    const failedDeliveries = (item.failedDeliveries ?? 0) + 1;
+    if (failedDeliveries >= MAX_FAILED_DELIVERIES) {
+      this.remove(reportId);
+      return 'dropped';
+    }
+    const updated = { ...item, failedDeliveries } satisfies QueuedReport;
+    writeFileAtomic(this.fileFor(updated), zlib.gzipSync(Buffer.from(JSON.stringify(updated), 'utf8')));
+    return 'counted';
   }
 
   remove(reportId: string): void {

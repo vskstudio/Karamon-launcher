@@ -74,3 +74,71 @@ test('applique tous les masques en un seul passage', () => {
   );
   assert.equal(output, String.raw`<user>\game lancé sur <ip> avec --accessToken [masqué]`);
 });
+
+test('masque le pseudo Discord, le chat des joueurs et les noms de la machine', () => {
+  const input = [
+    '[15:43:06] [Discord] connecté en tant que joueur_discord_test',
+    '[15:50:01] [Render thread/INFO]: [System] [CHAT] <JoueurTest> mon mot de passe est hunter2',
+    '[15:50:02] Hostname: Machine-De-Test, user utilisateur_test',
+  ].join('\n');
+  const output = redactReportText(input, undefined, ['Machine-De-Test', 'utilisateur_test', 'ab']);
+  for (const leaked of ['joueur_discord_test', 'JoueurTest', 'hunter2', 'Machine-De-Test', 'utilisateur_test']) {
+    assert.ok(!output.includes(leaked), output);
+  }
+  assert.ok(output.includes('[CHAT] [masqué]'), output);
+  assert.ok(output.includes('Hostname: <local>, user <local>'), output);
+});
+
+test('ne masque pas un nom de la machine collé à un point ou à un slash de paquet', () => {
+  const output = redactReportText(
+    'at dev.karamon.Foo.run(Foo.java:3)\nkaramon.jar chargé\nuser karamon, Bonjour karamon.',
+    undefined,
+    ['karamon'],
+  );
+  assert.equal(output, 'at dev.karamon.Foo.run(Foo.java:3)\nkaramon.jar chargé\nuser <local>, Bonjour <local>.');
+});
+
+test('ne masque jamais les noms génériques comme minecraft, localhost ou dev', () => {
+  const input = [
+    'at net.minecraft.client.Minecraft.run(Minecraft.java:12)',
+    'connexion à localhost:25565',
+    'at dev.karamon.Foo.run(Foo.java:3)',
+    'le root du dossier /srv/root/game sur desktop',
+  ].join('\n');
+  assert.equal(redactReportText(input, undefined, ['minecraft', 'Localhost', 'dev', 'desktop', 'root']), input);
+});
+
+test('masque un nom générique après une clé d\'identité', () => {
+  const input = ['user.name=admin', 'Hostname: desktop, user=root', 'USERNAME="dev"', '"user": "guest"'].join('\n');
+  assert.equal(
+    redactReportText(input, undefined, ['admin', 'desktop', 'root', 'dev', 'guest']),
+    ['user.name=<local>', 'Hostname: <local>, user=<local>', 'USERNAME="<local>"', '"user": "<local>"'].join('\n'),
+  );
+});
+
+test('ne masque pas un nom générique qui suit une clé d\'identité sans séparateur', () => {
+  const input = ['user home directory', 'host server started', 'Using user default settings'].join('\n');
+  assert.equal(redactReportText(input, undefined, ['home', 'server', 'default']), input);
+});
+
+test('masque un nom court seulement après une clé d\'identité ou comme dossier entier', () => {
+  const input = [
+    'user al',
+    'Hostname: al',
+    'USERNAME=al',
+    '"user.name": "al"',
+    'dossier /srv/al/game et C:\\Jeux\\al\\logs',
+    'al dente, alpha, val',
+  ].join('\n');
+  assert.equal(
+    redactReportText(input, undefined, ['al']),
+    [
+      'user <local>',
+      'Hostname: <local>',
+      'USERNAME=<local>',
+      '"user.name": "<local>"',
+      'dossier /srv/<local>/game et C:\\Jeux\\<local>\\logs',
+      'al dente, alpha, val',
+    ].join('\n'),
+  );
+});

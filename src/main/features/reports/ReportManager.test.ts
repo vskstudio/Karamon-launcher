@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ReportManager } from './ReportManager.ts';
-import { ReportQueue } from './ReportQueue.ts';
+import { MAX_FAILED_DELIVERIES, ReportQueue } from './ReportQueue.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
 
 function setup() {
@@ -14,6 +14,8 @@ function setup() {
   let transport: 'sent' | 'retry' | 'discard' = 'sent';
   let next = 1;
   const consent: Array<{ reportId: string; trigger: ReportTrigger; summary: string[] }> = [];
+  const logs: string[] = [];
+  let duringSend: (report: LauncherReport) => void = () => {};
   const manager = new ReportManager({
     collector: {
       collect: async ({ trigger, summary }): Promise<LauncherReport> => ({
@@ -23,13 +25,19 @@ function setup() {
       }),
     },
     queue,
-    transport: { send: async () => transport },
+    transport: { send: async (report) => { duringSend(report); return transport; } },
     context: () => ({ gameDir: '/game', ramMb: 8192 }),
     autoSend: () => automatic,
     setAutoSend: (value) => { automatic = value; },
     requestConsent: (request) => { consent.push(request); },
+    log: (message) => { logs.push(message); },
   });
-  return { root, queue, manager, consent, automatic: () => automatic, setTransport: (value: typeof transport) => { transport = value; } };
+  return {
+    root, queue, manager, consent, logs,
+    automatic: () => automatic,
+    setTransport: (value: typeof transport) => { transport = value; },
+    setDuringSend: (hook: typeof duringSend) => { duringSend = hook; },
+  };
 }
 
 test('une détection sans envoi automatique attend le consentement', async () => {
@@ -113,6 +121,27 @@ test('une erreur du transport reste silencieuse et garde le rapport', async () =
   assert.deepEqual(await manager.detect('crash', ['x']), { status: 'queued', code: 'fedcba98' });
   assert.equal(queue.list('approved').length, 1);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('abandonne un rapport après cinq envois ratés', async () => {
+  const f = setup();
+  f.setTransport('retry');
+  assert.equal((await f.manager.sendManual()).status, 'queued');
+  for (let failed = 2; failed < MAX_FAILED_DELIVERIES; failed++) await f.manager.start();
+  assert.equal(f.queue.list('approved').length, 1);
+  await f.manager.start();
+  assert.equal(f.queue.list().length, 0);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('un rapport retiré de la file pendant son envoi n’est pas annoncé comme abandonné', async () => {
+  const f = setup();
+  f.setTransport('retry');
+  f.setDuringSend((report) => f.queue.remove(report.reportId));
+  assert.equal((await f.manager.sendManual()).status, 'failed');
+  assert.ok(f.logs.some((line) => line.includes('retiré de la file pendant son envoi')));
+  assert.ok(!f.logs.some((line) => line.includes('abandonné')));
+  fs.rmSync(f.root, { recursive: true, force: true });
 });
 
 test('au démarrage réessaie les approuvés et repropose les consentements', async () => {
