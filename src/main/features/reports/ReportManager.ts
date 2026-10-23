@@ -1,5 +1,5 @@
 import type { CollectReportInput } from './ReportCollector.ts';
-import type { ReportQueue } from './ReportQueue.ts';
+import { MAX_FAILED_DELIVERIES, type ReportQueue } from './ReportQueue.ts';
 import type { ReportTransportResult } from './ReportTransport.ts';
 import type { LauncherReport, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
 
@@ -11,7 +11,7 @@ export interface ReportConsentRequest {
 
 export interface ReportManagerOptions {
   collector: { collect(input: CollectReportInput): Promise<LauncherReport> };
-  queue: Pick<ReportQueue, 'enqueue' | 'list' | 'approve' | 'remove' | 'mayAutoSend' | 'markAutoSent'>;
+  queue: Pick<ReportQueue, 'enqueue' | 'list' | 'approve' | 'remove' | 'recordFailedDelivery' | 'mayAutoSend' | 'markAutoSent'>;
   transport: { send(report: LauncherReport): Promise<ReportTransportResult> };
   context: () => { gameDir: string; ramMb: number };
   autoSend: () => boolean;
@@ -112,6 +112,10 @@ export class ReportManager {
     if (state === 'discard') {
       this.options.queue.remove(report.reportId);
       this.log(`Rapport ${shortCode(report)} refusé définitivement par le panel.`);
+      return result('failed', report);
+    }
+    if (!this.options.queue.recordFailedDelivery(report.reportId)) {
+      this.log(`Rapport ${shortCode(report)} abandonné après ${MAX_FAILED_DELIVERIES} envois ratés.`);
       return result('failed', report);
     }
     this.log(`Rapport ${shortCode(report)} en attente d'envoi.`);

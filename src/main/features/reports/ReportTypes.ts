@@ -26,6 +26,7 @@ export interface QueuedReport {
   state: ReportQueueState;
   createdAt: number;
   report: LauncherReport;
+  failedDeliveries?: number;
 }
 
 export type ReportSendStatus = 'sent' | 'queued' | 'skipped' | 'failed';

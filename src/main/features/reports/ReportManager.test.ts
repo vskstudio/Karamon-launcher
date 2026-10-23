@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ReportManager } from './ReportManager.ts';
-import { ReportQueue } from './ReportQueue.ts';
+import { MAX_FAILED_DELIVERIES, ReportQueue } from './ReportQueue.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
 
 function setup() {
@@ -113,6 +113,17 @@ test('une erreur du transport reste silencieuse et garde le rapport', async () =
   assert.deepEqual(await manager.detect('crash', ['x']), { status: 'queued', code: 'fedcba98' });
   assert.equal(queue.list('approved').length, 1);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('abandonne un rapport après cinq envois ratés', async () => {
+  const f = setup();
+  f.setTransport('retry');
+  assert.equal((await f.manager.sendManual()).status, 'queued');
+  for (let failed = 2; failed < MAX_FAILED_DELIVERIES; failed++) await f.manager.start();
+  assert.equal(f.queue.list('approved').length, 1);
+  await f.manager.start();
+  assert.equal(f.queue.list().length, 0);
+  fs.rmSync(f.root, { recursive: true, force: true });
 });
 
 test('au démarrage réessaie les approuvés et repropose les consentements', async () => {
