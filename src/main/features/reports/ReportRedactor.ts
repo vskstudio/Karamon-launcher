@@ -1,13 +1,18 @@
 import net from 'net';
 
 const MASKED = '[masqué]';
+const MIN_LOCAL_NAME_LENGTH = 3;
 
 /** Removes local identity, credentials and network addresses from diagnostic text. */
-export function redactReportText(text: string, homeDir?: string): string {
+export function redactReportText(text: string, homeDir?: string, localNames: string[] = []): string {
   let result = text;
 
   if (homeDir) {
     result = result.replace(new RegExp(escapeRegex(homeDir), windowsPath(homeDir) ? 'gi' : 'g'), '<user>');
+  }
+  for (const name of localNames) {
+    if (name.trim().length < MIN_LOCAL_NAME_LENGTH) continue;
+    result = result.replace(new RegExp(`(?<![A-Za-z0-9_])${escapeRegex(name.trim())}(?![A-Za-z0-9_])`, 'gi'), '<local>');
   }
 
   result = result
@@ -17,6 +22,8 @@ export function redactReportText(text: string, homeDir?: string): string {
     .replace(/(--accessToken(?:\s+|=))(?:(['"])[\s\S]*?\2|\S+)/gi, `$1${MASKED}`)
     .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, `$1${MASKED}`)
     .replace(/\bBearer\s+[^\s,;]+/gi, `Bearer ${MASKED}`)
+    .replace(/(connecté en tant que |logged in as )\S+/gi, `$1${MASKED}`)
+    .replace(/(\[CHAT\] ).*$/gm, `$1${MASKED}`)
     .replace(
       /((?:["']?(?:accessToken|access_token|refreshToken|refresh_token|session)["']?)\s*[:=]\s*)(["']?)([^\s"',;}\]]+)\2/gi,
       (_match, prefix: string, quote: string) => `${prefix}${quote}${MASKED}${quote}`,

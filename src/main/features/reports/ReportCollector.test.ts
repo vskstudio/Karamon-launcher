@@ -25,6 +25,7 @@ function fixture() {
     platform: 'linux',
     arch: 'x64',
     homeDir: '/home/alice',
+    localNames: [],
     uuid: () => '123e4567-e89b-42d3-a456-426614174000',
   });
   return { root, dataDir, gameDir, collector };

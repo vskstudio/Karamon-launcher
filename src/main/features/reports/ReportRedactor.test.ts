@@ -74,3 +74,17 @@ test('applique tous les masques en un seul passage', () => {
   );
   assert.equal(output, String.raw`<user>\game lancé sur <ip> avec --accessToken [masqué]`);
 });
+
+test('masque le pseudo Discord, le chat des joueurs et les noms de la machine', () => {
+  const input = [
+    '[15:43:06] [Discord] connecté en tant que joueur_discord_test',
+    '[15:50:01] [Render thread/INFO]: [System] [CHAT] <JoueurTest> mon mot de passe est hunter2',
+    '[15:50:02] Hostname: Machine-De-Test, user utilisateur_test',
+  ].join('\n');
+  const output = redactReportText(input, undefined, ['Machine-De-Test', 'utilisateur_test', 'ab']);
+  for (const leaked of ['joueur_discord_test', 'JoueurTest', 'hunter2', 'Machine-De-Test', 'utilisateur_test']) {
+    assert.ok(!output.includes(leaked), output);
+  }
+  assert.ok(output.includes('[CHAT] [masqué]'), output);
+  assert.ok(output.includes('Hostname: <local>, user <local>'), output);
+});

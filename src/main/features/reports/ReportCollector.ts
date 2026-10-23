@@ -22,6 +22,7 @@ export interface ReportCollectorOptions {
   platform?: string;
   arch?: string;
   homeDir?: string;
+  localNames?: string[];
   uuid?: () => string;
 }
 
@@ -85,7 +86,7 @@ export class ReportCollector {
   }
 
   private redact(value: string): string {
-    return redactReportText(value, this.options.homeDir ?? os.homedir());
+    return redactReportText(value, this.options.homeDir ?? os.homedir(), this.options.localNames ?? localMachineNames());
   }
 
   private async optional<T>(getter: (() => Promise<T | undefined>) | undefined, fallback: T): Promise<T> {
@@ -96,6 +97,16 @@ export class ReportCollector {
       return fallback;
     }
   }
+}
+
+function localMachineNames(): string[] {
+  const names = [os.hostname().replace(/\.local$/i, '')];
+  try {
+    names.push(os.userInfo().username);
+  } catch {
+    return names;
+  }
+  return names;
 }
 
 function newestFile(dir: string, accepts: (name: string) => boolean): string | null {
