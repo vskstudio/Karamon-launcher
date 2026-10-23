@@ -10,6 +10,15 @@ const MIB = 1024 * KIB;
 export const MAX_REPORT_JSON_BYTES = 5 * MIB;
 const SUMMARY_MAX_TAGS = 20;
 const SUMMARY_TAG_LENGTH = 200;
+const PANEL_FILE_NAME_MAX = 128;
+
+export function panelFileLimit(name: string): number | undefined {
+  if (name.length > PANEL_FILE_NAME_MAX || name.includes('..') || !/^[A-Za-z0-9._-]+$/.test(name)) return undefined;
+  if (name === 'launcher.log') return 256 * KIB;
+  if (name === 'latest.log') return 512 * KIB;
+  if ((name.startsWith('crash-') && name.endsWith('.txt')) || (name.startsWith('hs_err_pid') && name.endsWith('.log'))) return MIB;
+  return undefined;
+}
 
 export interface ReportCollectorOptions {
   dataDir: string;
@@ -70,18 +79,22 @@ export class ReportCollector {
   }
 
   private collectFiles(gameDir: string, redact: (text: string) => string): ReportFile[] {
-    const candidates: Array<{ file: string | null; limit: number }> = [
-      { file: path.join(this.options.dataDir, 'logs', 'launcher.log'), limit: 256 * KIB },
-      { file: path.join(gameDir, 'logs', 'latest.log'), limit: 512 * KIB },
-      { file: newestFile(path.join(gameDir, 'crash-reports'), (name) => /^crash-.*\.txt$/i.test(name)), limit: MIB },
-      { file: newestFile(gameDir, (name) => /^hs_err_pid\d+\.log$/i.test(name)), limit: MIB },
+    const accepted = (pattern: RegExp) => (name: string) => pattern.test(name) && panelFileLimit(name) !== undefined;
+    const candidates = [
+      path.join(this.options.dataDir, 'logs', 'launcher.log'),
+      path.join(gameDir, 'logs', 'latest.log'),
+      newestFile(path.join(gameDir, 'crash-reports'), accepted(/^crash-.*\.txt$/)),
+      newestFile(gameDir, accepted(/^hs_err_pid\d+\.log$/)),
     ];
     const files: ReportFile[] = [];
-    for (const { file, limit } of candidates) {
+    for (const file of candidates) {
       if (!file) continue;
+      const name = path.basename(file);
+      const limit = panelFileLimit(name);
+      if (limit === undefined) continue;
       const content = readUtf8Tail(file, limit);
       if (!content) continue;
-      files.push({ name: path.basename(file), content: redact(content) });
+      files.push({ name, content: fitRedactedTail(redact(content), limit) });
     }
     return files;
   }
@@ -149,6 +162,14 @@ export function readUtf8Tail(file: string, limitBytes: number): string {
   } catch {
     return '';
   }
+}
+
+export function fitRedactedTail(text: string, limitBytes: number): string {
+  if (Buffer.byteLength(text) <= limitBytes) return text;
+  const body = Buffer.from(text.startsWith(TRUNCATED_MARKER) ? text.slice(TRUNCATED_MARKER.length) : text);
+  const window = body.subarray(body.length - Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES));
+  const firstLineEnd = window.indexOf(0x0a);
+  return TRUNCATED_MARKER + (firstLineEnd < 0 ? '' : window.subarray(firstLineEnd + 1).toString('utf8'));
 }
 
 function fitReport(report: LauncherReport): LauncherReport {

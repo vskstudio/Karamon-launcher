@@ -109,11 +109,16 @@ test('ne masque jamais les noms génériques comme minecraft, localhost ou dev',
 });
 
 test('masque un nom générique après une clé d\'identité', () => {
-  const input = ['user.name=admin', 'Hostname: desktop, user root', 'USERNAME="dev"'].join('\n');
+  const input = ['user.name=admin', 'Hostname: desktop, user=root', 'USERNAME="dev"', '"user": "guest"'].join('\n');
   assert.equal(
-    redactReportText(input, undefined, ['admin', 'desktop', 'root', 'dev']),
-    ['user.name=<local>', 'Hostname: <local>, user <local>', 'USERNAME="<local>"'].join('\n'),
+    redactReportText(input, undefined, ['admin', 'desktop', 'root', 'dev', 'guest']),
+    ['user.name=<local>', 'Hostname: <local>, user=<local>', 'USERNAME="<local>"', '"user": "<local>"'].join('\n'),
   );
+});
+
+test('ne masque pas un nom générique qui suit une clé d\'identité sans séparateur', () => {
+  const input = ['user home directory', 'host server started', 'Using user default settings'].join('\n');
+  assert.equal(redactReportText(input, undefined, ['home', 'server', 'default']), input);
 });
 
 test('masque un nom court seulement après une clé d\'identité ou comme dossier entier', () => {

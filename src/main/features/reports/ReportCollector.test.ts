@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { ReportCollector } from './ReportCollector.ts';
+import { panelFileLimit, ReportCollector } from './ReportCollector.ts';
 import { isGenericName } from './ReportRedactor.ts';
 
 const KIB = 1024;
@@ -93,6 +93,37 @@ test('garde le fichier avec une marque de troncature quand la fin lue tient sur 
   assert.ok(latest);
   assert.equal(latest.content, '[début tronqué]\n');
   fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('garde chaque fichier sous la limite du panel quand le masquage allonge le texte', async () => {
+  const f = fixture();
+  const line = `${'bob '.repeat(25)}\n`;
+  write(path.join(f.gameDir, 'logs', 'latest.log'), line.repeat(Math.floor((512 * KIB) / line.length)));
+  const collector = new ReportCollector({
+    dataDir: f.dataDir,
+    launcherVersion: '2.1.0',
+    bundledPackVersion: '0.9.4',
+    homeDir: '/home/alice',
+    localNames: ['bob'],
+    uuid: () => '123e4567-e89b-42d3-a456-426614174003',
+  });
+  const report = await collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  const latest = report.files.find((file) => file.name === 'latest.log');
+  assert.ok(latest);
+  assert.ok(Buffer.byteLength(latest.content) <= 512 * KIB);
+  assert.ok(latest.content.startsWith('[début tronqué]\n<local> '));
+  assert.ok(!latest.content.includes('bob'));
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('applique exactement les noms et les limites de fichier du panel', () => {
+  assert.equal(panelFileLimit('launcher.log'), 256 * KIB);
+  assert.equal(panelFileLimit('latest.log'), 512 * KIB);
+  assert.equal(panelFileLimit('crash-2026-10-15_12.00.00-client.txt'), 1024 * KIB);
+  assert.equal(panelFileLimit('hs_err_pid123.log'), 1024 * KIB);
+  for (const refused of ['Crash-2026.TXT', 'crash-a b.txt', 'crash-..txt', '../latest.log', 'options.txt', `crash-${'x'.repeat(120)}.txt`]) {
+    assert.equal(panelFileLimit(refused), undefined, refused);
+  }
 });
 
 test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur', async (t) => {

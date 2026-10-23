@@ -66,8 +66,10 @@ function maskLocalNames(text: string, localNames: readonly string[]): string {
     const name = raw.trim();
     if (name.length === 0) continue;
     const escaped = escapeRegex(name);
-    result = result.replace(new RegExp(`(${IDENTITY_KEY}["']?(?:\\s*[:=]\\s*|\\s+)["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`);
-    if (isGenericName(name)) continue;
+    const generic = isGenericName(name);
+    const separator = generic ? String.raw`\s*[:=]\s*` : String.raw`(?:\s*[:=]\s*|\s+)`;
+    result = result.replace(new RegExp(`(${IDENTITY_KEY}["']?${separator}["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`);
+    if (generic) continue;
     result = result.replace(new RegExp(`(?<=[\\\\/])${escaped}(?=[\\\\/]|$|[\\s"'])`, 'gim'), LOCAL);
     if (name.length >= MIN_FREE_WORD_LENGTH) {
       result = result.replace(new RegExp(`(?<![A-Za-z0-9_./\\\\])${escaped}(?![A-Za-z0-9_/\\\\]|\\.[A-Za-z0-9_])`, 'gi'), LOCAL);
