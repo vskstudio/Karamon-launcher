@@ -45,6 +45,7 @@ const MIN_MEMORY_MB = 2048;
 const MEMORY_STEP_MB = 512;
 const RECOMMENDED_MIN_MB = 8192;
 const RECOMMENDED_MAX_MB = 12288;
+const PACK_MIN_MEMORY_MB = 4096;
 const AUTO_JAVA = '';
 const CUSTOM_JAVA = '__custom__';
 const CUSTOM_PRESET = 'custom';
@@ -429,7 +430,9 @@ export class SettingsPage implements Page {
     this.potatoMemory.textContent =
       cap === null
         ? 'Mémoire : ton réglage est gardé.'
-        : `Mémoire limitée à ${SettingsPage.formatGo(cap)} au plus (ton PC a ${totalGo} Go de RAM), pour laisser de la place au système. Un réglage plus bas est gardé.`;
+        : cap < PACK_MIN_MEMORY_MB
+          ? `Mémoire limitée à ${SettingsPage.formatGo(cap)} (ton PC a ${totalGo} Go de RAM) : c'est trop peu pour le pack, il risque de planter au chargement.`
+          : `Mémoire limitée à ${SettingsPage.formatGo(cap)} au plus (ton PC a ${totalGo} Go de RAM), pour laisser de la place au système. Un réglage plus bas est gardé.`;
     const suggested = system.lowEndReasons.length > 0;
     this.potatoBadge.replaceWith((this.potatoBadge = suggested ? badge('Conseillé pour ce PC', 'amber') : h('span')));
     if (suggested) this.potatoBadge.title = system.lowEndReasons.join(', ');

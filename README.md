@@ -73,7 +73,7 @@ Tant qu'il est actif, avant chaque lancement :
 - les shaders sont coupés. Ton shader reste sélectionné, et tu peux les rallumer en jeu jusqu'au lancement suivant ;
 - les graphismes sont baissés : distance de rendu 6 et simulation 5 (comme le serveur), mode rapide, sans occlusion ambiante, nuages, ombres d'entités ni flou des menus, particules minimales, pas de mélange des biomes ni de mipmaps, entités affichées moins loin, feuilles et météo rapides dans Sodium. Un réglage que tu as déjà mis plus bas n'est jamais remonté ;
 - quatre mods qui ne servent qu'à l'image et au son, et que le serveur ne demande pas, sont désactivés : Voxy, Particular, Particle Rain et Sound Physics Remastered ;
-- si ton PC a 8 Go de RAM ou moins, le jeu démarre avec 4 Go au plus (2 à 2,5 Go sur 4 à 6 Go de RAM), avec des réglages de mémoire légers si tu n'as pas choisi les tiens.
+- si ton PC a 8 Go de RAM ou moins, le jeu démarre avec 4 Go au plus, le minimum du pack (2 Go sur un PC à 4 Go de RAM, trop peu pour le pack : le launcher le signale), avec des réglages de mémoire légers si tu n'as pas choisi les tiens.
 
 Quand tu le coupes, tes réglages d'avant et les mods reviennent. Un réglage que tu as changé toi-même pendant que le mode était actif reste comme tu l'as mis. Les mods désactivés restent vérifiés par « Réparer l'installation » : ils sont gardés en `.jar.disabled` et ne sont pas retéléchargés.
 

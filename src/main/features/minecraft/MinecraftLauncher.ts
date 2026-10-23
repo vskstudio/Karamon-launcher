@@ -12,7 +12,7 @@ import { repairCorruptConfigs, repairMessage, type ConfigRepairResult } from '..
 import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/CrashDiagnosis';
 import { ServersDat } from './ServersDat';
 import { PotatoMode, potatoSummary, type PotatoReport } from '../potato/PotatoMode';
-import { potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
+import { PACK_MIN_MEMORY_MB, potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
 import { SodiumOff, sodiumSummary } from '../sodium/SodiumOff';
 import type { ParkingReport } from '../modpack/JarParking';
 import type { GameLauncher } from './GameLauncher';
@@ -147,6 +147,11 @@ export class MinecraftLauncher {
     if (jvm.memoryMb < memoryMb) {
       events.onStatus(
         `Mode PC modeste : le jeu démarre avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire (réglage : ${MinecraftLauncher.go(memoryMb)}).`,
+      );
+    }
+    if (jvm.memoryMb < PACK_MIN_MEMORY_MB) {
+      events.onStatus(
+        `Attention : avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire, le pack risque de planter au chargement (il lui faut ${MinecraftLauncher.go(PACK_MIN_MEMORY_MB)}).`,
       );
     }
 
