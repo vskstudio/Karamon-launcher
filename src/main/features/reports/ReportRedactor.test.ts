@@ -88,3 +88,44 @@ test('masque le pseudo Discord, le chat des joueurs et les noms de la machine', 
   assert.ok(output.includes('[CHAT] [masqué]'), output);
   assert.ok(output.includes('Hostname: <local>, user <local>'), output);
 });
+
+test('ne masque pas un nom de la machine collé à un point ou à un slash de paquet', () => {
+  const output = redactReportText(
+    'at dev.karamon.Foo.run(Foo.java:3)\nkaramon.jar chargé\nuser karamon, Bonjour karamon.',
+    undefined,
+    ['karamon'],
+  );
+  assert.equal(output, 'at dev.karamon.Foo.run(Foo.java:3)\nkaramon.jar chargé\nuser <local>, Bonjour <local>.');
+});
+
+test('ne masque jamais les noms génériques comme minecraft, localhost ou dev', () => {
+  const input = [
+    'at net.minecraft.client.Minecraft.run(Minecraft.java:12)',
+    'connexion à localhost:25565',
+    'at dev.karamon.Foo.run(Foo.java:3)',
+    'Hostname: desktop, user root',
+  ].join('\n');
+  assert.equal(redactReportText(input, undefined, ['minecraft', 'Localhost', 'dev', 'desktop', 'root']), input);
+});
+
+test('masque un nom court seulement après une clé d\'identité ou comme dossier entier', () => {
+  const input = [
+    'user al',
+    'Hostname: al',
+    'USERNAME=al',
+    '"user.name": "al"',
+    'dossier /srv/al/game et C:\\Jeux\\al\\logs',
+    'al dente, alpha, val',
+  ].join('\n');
+  assert.equal(
+    redactReportText(input, undefined, ['al']),
+    [
+      'user <local>',
+      'Hostname: <local>',
+      'USERNAME=<local>',
+      '"user.name": "<local>"',
+      'dossier /srv/<local>/game et C:\\Jeux\\<local>\\logs',
+      'al dente, alpha, val',
+    ].join('\n'),
+  );
+});

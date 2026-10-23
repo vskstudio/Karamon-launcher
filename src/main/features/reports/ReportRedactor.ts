@@ -1,7 +1,30 @@
 import net from 'net';
 
 const MASKED = '[masqué]';
-const MIN_LOCAL_NAME_LENGTH = 3;
+const LOCAL = '<local>';
+const MIN_FREE_WORD_LENGTH = 3;
+const GENERIC_NAMES = new Set([
+  'admin',
+  'default',
+  'desktop',
+  'dev',
+  'guest',
+  'home',
+  'java',
+  'laptop',
+  'linux',
+  'localhost',
+  'mac',
+  'macbook',
+  'minecraft',
+  'pc',
+  'root',
+  'server',
+  'ubuntu',
+  'user',
+  'windows',
+]);
+const IDENTITY_KEY = String.raw`(?<![A-Za-z0-9_])(?:user(?:[ ._-]?name)?|utilisateur|nom d'utilisateur|host(?:[ _-]?name)?|computer[ _-]?name|machine)`;
 
 /** Removes local identity, credentials and network addresses from diagnostic text. */
 export function redactReportText(text: string, homeDir?: string, localNames: string[] = []): string {
@@ -10,10 +33,7 @@ export function redactReportText(text: string, homeDir?: string, localNames: str
   if (homeDir) {
     result = result.replace(new RegExp(escapeRegex(homeDir), windowsPath(homeDir) ? 'gi' : 'g'), '<user>');
   }
-  for (const name of localNames) {
-    if (name.trim().length < MIN_LOCAL_NAME_LENGTH) continue;
-    result = result.replace(new RegExp(`(?<![A-Za-z0-9_])${escapeRegex(name.trim())}(?![A-Za-z0-9_])`, 'gi'), '<local>');
-  }
+  result = maskLocalNames(result, localNames);
 
   result = result
     // Windows: plain, JSON-escaped (\\) or forward-slash separators.
@@ -39,6 +59,22 @@ export function redactReportText(text: string, homeDir?: string, localNames: str
     net.isIP(candidate) === 6 ? '<ip>' : whole,
   );
 
+  return result;
+}
+
+function maskLocalNames(text: string, localNames: readonly string[]): string {
+  let result = text;
+  for (const raw of localNames) {
+    const name = raw.trim();
+    if (name.length === 0 || GENERIC_NAMES.has(name.toLowerCase())) continue;
+    const escaped = escapeRegex(name);
+    result = result
+      .replace(new RegExp(`(${IDENTITY_KEY}["']?(?:\\s*[:=]\\s*|\\s+)["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`)
+      .replace(new RegExp(`(?<=[\\\\/])${escaped}(?=[\\\\/]|$|[\\s"'])`, 'gim'), LOCAL);
+    if (name.length >= MIN_FREE_WORD_LENGTH) {
+      result = result.replace(new RegExp(`(?<![A-Za-z0-9_./\\\\])${escaped}(?![A-Za-z0-9_/\\\\]|\\.[A-Za-z0-9_])`, 'gi'), LOCAL);
+    }
+  }
   return result;
 }
 

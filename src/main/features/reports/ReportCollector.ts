@@ -46,7 +46,8 @@ export class ReportCollector {
       this.optional(this.options.getJavaVersion, 'inconnu'),
       this.optional(this.options.getGpu, undefined),
     ]);
-    const files = this.collectFiles(input.gameDir);
+    const redact = this.redactor();
+    const files = this.collectFiles(input.gameDir, redact);
     const playerName = this.options.getPlayerName?.();
     const report: LauncherReport = {
       reportId: (this.options.uuid ?? crypto.randomUUID)(),
@@ -58,17 +59,17 @@ export class ReportCollector {
       ramMb: input.ramMb,
       trigger: input.trigger,
       summary: input.summary
-        .map((tag) => this.redact(tag).trim().slice(0, SUMMARY_TAG_LENGTH))
+        .map((tag) => redact(tag).trim().slice(0, SUMMARY_TAG_LENGTH))
         .filter((tag) => tag.length > 0)
         .slice(0, SUMMARY_MAX_TAGS),
       files,
-      ...(gpu ? { gpu: this.redact(gpu) } : {}),
+      ...(gpu ? { gpu: redact(gpu) } : {}),
       ...(playerName ? { playerName } : {}),
     };
     return fitReport(report);
   }
 
-  private collectFiles(gameDir: string): ReportFile[] {
+  private collectFiles(gameDir: string, redact: (text: string) => string): ReportFile[] {
     const candidates: Array<{ file: string | null; limit: number }> = [
       { file: path.join(this.options.dataDir, 'logs', 'launcher.log'), limit: 256 * KIB },
       { file: path.join(gameDir, 'logs', 'latest.log'), limit: 512 * KIB },
@@ -80,13 +81,15 @@ export class ReportCollector {
       if (!file) continue;
       const content = readUtf8Tail(file, limit);
       if (!content) continue;
-      files.push({ name: path.basename(file), content: this.redact(content) });
+      files.push({ name: path.basename(file), content: redact(content) });
     }
     return files;
   }
 
-  private redact(value: string): string {
-    return redactReportText(value, this.options.homeDir ?? os.homedir(), this.options.localNames ?? localMachineNames());
+  private redactor(): (text: string) => string {
+    const homeDir = this.options.homeDir ?? os.homedir();
+    const localNames = this.options.localNames ?? localMachineNames();
+    return (text) => redactReportText(text, homeDir, localNames);
   }
 
   private async optional<T>(getter: (() => Promise<T | undefined>) | undefined, fallback: T): Promise<T> {
@@ -132,10 +135,11 @@ export function readUtf8Tail(file: string, limitBytes: number): string {
       const size = fs.fstatSync(fd).size;
       const length = Math.min(size, limitBytes);
       const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, size - length);
-      let start = 0;
-      while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) start++;
-      return buffer.subarray(start).toString('utf8');
+      const offset = size - length;
+      fs.readSync(fd, buffer, 0, length, offset);
+      if (offset === 0) return buffer.toString('utf8');
+      const firstLineEnd = buffer.indexOf(0x0a);
+      return firstLineEnd < 0 ? '' : buffer.subarray(firstLineEnd + 1).toString('utf8');
     } finally {
       fs.closeSync(fd);
     }
