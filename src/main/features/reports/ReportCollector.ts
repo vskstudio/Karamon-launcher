@@ -128,18 +128,21 @@ function newestFile(dir: string, accepts: (name: string) => boolean): string | n
   return newest?.file ?? null;
 }
 
+const TRUNCATED_MARKER = '[début tronqué]\n';
+const TRUNCATED_MARKER_BYTES = Buffer.byteLength(TRUNCATED_MARKER);
+
 export function readUtf8Tail(file: string, limitBytes: number): string {
   try {
     const fd = fs.openSync(file, 'r');
     try {
       const size = fs.fstatSync(fd).size;
-      const length = Math.min(size, limitBytes);
+      const length = size <= limitBytes ? size : Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES);
       const buffer = Buffer.alloc(length);
-      const offset = size - length;
-      fs.readSync(fd, buffer, 0, length, offset);
-      if (offset === 0) return buffer.toString('utf8');
+      fs.readSync(fd, buffer, 0, length, size - length);
+      if (length === size) return buffer.toString('utf8');
       const firstLineEnd = buffer.indexOf(0x0a);
-      return firstLineEnd < 0 ? '' : buffer.subarray(firstLineEnd + 1).toString('utf8');
+      const completeLines = firstLineEnd < 0 ? '' : buffer.subarray(firstLineEnd + 1).toString('utf8');
+      return TRUNCATED_MARKER + completeLines;
     } finally {
       fs.closeSync(fd);
     }

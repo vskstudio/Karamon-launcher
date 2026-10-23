@@ -4,6 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ReportCollector } from './ReportCollector.ts';
+import { isGenericName } from './ReportRedactor.ts';
 
 const KIB = 1024;
 
@@ -73,22 +74,36 @@ test('collecte les métadonnées et anonymise les fins de logs aux limites prév
 test('écarte la ligne coupée au début de la fin lue pour ne pas laisser fuir un message du chat', async () => {
   const f = fixture();
   const chat = '[15:50:01] [Render thread/INFO]: [CHAT] <JoueurTest> mon mot de passe est hunter2\n';
-  write(path.join(f.gameDir, 'logs', 'latest.log'), `${'a'.repeat(100)}\n${chat}${'b'.repeat(512 * KIB - 41)}\nfin du log`);
+  write(path.join(f.gameDir, 'logs', 'latest.log'), `${'a'.repeat(100)}\n${chat}${'b'.repeat(512 * KIB - 60)}\nfin du log`);
   const report = await f.collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
   assert.ok(!latest.content.includes('hunter2'), latest.content.slice(0, 80));
+  assert.ok(latest.content.startsWith('[début tronqué]\n'));
   assert.ok(latest.content.endsWith('\nfin du log'));
+  assert.ok(Buffer.byteLength(latest.content) <= 512 * KIB);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 
-test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur', async () => {
+test('garde le fichier avec une marque de troncature quand la fin lue tient sur une seule ligne coupée', async () => {
   const f = fixture();
+  write(path.join(f.gameDir, 'logs', 'latest.log'), `[CHAT] <JoueurTest> mon code est hunter2 ${'z'.repeat(600 * KIB)}`);
+  const report = await f.collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  const latest = report.files.find((file) => file.name === 'latest.log');
+  assert.ok(latest);
+  assert.equal(latest.content, '[début tronqué]\n');
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur', async (t) => {
   const hostname = os.hostname().replace(/\.local$/i, '');
   const username = os.userInfo().username;
-  const generic = new Set(['admin', 'default', 'desktop', 'dev', 'guest', 'home', 'java', 'laptop', 'linux', 'localhost', 'mac', 'macbook', 'minecraft', 'pc', 'root', 'server', 'ubuntu', 'user', 'windows']);
-  const checked = [hostname, username].filter((name) => name.length > 0 && !generic.has(name.toLowerCase()));
-  assert.ok(checked.length > 0, 'ce poste n\'a aucun nom à vérifier');
+  const checked = [hostname, username].filter((name) => name.length > 0 && !isGenericName(name));
+  if (checked.length === 0) {
+    t.skip('les deux noms de ce poste sont génériques, rien à vérifier');
+    return;
+  }
+  const f = fixture();
   write(path.join(f.gameDir, 'logs', 'latest.log'), `Hostname: ${hostname}\nuser ${username}\n`);
   const collector = new ReportCollector({
     dataDir: f.dataDir,
@@ -101,8 +116,9 @@ test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
   for (const name of checked) {
-    assert.ok(!new RegExp(`(?<![A-Za-z0-9_])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`, 'i').test(latest.content), latest.content);
-    assert.ok(!report.summary.join('\n').toLowerCase().includes(name.toLowerCase()), report.summary.join('\n'));
+    const stillThere = new RegExp(`(?<![A-Za-z0-9_])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`, 'i');
+    assert.ok(!stillThere.test(latest.content), 'un nom de la machine reste dans latest.log');
+    assert.ok(!report.summary.join('\n').toLowerCase().includes(name.toLowerCase()), 'un nom de la machine reste dans le résumé');
   }
   fs.rmSync(f.root, { recursive: true, force: true });
 });

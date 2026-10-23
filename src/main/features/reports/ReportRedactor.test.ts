@@ -103,9 +103,17 @@ test('ne masque jamais les noms génériques comme minecraft, localhost ou dev',
     'at net.minecraft.client.Minecraft.run(Minecraft.java:12)',
     'connexion à localhost:25565',
     'at dev.karamon.Foo.run(Foo.java:3)',
-    'Hostname: desktop, user root',
+    'le root du dossier /srv/root/game sur desktop',
   ].join('\n');
   assert.equal(redactReportText(input, undefined, ['minecraft', 'Localhost', 'dev', 'desktop', 'root']), input);
+});
+
+test('masque un nom générique après une clé d\'identité', () => {
+  const input = ['user.name=admin', 'Hostname: desktop, user root', 'USERNAME="dev"'].join('\n');
+  assert.equal(
+    redactReportText(input, undefined, ['admin', 'desktop', 'root', 'dev']),
+    ['user.name=<local>', 'Hostname: <local>, user <local>', 'USERNAME="<local>"'].join('\n'),
+  );
 });
 
 test('masque un nom court seulement après une clé d\'identité ou comme dossier entier', () => {

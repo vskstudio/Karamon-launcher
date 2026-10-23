@@ -26,7 +26,6 @@ const GENERIC_NAMES = new Set([
 ]);
 const IDENTITY_KEY = String.raw`(?<![A-Za-z0-9_])(?:user(?:[ ._-]?name)?|utilisateur|nom d'utilisateur|host(?:[ _-]?name)?|computer[ _-]?name|machine)`;
 
-/** Removes local identity, credentials and network addresses from diagnostic text. */
 export function redactReportText(text: string, homeDir?: string, localNames: string[] = []): string {
   let result = text;
 
@@ -36,7 +35,6 @@ export function redactReportText(text: string, homeDir?: string, localNames: str
   result = maskLocalNames(result, localNames);
 
   result = result
-    // Windows: plain, JSON-escaped (\\) or forward-slash separators.
     .replace(/\b([A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/))[^\\/"\r\n]+/gi, (_value, prefix: string) => `${prefix}<user>`)
     .replace(/\/(home|Users)\/[^/\s]+/g, (_value, root: string) => `/${root}/<user>`)
     .replace(/(--accessToken(?:\s+|=))(?:(['"])[\s\S]*?\2|\S+)/gi, `$1${MASKED}`)
@@ -66,16 +64,20 @@ function maskLocalNames(text: string, localNames: readonly string[]): string {
   let result = text;
   for (const raw of localNames) {
     const name = raw.trim();
-    if (name.length === 0 || GENERIC_NAMES.has(name.toLowerCase())) continue;
+    if (name.length === 0) continue;
     const escaped = escapeRegex(name);
-    result = result
-      .replace(new RegExp(`(${IDENTITY_KEY}["']?(?:\\s*[:=]\\s*|\\s+)["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`)
-      .replace(new RegExp(`(?<=[\\\\/])${escaped}(?=[\\\\/]|$|[\\s"'])`, 'gim'), LOCAL);
+    result = result.replace(new RegExp(`(${IDENTITY_KEY}["']?(?:\\s*[:=]\\s*|\\s+)["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`);
+    if (isGenericName(name)) continue;
+    result = result.replace(new RegExp(`(?<=[\\\\/])${escaped}(?=[\\\\/]|$|[\\s"'])`, 'gim'), LOCAL);
     if (name.length >= MIN_FREE_WORD_LENGTH) {
       result = result.replace(new RegExp(`(?<![A-Za-z0-9_./\\\\])${escaped}(?![A-Za-z0-9_/\\\\]|\\.[A-Za-z0-9_])`, 'gi'), LOCAL);
     }
   }
   return result;
+}
+
+export function isGenericName(name: string): boolean {
+  return GENERIC_NAMES.has(name.trim().toLowerCase());
 }
 
 function escapeRegex(value: string): string {
