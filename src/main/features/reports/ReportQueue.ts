@@ -8,6 +8,8 @@ const MAX_PENDING_REPORTS = 3;
 const AUTO_COOLDOWN_MS = 10 * 60 * 1000;
 export const MAX_FAILED_DELIVERIES = 5;
 
+export type FailedDeliveryOutcome = 'counted' | 'dropped' | 'missing';
+
 interface QueueMeta {
   lastAuto: Partial<Record<ReportTrigger, number>>;
 }
@@ -60,17 +62,17 @@ export class ReportQueue {
     return this.enqueue(item.report, 'approved', item.createdAt);
   }
 
-  recordFailedDelivery(reportId: string): boolean {
+  recordFailedDelivery(reportId: string): FailedDeliveryOutcome {
     const item = this.list().find((candidate) => candidate.report.reportId === reportId);
-    if (!item) return false;
+    if (!item) return 'missing';
     const failedDeliveries = (item.failedDeliveries ?? 0) + 1;
     if (failedDeliveries >= MAX_FAILED_DELIVERIES) {
       this.remove(reportId);
-      return false;
+      return 'dropped';
     }
     const updated = { ...item, failedDeliveries } satisfies QueuedReport;
     writeFileAtomic(this.fileFor(updated), zlib.gzipSync(Buffer.from(JSON.stringify(updated), 'utf8')));
-    return true;
+    return 'counted';
   }
 
   remove(reportId: string): void {

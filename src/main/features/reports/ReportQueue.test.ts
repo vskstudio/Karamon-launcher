@@ -52,11 +52,12 @@ test('un rapport en file sans compteur d’échecs part de zéro', () => {
   fs.writeFileSync(path.join(dir, '5-ancien.json.gz'), zlib.gzipSync(Buffer.from(JSON.stringify(legacy), 'utf8')));
   const queue = new ReportQueue(root);
   for (let failed = 1; failed < MAX_FAILED_DELIVERIES; failed++) {
-    assert.equal(queue.recordFailedDelivery('ancien'), true);
+    assert.equal(queue.recordFailedDelivery('ancien'), 'counted');
     assert.equal(new ReportQueue(root).list()[0].failedDeliveries, failed);
   }
-  assert.equal(queue.recordFailedDelivery('ancien'), false);
+  assert.equal(queue.recordFailedDelivery('ancien'), 'dropped');
   assert.deepEqual(new ReportQueue(root).list(), []);
+  assert.equal(queue.recordFailedDelivery('ancien'), 'missing');
   fs.rmSync(root, { recursive: true, force: true });
 });
 

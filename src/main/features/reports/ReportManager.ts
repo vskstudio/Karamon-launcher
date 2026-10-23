@@ -114,8 +114,13 @@ export class ReportManager {
       this.log(`Rapport ${shortCode(report)} refusé définitivement par le panel.`);
       return result('failed', report);
     }
-    if (!this.options.queue.recordFailedDelivery(report.reportId)) {
+    const outcome = this.options.queue.recordFailedDelivery(report.reportId);
+    if (outcome === 'dropped') {
       this.log(`Rapport ${shortCode(report)} abandonné après ${MAX_FAILED_DELIVERIES} envois ratés.`);
+      return result('failed', report);
+    }
+    if (outcome === 'missing') {
+      this.log(`Rapport ${shortCode(report)} retiré de la file pendant son envoi.`);
       return result('failed', report);
     }
     this.log(`Rapport ${shortCode(report)} en attente d'envoi.`);
