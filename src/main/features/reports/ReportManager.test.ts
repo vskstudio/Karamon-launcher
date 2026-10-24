@@ -68,8 +68,8 @@ test('toujours envoyer active le réglage et garde hors-ligne le même code', as
 
 test('limite les doublons automatiques mais jamais le bouton manuel', async () => {
   const f = setup();
-  await f.manager.detect('crash', ['premier'], 1_000);
-  assert.equal((await f.manager.detect('crash', ['doublon'], 2_000)).status, 'skipped');
+  await f.manager.detect('crash', ['premier'], undefined, 1_000);
+  assert.equal((await f.manager.detect('crash', ['doublon'], undefined, 2_000)).status, 'skipped');
   assert.equal((await f.manager.sendManual()).status, 'sent');
   assert.equal((await f.manager.sendManual()).status, 'sent');
   fs.rmSync(f.root, { recursive: true, force: true });

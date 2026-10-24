@@ -9,7 +9,7 @@ import {
   type ProgressEmitter,
 } from '../modpack/ModpackSync';
 import { repairCorruptConfigs, repairMessage, type ConfigRepairResult } from '../integrity/ConfigRepair';
-import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/CrashDiagnosis';
+import { detectCorruption, isEarlyCrash, readCrashEvidence, stoppedCleanly } from '../integrity/CrashDiagnosis';
 import { ServersDat } from './ServersDat';
 import { PotatoMode, potatoSummary, type PotatoReport } from '../potato/PotatoMode';
 import { PACK_MIN_MEMORY_MB, potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
@@ -173,7 +173,8 @@ export class MinecraftLauncher {
           const corruption = isEarlyCrash(code, spawnedAt, endedAt)
             ? detectCorruption(readCrashEvidence(gameDir, spawnedAt))
             : [];
-          events.onExit(code, corruption, exitTrigger(code, spawnedAt, endedAt));
+          const clean = code !== 0 && stoppedCleanly(gameDir, spawnedAt);
+          events.onExit(code, corruption, exitTrigger(code, spawnedAt, endedAt, clean));
         },
       },
     );

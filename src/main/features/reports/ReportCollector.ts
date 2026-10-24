@@ -40,6 +40,8 @@ export interface CollectReportInput {
   summary: string[];
   gameDir: string;
   ramMb: number;
+  /** Début de la session : un crash-report ou hs_err plus ancien vient d'une autre session. */
+  since?: number;
 }
 
 export class ReportCollector {
@@ -56,7 +58,7 @@ export class ReportCollector {
       this.optional(this.options.getGpu, undefined),
     ]);
     const redact = this.redactor();
-    const files = this.collectFiles(input.gameDir, redact);
+    const files = this.collectFiles(input.gameDir, redact, input.since ?? 0);
     const playerName = this.options.getPlayerName?.();
     const report: LauncherReport = {
       reportId: (this.options.uuid ?? crypto.randomUUID)(),
@@ -78,13 +80,13 @@ export class ReportCollector {
     return fitReport(report);
   }
 
-  private collectFiles(gameDir: string, redact: (text: string) => string): ReportFile[] {
+  private collectFiles(gameDir: string, redact: (text: string) => string, since: number): ReportFile[] {
     const accepted = (pattern: RegExp) => (name: string) => pattern.test(name) && panelFileLimit(name) !== undefined;
     const candidates = [
       path.join(this.options.dataDir, 'logs', 'launcher.log'),
       path.join(gameDir, 'logs', 'latest.log'),
-      newestFile(path.join(gameDir, 'crash-reports'), accepted(/^crash-.*\.txt$/)),
-      newestFile(gameDir, accepted(/^hs_err_pid\d+\.log$/)),
+      newestFile(path.join(gameDir, 'crash-reports'), accepted(/^crash-.*\.txt$/), since),
+      newestFile(gameDir, accepted(/^hs_err_pid\d+\.log$/), since),
     ];
     const files: ReportFile[] = [];
     for (const file of candidates) {
@@ -125,14 +127,14 @@ function localMachineNames(): string[] {
   return names;
 }
 
-function newestFile(dir: string, accepts: (name: string) => boolean): string | null {
+function newestFile(dir: string, accepts: (name: string) => boolean, since: number): string | null {
   let newest: { file: string; mtime: number } | null = null;
   try {
     for (const name of fs.readdirSync(dir)) {
       if (!accepts(name)) continue;
       const file = path.join(dir, name);
       const stat = fs.statSync(file);
-      if (!stat.isFile()) continue;
+      if (!stat.isFile() || stat.mtimeMs < since) continue;
       if (!newest || stat.mtimeMs > newest.mtime) newest = { file, mtime: stat.mtimeMs };
     }
   } catch {

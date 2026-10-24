@@ -181,9 +181,9 @@ export class KaramonApp {
   }
 
   /** Automatic report after a problem; a failure only lands in launcher.log. */
-  private reportProblem(trigger: AutomaticTrigger, summary: string[]): void {
+  private reportProblem(trigger: AutomaticTrigger, summary: string[], since: number): void {
     this.reports
-      .detect(trigger, summary)
+      .detect(trigger, summary, since)
       .then((result) => {
         if (result.status === 'sent') {
           this.window.send(Channels.eventStatus, `Rapport envoyé à l'équipe Karamon (code ${result.code}).`);
@@ -532,6 +532,7 @@ export class KaramonApp {
   }
 
   private async play(): Promise<LaunchResult> {
+    const startedAt = Date.now();
     const cfg = this.config.get();
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
@@ -558,7 +559,7 @@ export class KaramonApp {
           );
           if (corruption.length > 0) void this.repairAfterCrash(corruption);
           if (trigger) {
-            this.reportProblem(trigger, [`Code de sortie ${code}`, ...corruption, ...this.crashSummary(gameDir)]);
+            this.reportProblem(trigger, [`Code de sortie ${code}`, ...corruption, ...this.crashSummary(gameDir)], startedAt);
           }
         },
       });
@@ -574,7 +575,7 @@ export class KaramonApp {
       onStatus('Erreur: ' + msg);
       onProgress(0);
       if (!this.minecraft.isRunning()) this.window.send(Channels.eventGameState, { running: false });
-      this.reportProblem(failureTrigger(e), failureSummary(e));
+      this.reportProblem(failureTrigger(e), failureSummary(e), startedAt);
       return { ok: false, error: msg, loginRequired: e instanceof MicrosoftSessionExpired };
     }
   }
@@ -590,6 +591,7 @@ export class KaramonApp {
   }
 
   private async syncMods(): Promise<LaunchResult> {
+    const startedAt = Date.now();
     const cfg = this.config.get();
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
@@ -602,7 +604,7 @@ export class KaramonApp {
       const msg = (e as Error).message;
       onStatus('Erreur de synchronisation: ' + msg);
       onProgress(0);
-      this.reportProblem('sync_failed', ['Synchronisation du pack', msg]);
+      this.reportProblem('sync_failed', ['Synchronisation du pack', msg], startedAt);
       return { ok: false, error: msg };
     }
   }

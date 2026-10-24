@@ -186,3 +186,22 @@ test('réduit un JSON pathologique sous 5 Mio', async () => {
   assert.ok(Buffer.byteLength(JSON.stringify(report)) <= 5 * 1024 * KIB);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
+
+test('ne joint pas le crash-report ni le hs_err d’une session précédente', async () => {
+  const f = fixture();
+  write(path.join(f.gameDir, 'logs', 'latest.log'), 'log');
+  write(path.join(f.gameDir, 'crash-reports', 'crash-old.txt'), 'ancien');
+  write(path.join(f.gameDir, 'hs_err_pid1.log'), 'ancien');
+  const past = new Date(Date.now() - 3_600_000);
+  fs.utimesSync(path.join(f.gameDir, 'crash-reports', 'crash-old.txt'), past, past);
+  fs.utimesSync(path.join(f.gameDir, 'hs_err_pid1.log'), past, past);
+  const since = Date.now() - 60_000;
+
+  const stale = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096, since });
+  assert.deepEqual(stale.files.map((file) => file.name), ['latest.log']);
+
+  write(path.join(f.gameDir, 'hs_err_pid2.log'), 'nouveau');
+  const fresh = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096, since });
+  assert.deepEqual(fresh.files.map((file) => file.name), ['latest.log', 'hs_err_pid2.log']);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
