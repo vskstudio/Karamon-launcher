@@ -16,6 +16,11 @@ test('une sortie normale ne produit aucun rapport', () => {
   assert.equal(exitTrigger(0, 0, 60 * MIN), null);
 });
 
+test('un code non nul après la fermeture demandée par le joueur ne produit aucun rapport', () => {
+  assert.equal(exitTrigger(3221226505, 0, 60 * MIN, true), null);
+  assert.equal(exitTrigger(3221226505, 0, 60 * MIN, false), 'crash');
+});
+
 test('un échec de synchronisation pendant Jouer reste sync_failed', () => {
   const error = new LaunchPhaseError('sync', new Error('HTTP 503 sur pack.json'));
   assert.equal(error.message, 'HTTP 503 sur pack.json');

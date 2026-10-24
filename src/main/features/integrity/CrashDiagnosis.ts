@@ -53,6 +53,21 @@ export function readCrashEvidence(gameDir: string, sinceMs: number): string {
   return parts.join('\n');
 }
 
+/**
+ * The game ran its normal shutdown (`Stopping!` in this run's latest.log) and wrote no crash report:
+ * a non-zero code after that is a native crash while quitting (0xC0000409 seen with Voxy/voice/drivers).
+ */
+export function stoppedCleanly(gameDir: string, sinceMs: number): boolean {
+  if (newestCrashReport(path.join(gameDir, 'crash-reports'), sinceMs - CLOCK_SLACK_MS)) return false;
+  const log = path.join(gameDir, 'logs', 'latest.log');
+  try {
+    if (fs.statSync(log).mtimeMs < sinceMs - CLOCK_SLACK_MS) return false;
+  } catch {
+    return false;
+  }
+  return /\[Render thread\/INFO\]: Stopping!/.test(readTail(log, LOG_TAIL_BYTES));
+}
+
 function newestCrashReport(dir: string, sinceMs: number): string | null {
   let best: { file: string; mtime: number } | null = null;
   try {

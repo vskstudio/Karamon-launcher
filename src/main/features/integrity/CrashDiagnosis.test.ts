@@ -8,6 +8,7 @@ import {
   EARLY_CRASH_WINDOW_MS,
   isEarlyCrash,
   readCrashEvidence,
+  stoppedCleanly,
 } from './CrashDiagnosis.ts';
 
 test('reconnaît un jar tronqué', () => {
@@ -60,5 +61,30 @@ test('lit le dernier rapport de crash de la session et la fin de latest.log', ()
   assert.match(evidence, /fin du log/);
   assert.doesNotMatch(evidence, /ancien/);
   assert.equal(readCrashEvidence(path.join(dir, 'absent'), Date.now()), '');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('une fermeture lancée par le jeu, sans rapport de crash, est propre', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-stop-'));
+  fs.mkdirSync(path.join(dir, 'logs'));
+  fs.mkdirSync(path.join(dir, 'crash-reports'));
+  const log = path.join(dir, 'logs', 'latest.log');
+  const since = Date.now() - 1000;
+
+  fs.writeFileSync(log, '[21:34:57] [Render thread/INFO]: Stopping!\n[21:34:59] [Render thread/INFO]: Discarded config watch service\n');
+  assert.equal(stoppedCleanly(dir, since), true);
+
+  const past = new Date(Date.now() - 3_600_000);
+  fs.utimesSync(log, past, past);
+  assert.equal(stoppedCleanly(dir, since), false, 'latest.log d’une session précédente');
+
+  fs.writeFileSync(log, '[Render thread/INFO]: Stopping!\n');
+  fs.writeFileSync(path.join(dir, 'crash-reports', 'crash-new.txt'), 'rapport');
+  assert.equal(stoppedCleanly(dir, since), false, 'rapport de crash écrit pendant la session');
+
+  fs.rmSync(path.join(dir, 'crash-reports'), { recursive: true });
+  fs.writeFileSync(log, '[Render thread/INFO]: Stopping worker threads\n');
+  assert.equal(stoppedCleanly(dir, since), false, 'pas de Stopping!');
+  assert.equal(stoppedCleanly(path.join(dir, 'absent'), since), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });

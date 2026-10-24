@@ -15,9 +15,14 @@ export class LaunchPhaseError extends Error {
   }
 }
 
-/** Trigger d'une sortie de Minecraft ; null pour une fermeture normale. */
-export function exitTrigger(code: number | null, startedAt: number, endedAt: number): 'crash_early' | 'crash' | null {
-  if (code === 0) return null;
+/** Trigger d'une sortie de Minecraft ; null pour une fermeture normale, même terminée par un crash natif. */
+export function exitTrigger(
+  code: number | null,
+  startedAt: number,
+  endedAt: number,
+  stoppedCleanly = false,
+): 'crash_early' | 'crash' | null {
+  if (code === 0 || stoppedCleanly) return null;
   return endedAt - startedAt <= EARLY_CRASH_WINDOW_MS ? 'crash_early' : 'crash';
 }
 

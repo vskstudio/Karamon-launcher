@@ -37,10 +37,16 @@ export class ReportManager {
     }
   }
 
-  async detect(trigger: Exclude<ReportTrigger, 'manual'>, summary: string[], now = Date.now()): Promise<ReportSendResult> {
+  /** `since` : début de la session concernée, pour ne pas joindre les crashs des sessions précédentes. */
+  async detect(
+    trigger: Exclude<ReportTrigger, 'manual'>,
+    summary: string[],
+    since?: number,
+    now = Date.now(),
+  ): Promise<ReportSendResult> {
     if (!this.options.queue.mayAutoSend(trigger, now)) return { status: 'skipped' };
     try {
-      const report = await this.collect(trigger, summary);
+      const report = await this.collect(trigger, summary, since);
       this.options.queue.markAutoSent(trigger, now);
       if (this.options.autoSend()) {
         this.options.queue.enqueue(report, 'approved', now);
@@ -78,9 +84,9 @@ export class ReportManager {
     return await this.deliver(item.report);
   }
 
-  private async collect(trigger: ReportTrigger, summary: string[]): Promise<LauncherReport> {
+  private async collect(trigger: ReportTrigger, summary: string[], since?: number): Promise<LauncherReport> {
     const context = this.options.context();
-    return await this.options.collector.collect({ trigger, summary, ...context });
+    return await this.options.collector.collect({ trigger, summary, since, ...context });
   }
 
   private ask(report: LauncherReport): void {
