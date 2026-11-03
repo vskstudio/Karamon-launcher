@@ -334,11 +334,11 @@ export class KaramonApp {
       shell.showItemInFolder(this.crashes.reportPath(this.currentInstanceDir(), name)),
     );
     ipcMain.handle(Channels.reportsSendManual, (e): Promise<ReportSendResult> | ReportSendResult =>
-      this.window.isOwnSender(e.sender, e.senderFrame?.url) ? this.reports.sendManual() : REJECTED_SENDER,
+      this.window.isOwnSender(e.sender, e.senderFrame) ? this.reports.sendManual() : REJECTED_SENDER,
     );
     // Only the report id and the player's choice cross over; the manager checks the report's state.
     ipcMain.handle(Channels.reportsConsent, (e, answer: ReportConsentAnswer): Promise<ReportSendResult> | ReportSendResult => {
-      if (!this.window.isOwnSender(e.sender, e.senderFrame?.url)) return REJECTED_SENDER;
+      if (!this.window.isOwnSender(e.sender, e.senderFrame)) return REJECTED_SENDER;
       return this.reports.answerConsent(String(answer?.reportId ?? ''), answer?.send === true, answer?.always === true);
     });
     ipcMain.handle(Channels.backupCreate, () =>

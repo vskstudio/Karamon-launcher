@@ -174,3 +174,33 @@ test('limite l’envoi manuel à trois par tranche de dix minutes', () => {
   assert.equal(new ReportQueue(root).mayManualSend(1_000 + 600_000), true, 'le plus ancien sort de la fenêtre');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('n’évince jamais le rapport qui vient d’être ajouté', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('a'), 'approved', 10);
+  queue.enqueue(report('b'), 'approved', 20);
+  queue.enqueue(report('c', 'manual'), 'approved', 30);
+  queue.enqueue(report('d'), 'awaiting-consent', 40);
+  assert.deepEqual(queue.list(undefined, 50).map((item) => item.report.reportId), ['b', 'c', 'd']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('un envoi manuel daté dans le futur ne bloque pas la limite', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  for (let i = 0; i < 3; i++) queue.markManualSent(10 * DAY);
+  assert.equal(queue.mayManualSend(DAY), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('supprime un rapport dont le nom de fichier ne correspond pas au contenu', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('a'), 'approved', 10);
+  const dir = path.join(root, 'reports');
+  fs.renameSync(path.join(dir, reportFiles(root)[0]), path.join(dir, 'renomme.json.gz'));
+  queue.remove('a');
+  assert.deepEqual(reportFiles(root), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});

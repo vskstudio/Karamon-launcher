@@ -158,6 +158,14 @@ test('limite les doublons automatiques par type', async () => {
   f.done();
 });
 
+test('deux détections simultanées du même type ne font qu’un rapport', async () => {
+  const f = setup();
+  const [first, second] = await Promise.all([f.manager.detect('crash', ['a']), f.manager.detect('crash', ['b'])]);
+  assert.deepEqual([first.status, second.status].sort(), ['queued', 'skipped']);
+  assert.equal(f.counts().collects, 1);
+  f.done();
+});
+
 test('l’envoi manuel est limité à trois par tranche de dix minutes', async () => {
   const f = setup();
   for (let i = 0; i < 3; i++) {

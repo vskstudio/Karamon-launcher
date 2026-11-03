@@ -59,9 +59,10 @@ export class ReportManager {
   async detect(trigger: Exclude<ReportTrigger, 'manual'>, summary: string[]): Promise<ReportSendResult> {
     const now = this.now();
     if (!this.options.queue.mayAutoSend(trigger, now)) return { status: 'skipped', reason: 'cooldown' };
+    // Marked before the await: a simultaneous detection of the same type sees the cooldown.
+    this.options.queue.markAutoSent(trigger, now);
     const report = await this.collect(trigger, summary);
     if (!report) return collectFailed();
-    this.options.queue.markAutoSent(trigger, now);
     if (this.options.autoSend()) {
       return await this.deliver(this.options.queue.enqueue(report, 'approved', now));
     }
@@ -129,8 +130,8 @@ export class ReportManager {
     let outcome: ReportTransportResult;
     try {
       outcome = await this.options.transport.send(report);
-    } catch (error) {
-      outcome = { kind: 'retry', reason: (error as Error).message || 'erreur inconnue', retryAfterMs: null };
+    } catch {
+      outcome = { kind: 'retry', reason: 'erreur inattendue', retryAfterMs: null };
     }
     if (outcome.kind === 'sent') {
       this.options.queue.remove(report.reportId);

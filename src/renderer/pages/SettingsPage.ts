@@ -28,6 +28,7 @@ import {
 
 type Toggle = ReturnType<typeof toggle>;
 import { JVM_PRESETS } from '../util/jvmPresets';
+import { changedSettings } from '../util/changedSettings';
 import { formatDuration, formatNumber, formatShortDate } from '../util/format';
 import type { Page } from './Page';
 import './SettingsPage.css';
@@ -578,9 +579,10 @@ export class SettingsPage implements Page {
   }
 
   private async save(): Promise<void> {
-    const updates: AppConfigUpdate = this.collect();
+    const current = this.collect();
+    const updates: AppConfigUpdate = this.saved ? changedSettings(this.saved, current) : current;
     // Answering in the settings counts as answering the suggestion.
-    if (updates.potatoMode !== this.saved?.potatoMode && !this.potatoHintDismissed) {
+    if ('potatoMode' in updates && !this.potatoHintDismissed) {
       updates.potatoHintDismissed = true;
       this.potatoHintDismissed = true;
     }
@@ -590,7 +592,7 @@ export class SettingsPage implements Page {
       Toast.show(`Enregistrement impossible : ${String(error)}`, 'error');
       return;
     }
-    this.saved = updates;
+    this.saved = current;
     this.markDirty();
     this.options.onSaved();
   }

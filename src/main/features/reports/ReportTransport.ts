@@ -63,7 +63,11 @@ export class ReportTransport {
     try {
       response = await this.post(LAUNCHER_REPORTS_URL, body, headers, controller.signal);
     } catch (error) {
-      const reason = controller.signal.aborted ? 'délai dépassé' : (error as Error).message || 'réseau indisponible';
+      // Only a fixed code leaves this module: raw messages may carry an IP address.
+      const code = (error as NodeJS.ErrnoException).code;
+      const reason = controller.signal.aborted
+        ? 'délai dépassé'
+        : typeof code === 'string' && /^[A-Z0-9_]{2,40}$/.test(code) ? code : 'réseau indisponible';
       return { kind: 'retry', reason, retryAfterMs: null };
     } finally {
       clearTimeout(timer);

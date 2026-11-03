@@ -83,13 +83,37 @@ test('masque les adresses e-mail', () => {
 });
 
 test('reste linéaire sur un log de 1 Mio sans séparateur (pas de retour arrière quadratique)', () => {
-  for (const filler of ['c', 'a', '1', 'f:']) {
-    const text = filler.repeat(Math.ceil((1024 * 1024) / filler.length));
+  const fillers = [
+    'c', 'a', '1', 'f:', '-Dtoken', 'token', '--accessToken "', '-Dtoken="', 'accessToken: "',
+    'http://', 'https://a.b/', 'eyJ.', 'M.C1_a', 'a@', '/Users/', 'C:\\Users\\',
+  ];
+  for (const filler of fillers) {
+    const body = filler.repeat(Math.ceil((1024 * 1024) / filler.length));
+    const text = filler === 'token' ? `-D${body}` : body;
     const start = performance.now();
     redactReportText(text, { homeDir: '/home/alice', hostName: 'PC-DE-SACHA' });
     const elapsed = performance.now() - start;
     assert.ok(elapsed < 1500, `motif « ${filler} » : ${Math.round(elapsed)} ms`);
   }
+});
+
+test('un dossier personnel court ne déborde pas sur les chemins voisins', () => {
+  assert.equal(redactReportText('/root/x et /rootfs/y', { homeDir: '/root' }), '<user>/x et /rootfs/y');
+  assert.equal(redactReportText('/var/log', { homeDir: '/' }), '/var/log');
+});
+
+test('masque un nom macOS avec espace et une valeur de jeton entre guillemets', () => {
+  const output = redactReportText(
+    'at /Users/Jean Dupont/Library/x.jar et {"accessToken": "abc def ghi", "session": \'x y\'} -Dauth.token="a b"',
+  );
+  assert.ok(!output.includes('Jean') && !output.includes('Dupont'), output);
+  assert.ok(!/abc|def|ghi|x y|a b/.test(output), output);
+  assert.match(output, /"accessToken": "\[masqué\]"/);
+  assert.match(output, /\/Users\/<user>\/Library/);
+});
+
+test('ne touche pas une propriété JVM sans secret', () => {
+  assert.equal(redactReportText('-Dfile.encoding=UTF-8 -Dauth.token=abc'), `-Dfile.encoding=UTF-8 -Dauth.token=[masqué]`);
 });
 
 test('masque les paramètres des URL mais garde le chemin', () => {

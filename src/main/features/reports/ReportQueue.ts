@@ -30,6 +30,8 @@ export class ReportQueue {
   private readonly dir: string;
   private readonly metaFile: string;
   private readonly log: (message: string) => void;
+  /** reportId -> file it was last read from or written to. */
+  private readonly sourceFiles = new Map<string, string>();
 
   constructor(dataDir: string, options: ReportQueueOptions = {}) {
     this.dir = path.join(dataDir, 'reports');
@@ -40,7 +42,7 @@ export class ReportQueue {
   enqueue(report: LauncherReport, state: ReportQueueState, createdAt = Date.now()): QueuedReport {
     const item: QueuedReport = { state, createdAt, attempts: 0, report };
     this.write(item);
-    this.evict(createdAt);
+    this.evict(createdAt, report.reportId);
     return item;
   }
 
@@ -108,19 +110,22 @@ export class ReportQueue {
   }
 
   private recentManual(meta: QueueMeta, now: number): number[] {
-    return meta.manualSends.filter((at) => now - at < MANUAL_WINDOW_MS);
+    // A date in the future (clock moved back) must not lock the button.
+    return meta.manualSends.filter((at) => at <= now && now - at < MANUAL_WINDOW_MS);
   }
 
   /**
    * Cap of MAX_PENDING_REPORTS: expired first, then automatic reports still
    * waiting for consent; manual and approved reports go last, oldest first.
+   * The report just added is never the victim.
    */
-  private evict(now: number): void {
+  private evict(now: number, keepId: string): void {
     const items = this.list(undefined, now);
+    const candidates = items.filter((item) => item.report.reportId !== keepId);
     const order = [
-      ...items.filter((item) => item.state === 'awaiting-consent' && item.report.trigger !== 'manual'),
-      ...items.filter((item) => item.state === 'awaiting-consent' && item.report.trigger === 'manual'),
-      ...items.filter((item) => item.state === 'approved'),
+      ...candidates.filter((item) => item.state === 'awaiting-consent' && item.report.trigger !== 'manual'),
+      ...candidates.filter((item) => item.state === 'awaiting-consent' && item.report.trigger === 'manual'),
+      ...candidates.filter((item) => item.state === 'approved'),
     ];
     for (let excess = items.length - MAX_PENDING_REPORTS; excess > 0; excess--) {
       const victim = order.shift();
@@ -150,6 +155,7 @@ export class ReportQueue {
           throw new Error('format inattendu');
         }
         items.push({ ...item, attempts: typeof item.attempts === 'number' ? item.attempts : 0 });
+        this.sourceFiles.set(item.report.reportId, file);
       } catch (error) {
         // A broken entry can never be sent safely: drop it instead of failing every read.
         fs.rmSync(file, { force: true });
@@ -161,11 +167,18 @@ export class ReportQueue {
 
   private write(item: QueuedReport): void {
     this.ensureDir();
-    writeFileAtomic(this.fileFor(item), zlib.gzipSync(Buffer.from(JSON.stringify(item), 'utf8')), FILE_MODE);
+    const target = this.fileFor(item);
+    writeFileAtomic(target, zlib.gzipSync(Buffer.from(JSON.stringify(item), 'utf8')), FILE_MODE);
+    const previous = this.sourceFiles.get(item.report.reportId);
+    if (previous && previous !== target) fs.rmSync(previous, { force: true });
+    this.sourceFiles.set(item.report.reportId, target);
   }
 
+  /** Deletes the file the entry was read from, even if its name no longer matches the content. */
   private delete(item: QueuedReport): void {
-    fs.rmSync(this.fileFor(item), { force: true });
+    const id = item.report.reportId;
+    fs.rmSync(this.sourceFiles.get(id) ?? this.fileFor(item), { force: true });
+    this.sourceFiles.delete(id);
   }
 
   private ensureDir(): void {

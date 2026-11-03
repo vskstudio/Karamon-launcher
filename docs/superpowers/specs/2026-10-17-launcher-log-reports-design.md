@@ -51,7 +51,7 @@ Sont masqués :
 - les adresses e-mail, remplacées par `<email>` ;
 - les paramètres d'URL : tout ce qui suit `?` ou `#` dans une URL `http(s)` (codes OAuth, tickets) ;
 - les jetons Microsoft, Xbox et Minecraft : JWT `eyJ…`, jetons `M.C…`/`M.R…`, jetons compacts `Ew…`, en-tête `XBL3.0 x=…;…` ;
-- `accessToken`, `refreshToken`, `session`, `Authorization`, `Bearer` ;
+- `accessToken`, `refreshToken`, `clientToken`, `session`, `Authorization`, `Bearer`, valeurs entre guillemets comprises ;
 - les arguments de lancement `--accessToken`, `--session`, `--username`, `--uuid`, `--xuid`, `--clientId` ;
 - les propriétés JVM `-D…` dont le nom contient `token`, `session`, `password`, `secret` ou `auth` ;
 - les adresses IPv4 et IPv6, remplacées par `<ip>`.

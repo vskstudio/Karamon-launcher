@@ -4,6 +4,9 @@ import path from 'path';
 import type { IpcEventContract } from '../ipc/contract';
 import { ASPECT_RATIO, initialWindowSize, minimumWindowSize } from './shared/WindowSize';
 
+/** What identifies a frame across the IPC boundary (WebFrameMain). */
+type FrameId = { processId: number; routingId: number };
+
 export class WindowManager {
   private window: BrowserWindow | null = null;
 
@@ -63,10 +66,15 @@ export class WindowManager {
     return !!this.window && !this.window.isDestroyed();
   }
 
-  /** True when an IPC call comes from the launcher's own page (not a frame or another window). */
-  isOwnSender(sender: { id: number } | null | undefined, frameUrl?: string): boolean {
+  /** True when an IPC call comes from the launcher's own page: main frame of our window, loaded from file:. */
+  isOwnSender(
+    sender: { id: number; mainFrame?: FrameId } | null | undefined,
+    frame?: (FrameId & { url: string }) | null,
+  ): boolean {
     if (!this.exists() || !sender || sender.id !== this.window!.webContents.id) return false;
-    return frameUrl === undefined || frameUrl.startsWith('file:');
+    const main = sender.mainFrame;
+    if (!frame || !main || frame.processId !== main.processId || frame.routingId !== main.routingId) return false;
+    return frame.url.startsWith('file:');
   }
 
   minimize(): void {

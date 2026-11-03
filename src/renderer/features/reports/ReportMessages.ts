@@ -4,7 +4,7 @@ export const CONSENT_TEXT = {
   title: 'Rapport de problème',
   question: "Un problème a été détecté. Envoyer le rapport à l'équipe Karamon pour qu'on t'aide ?",
   detail:
-    'Il contient les journaux du launcher et du jeu. Avant l’envoi, on masque ton nom de session, ' +
+    'Il contient les journaux du launcher et du jeu. Avant l’envoi, on masque ton nom d’utilisateur sur le PC, ' +
     'le nom de ton PC, tes jetons de connexion, tes adresses IP et e-mail. ' +
     'Ton pseudo Minecraft peut apparaître dans les journaux du jeu.',
   declineHint: 'Ne pas envoyer supprime le rapport de ton PC.',
