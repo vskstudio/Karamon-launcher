@@ -2,135 +2,184 @@
 
 ## But
 
-Quand le launcher détecte un crash ou un échec de lancement, il propose d'envoyer les journaux utiles à l'équipe Karamon. Le joueur n'a plus à chercher les fichiers lui-même. L'envoi reste soumis à son consentement, ne bloque jamais le jeu et continue de fonctionner si le panel est momentanément hors ligne.
+Quand le launcher détecte un crash ou un échec de lancement, il propose d'envoyer les journaux utiles à l'équipe Karamon. Le joueur n'a plus à chercher les fichiers lui-même. Rien ne part sans son accord, l'envoi ne bloque jamais le jeu, et un panel hors ligne ne fait rien perdre.
 
 ## Contrat réseau
 
-Le launcher envoie un `POST` HTTPS vers `LAUNCHER_REPORTS_URL`, constante unique dont la valeur provisoire doit être confirmée par l'équipe du panel Karamon. Le chemin public attendu est `/api/launcher/reports`.
+Contrat fixé avec le panel Karamon, identique des deux côtés.
 
-Le corps est un objet JSON compressé avec gzip. Les en-têtes sont `Content-Type: application/json` et `Content-Encoding: gzip`. Le JSON décompressé ne dépasse jamais 5 Mio.
+- `POST https://karamon.fr/panel/api/launcher/reports`, dans la constante unique `LAUNCHER_REPORTS_URL`. Route publique, 10 rapports par heure et par IP, 429 au-delà.
+- Corps JSON compressé en gzip : `Content-Type: application/json`, `Content-Encoding: gzip`. Le JSON décompressé ne dépasse jamais 5 Mio.
+- `Idempotency-Key` égal au `reportId` : un réessai après une réponse perdue n'est pas un second rapport.
+- Réponse attendue : `{ "id": "<reportId>" }`.
 
 Un rapport contient :
 
-- `reportId` : UUID v4 créé avant la collecte ;
+- `reportId` : UUID v4 ;
 - `launcherVersion`, `packVersion`, `os`, `arch`, `javaVersion`, `ramMb` ;
-- `gpu` quand Electron sait l'identifier ;
+- `gpu`, si Electron sait l'identifier (identifiants vendeur:modèle) ;
 - `trigger` : `crash_early`, `crash`, `sync_failed`, `launch_failed` ou `manual` ;
-- `summary` : cause courte déjà calculée par `CrashReports` ou `CrashDiagnosis`, sinon message d'erreur anonymisé et limité ;
-- `playerName` si un profil Minecraft est connecté ;
-- `files` : objets `{ name, content }`.
+- `summary` : 20 chaînes au plus, 200 caractères chacune, masquées ;
+- `files` : objets `{ name, content }`, `name` étant un nom de fichier, jamais un chemin.
 
-Les fichiers admis sont :
+Pas de `playerName` : le pseudo n'aide pas au diagnostic. Il peut en revanche apparaître dans `latest.log`, et le texte de consentement le dit.
 
-- la fin de `launcher.log`, 256 Kio maximum ;
-- la fin de `latest.log`, 512 Kio maximum ;
-- le dernier `crash-reports/*.txt`, 1 Mio maximum ;
-- le dernier `hs_err_pid*.log`, 1 Mio maximum.
+Fichiers admis (le panel renvoie 400 pour tout autre nom) :
 
-Le plafond de 1 Mio des deux derniers fichiers est un choix provisoire à faire valider. Si la sérialisation dépasse 5 Mio malgré ces limites, le collecteur réduit d'abord les deux gros fichiers en conservant leur fin, puis retire un fichier optionnel. Il ne produit jamais un corps hors contrat.
+- la fin de `launcher.log`, 256 Kio au plus ;
+- la fin de `logs/latest.log`, 512 Kio au plus ;
+- le dernier `crash-reports/crash-*.txt`, 1 Mio au plus ;
+- le dernier `hs_err_pid*.log` du dossier du jeu, 1 Mio au plus.
 
-`packVersion` vient du `pack.json` public du panel/CDN et utilise la version embarquée comme repli. Une collecte hors ligne reste donc possible. Le collecteur récupère la version Java détectée, la RAM configurée, le GPU Electron et le pseudo mis en cache, sans déclencher de nouvelle authentification.
+Si le JSON dépasse 5 Mio malgré ces limites, le collecteur raccourcit d'abord les deux gros fichiers en gardant leur fin, puis retire un fichier. Il ne produit jamais un corps hors contrat.
 
-## Anonymisation
+## Collecte
 
-Chaque contenu et chaque résumé passent par l'anonymiseur avant d'être écrit dans la file ou transmis au renderer.
+- Chemins internes fixes : rien n'est choisi par le renderer ni par le joueur.
+- Le fichier doit être un fichier régulier, pas un lien symbolique, et son `realpath` doit rester sous la racine autorisée (dossier de données du launcher ou dossier de l'instance). Un dossier `crash-reports` qui pointe ailleurs est refusé de la même façon.
+- `packVersion` est la version enregistrée par la dernière synchronisation réussie (`.karamon-pack-version.json` dans l'instance). La collecte ne fait aucune requête réseau ; sans version enregistrée, la valeur est `inconnu`.
+- Java, RAM configurée et GPU viennent de ce que le launcher connaît déjà, sans nouvelle authentification.
 
-L'anonymiseur :
+## Masquage
 
-- remplace le dossier personnel réel et les chemins `C:\Users\<nom>`, `/home/<nom>` et `/Users/<nom>` par `<user>` ;
-- masque les valeurs de `accessToken`, `refreshToken`, `session`, `Authorization` et `Bearer`, y compris les arguments Java `--accessToken valeur` ;
-- remplace les adresses IPv4 et IPv6 par `<ip>` ;
-- ne modifie pas le reste du diagnostic.
+Chaque contenu et chaque résumé passent par `ReportRedactor` avant d'être écrits dans la file ou montrés au renderer. C'est un masquage au mieux : il retire ce que le launcher sait chercher. Il ne garantit pas qu'un journal soit anonyme.
 
-Les noms envoyés sont des basenames, jamais des chemins complets. Les rapports en attente contiennent déjà les données anonymisées. Aucun secret n'est ajouté au code, à la config ou aux tests.
+Sont masqués :
+
+- le dossier personnel réel et les chemins `C:\Users\<nom>`, `/home/<nom>`, `/Users/<nom>`, remplacés par `<user>` ;
+- le nom de la machine (`os.hostname()`), quelle que soit la casse, remplacé par `<host>` (sauf noms trop courts ou génériques comme `pc` ou `localhost`) ;
+- les adresses e-mail, remplacées par `<email>` ;
+- les paramètres d'URL : tout ce qui suit `?` ou `#` dans une URL `http(s)` (codes OAuth, tickets) ;
+- les jetons Microsoft, Xbox et Minecraft : JWT `eyJ…`, jetons `M.C…`/`M.R…`, jetons compacts `Ew…`, en-tête `XBL3.0 x=…;…` ;
+- `accessToken`, `refreshToken`, `session`, `Authorization`, `Bearer` ;
+- les arguments de lancement `--accessToken`, `--session`, `--username`, `--uuid`, `--xuid`, `--clientId` ;
+- les propriétés JVM `-D…` dont le nom contient `token`, `session`, `password`, `secret` ou `auth` ;
+- les adresses IPv4 et IPv6, remplacées par `<ip>`.
+
+Les expressions sont bornées : un journal de 1 Mio sans séparateur reste traité en temps linéaire (testé).
 
 ## Modules du processus principal
 
-### `ReportRedactor`
-
-Fonction pure d'anonymisation, testée avec des chemins Windows, macOS et Linux, les formes usuelles de jetons et les deux familles d'adresses IP.
-
 ### `ReportCollector`
 
-Collecte les métadonnées et les fins de fichiers. Les dépendances système (version du launcher, GPU, Java, profil, pack distant) sont injectées pour que les tests n'aient pas besoin d'Electron ni du réseau public.
+Collecte les métadonnées et les fins de fichiers. Les dépendances système sont injectées : les tests n'ont besoin ni d'Electron ni du réseau.
 
 ### `ReportQueue`
 
-Conserve les rapports sous le dossier de données du launcher avec écriture atomique. Un rapport est soit `awaiting-consent`, soit `approved`. La file contient au plus trois rapports au total ; si un quatrième arrive, le plus ancien est retiré. Ce partage de limite entre les deux états est provisoire et doit être validé.
+Rapports en attente sous `<données du launcher>/reports/`, un fichier gzip par rapport, écriture atomique.
 
-La file conserve aussi le dernier instant d'envoi automatique pour chaque trigger. Un trigger automatique est ignoré s'il a déjà été pris en charge dans les dix dernières minutes. `manual` n'est pas limité.
+- États : `awaiting-consent` ou `approved`.
+- Dossier en 0700, fichiers en 0600 (un dossier créé plus ouvert est resserré).
+- Durée de vie : 7 jours. Un rapport expiré est supprimé à la lecture.
+- Trois rapports au plus. L'éviction retire d'abord les expirés, puis les rapports automatiques qui attendent un consentement, du plus ancien au plus récent. Les manuels et les approuvés ne partent qu'en dernier recours.
+- Un fichier illisible ou corrompu est supprimé et journalisé, sans planter. Un `state.json` corrompu est réinitialisé.
+- `state.json` garde aussi le dernier envoi automatique par trigger (un trigger automatique est ignoré pendant 10 minutes) et les envois manuels récents (3 par tranche de 10 minutes).
 
 ### `ReportTransport`
 
-Compresse et envoie un rapport. Une réponse 2xx confirme l'envoi. Une erreur réseau, un 429 ou un 5xx conserve le rapport pour le prochain lancement. Les autres 4xx sont journalisés puis retirés pour éviter une boucle sans fin. Ce traitement des 4xx est provisoire et doit être validé.
+Compresse et poste un rapport, avec un délai de 10 secondes appliqué par `AbortController`.
+
+- 2xx : envoyé. L'`id` renvoyé par le panel sert de code support.
+- 408, 429, 5xx, erreur réseau, délai dépassé : à réessayer, en respectant `Retry-After` (secondes ou date HTTP, plafonné à 24 h).
+- Autres 4xx (400, 401, 403, 404, 413) : refus définitif, le rapport est supprimé.
 
 ### `ReportManager`
 
-Coordonne collecte, consentement, file et transport. Au démarrage, il réessaie les rapports approuvés, puis présente les rapports qui attendent un consentement quand la fenêtre est prête. Il ne lève jamais une erreur dans le flux de synchronisation ou de lancement du jeu.
+Coordonne collecte, consentement, file et transport, et ne lève jamais d'erreur dans la synchronisation ou le lancement.
 
-Si l'option d'envoi automatique est active, le rapport est approuvé et envoyé directement. Sinon, la preuve anonymisée est conservée et le renderer reçoit une demande de consentement. Cela couvre le cas où le launcher se ferme au démarrage du jeu : le dialogue apparaît au prochain lancement, sans perdre le crash.
+- Envoi automatique actif : le rapport est approuvé et envoyé. Sinon il attend le consentement et le renderer reçoit une demande (identifiant, trigger, résumé masqué).
+- Au démarrage (fenêtre chargée, sans la retarder) : il réessaie les approuvés dont la date d'essai est passée, puis repropose les consentements en attente.
+- Réessais : 5 tentatives au plus, avec un délai d'au moins 1 min, 5 min, 30 min, puis 2 h, ou plus si `Retry-After` le demande. Les réessais ont lieu au lancement suivant. Après la cinquième tentative, le rapport est supprimé.
+- Un échec d'envoi ne déclenche jamais de nouvelle collecte ni de nouveau rapport.
+- Un même rapport n'est jamais posté deux fois en parallèle.
+
+## IPC
+
+- invocation `reports:send-manual` ;
+- invocation `reports:consent`, qui reçoit `{ reportId, send, always }` et rien d'autre ;
+- événement `reports:consent-request`.
+
+Le main vérifie que l'appel vient de la page du launcher (même `webContents`, origine `file:`) et que le rapport attend bien un consentement. Une réponse pour un rapport inconnu ou déjà traité est ignorée et n'active pas le réglage.
+
+Résultat, en union discriminée :
+
+- `sent { supportCode }` : code renvoyé par le panel, ou `null` s'il n'en a pas renvoyé ;
+- `queued { nextAttemptAt }` ;
+- `skipped { reason }` : `cooldown`, `manual_limit`, `declined`, `unknown_report` ;
+- `failed { reason, retryable }`.
 
 ## Consentement et interface
 
-`AppConfig` reçoit `autoSendReports: boolean`, désactivé par défaut. Le réglage apparaît dans Paramètres et reste modifiable.
+`AppConfig.autoSendReports` est désactivé par défaut, y compris pour les configurations existantes. Le réglage est dans Paramètres.
 
-Le dialogue affiche exactement : « Un problème a été détecté. Envoyer le rapport à l'équipe Karamon pour qu'on t'aide ? » avec :
+Le dialogue pose la question « Un problème a été détecté. Envoyer le rapport à l'équipe Karamon pour qu'on t'aide ? ». Il dit ce qui est masqué, que le pseudo Minecraft peut apparaître dans les journaux du jeu, et que « Ne pas envoyer » supprime le rapport. Il propose :
 
 - `Envoyer` ;
-- `Pas maintenant` ;
+- `Ne pas envoyer` : supprime le rapport ;
 - la case `Toujours envoyer automatiquement`.
 
-`Pas maintenant` supprime le rapport courant, garde `autoSendReports` désactivé et laisse une future détection reposer la question. Ce comportement est provisoire et doit être validé.
+Fermer le dialogue sans répondre garde le rapport, qui est reproposé au lancement suivant (dans la limite des 7 jours).
 
-La carte Rapports de crash de l'écran Outils contient toujours le bouton `Envoyer mes logs à l'équipe`, même quand aucun crash n'est listé. Cette action vaut consentement pour ce rapport uniquement et utilise le trigger `manual`.
+Décocher le réglage dans Paramètres supprime les rapports approuvés qui ne sont pas encore partis.
 
-Après une acceptation ou un envoi manuel, l'interface affiche les huit premiers caractères du `reportId`. Si le panel est hors ligne, elle indique que le rapport attend le prochain lancement tout en montrant le même code.
+La carte Rapports de crash de l'écran Outils garde le bouton `Envoyer mes logs à l'équipe`. Ce clic vaut consentement pour ce rapport seulement (trigger `manual`).
 
-Les nouveaux canaux IPC sont :
-
-- invocation `reports:send-manual` ;
-- invocation `reports:consent` ;
-- événement `reports:consent-request`.
-
-Le résultat public porte un statut `sent`, `queued`, `skipped` ou `failed`, ainsi que le code court quand un rapport existe.
+Le code support n'est affiché qu'après acceptation par le panel. Avant, l'interface affiche « Rapport en attente. » et rien d'autre. Les échecs ne montrent rien au joueur : ils ne vont que dans `launcher.log`.
 
 ## Déclencheurs
 
 - Minecraft sort avec un code non nul en moins de deux minutes : `crash_early` ;
-- Minecraft sort avec un code non nul après deux minutes : `crash` ;
+- après deux minutes : `crash` ;
 - la synchronisation du pack échoue, seule ou pendant Jouer : `sync_failed` ;
-- Java, les librairies, les assets, le profil ou le spawn échouent : `launch_failed` ;
+- Java, les librairies, les assets, le profil ou le lancement du processus échouent : `launch_failed` ;
 - bouton de l'écran Outils : `manual`.
 
-`MinecraftLauncher` signale explicitement la phase qui a échoué afin que `KaramonApp` ne déduise pas le trigger depuis un texte traduit. Un crash précoce ne produit pas en plus un rapport `crash`.
+Une sortie ne compte pas si l'arrêt a été demandé : signal `SIGTERM`, `SIGINT` ou `SIGHUP` (fermeture par le joueur, fin de session), ou arrêt demandé par le launcher (`stopRequested`). Le launcher n'arrête jamais le jeu aujourd'hui, ce drapeau reste donc à `false` tant qu'aucun bouton Arrêter n'existe. `SIGKILL` et `SIGSEGV` restent des crashs (manque de mémoire, plantage de la JVM).
 
-## Hors ligne et démarrage
+`MinecraftLauncher` indique la phase qui a échoué, pour que `KaramonApp` ne déduise pas le trigger d'un texte affiché.
 
-La route du panel peut ne pas exister au moment où la PR est testée. Dans ce cas, l'acceptation affiche un rapport en attente, le jeu continue normalement et le prochain lancement réessaie une seule fois chaque rapport approuvé. Aucun message d'erreur technique ne bloque le joueur.
+## Points écartés
 
-Les traitements réseau de rapport ont un délai court et restent distincts des téléchargements du pack. Quitter le launcher pendant un envoi ne corrompt pas la file.
+- **Consentement avant toute collecte.** On garde la capture locale : elle reste sur la machine du joueur, rien ne sort sans son accord, et la durée de vie est de 7 jours.
+- **Consentement à trois états avec `policyVersion`.** Le booléen suffit, avec la suppression des approuvés quand le réglage est décoché.
+- **Chiffrement de la file.** Les permissions 0700/0600 suffisent : ces journaux sont déjà en clair sur le disque du joueur.
+- **Regroupement des incidents par empreinte.** Reporté à plus tard.
 
 ## Vérification
 
-L'implémentation suit TDD. Les tests couvrent au minimum :
+TDD. Les tests couvrent :
 
-- tous les motifs d'anonymisation et leur combinaison ;
-- les limites de fichier et la limite JSON de 5 Mio ;
-- le choix du dernier crash et du dernier `hs_err` ;
-- la file persistante, le maximum de trois et le redémarrage ;
-- le délai de dix minutes par trigger ;
-- les réponses 2xx, 429, 4xx, 5xx et l'absence de réseau ;
-- le consentement, l'option automatique, le bouton manuel et le code court ;
-- la classification des quatre déclencheurs automatiques ;
-- la compatibilité de la configuration existante.
+- chaque motif de masquage, Windows, macOS et Linux, et le temps linéaire sur 1 Mio ;
+- les limites par fichier et la limite de 5 Mio ;
+- le refus des liens symboliques, fichiers et dossiers ;
+- la version du pack lue sur disque, et sa conservation quand `pack.json` est injoignable ;
+- la file : persistance, TTL, ordre d'éviction, permissions, fichiers corrompus, tentatives ;
+- les délais : 10 minutes par trigger automatique, 3 envois manuels par 10 minutes ;
+- le transport : en-têtes, `Idempotency-Key`, 2xx/408/429/4xx/5xx, `Retry-After`, délai dépassé ;
+- le manager : consentement, refus, réponse invalide, envoi automatique, 5 tentatives, désactivation du réglage, échec silencieux ;
+- les déclencheurs, arrêt demandé compris ;
+- les messages montrés au joueur.
 
-La branche doit passer le typecheck, toute la suite de tests et le build. Une revue de code est faite avant d'ouvrir la PR. La PR n'est ni fusionnée ni publiée.
+La branche passe le typecheck, toute la suite de tests et le build. La PR n'est ni fusionnée ni publiée.
 
-## À valider dans la PR
+## À valider côté launcher
 
-- la valeur publique finale de `LAUNCHER_REPORTS_URL` pour le panel Karamon ;
-- la limite de 1 Mio pour le crash report et le fichier `hs_err` ;
-- le maximum de trois partagé entre rapports en attente de consentement et rapports approuvés ;
-- l'abandon des 4xx hors 429 ;
-- la suppression du rapport courant après `Pas maintenant`, avec nouvelle demande au prochain incident ;
-- l'affichage du code court même quand le rapport est encore en attente d'envoi.
+- les plafonds de 1 Mio pour `crash-*.txt` et `hs_err_pid*.log` ;
+- la file à 3 rapports, avec les manuels et approuvés évincés en dernier recours si la file en est pleine ;
+- l'abandon après 5 tentatives et le calendrier des délais ;
+- le traitement des réponses : 400, 401, 403, 404 et 413 abandonnés ; 408, 429 et 5xx réessayés ;
+- le réessai au lancement suivant uniquement (pas de minuterie pendant la session) ;
+- `inconnu` pour une version absente (pack jamais synchronisé, Java non détecté) ;
+- la limite manuelle de 3 envois par 10 minutes ;
+- le code support : les 8 premiers caractères de l'`id` renvoyé, en majuscules ;
+- sous Windows, « Fin de tâche » termine le jeu avec un code non nul sans signal : il compte comme un crash.
+
+## À valider côté panel (@karamon)
+
+- plafond de taille compressée **et** décompressée, contre les bombes gzip ;
+- validation du schéma (noms de fichiers, `summary` 20 × 200, types) ;
+- déduplication par `Idempotency-Key` ;
+- limite de débit (10 par heure et par IP aujourd'hui) ;
+- durée de conservation des rapports ;
+- accès restreint à l'équipe ;
+- URL définitive de `LAUNCHER_REPORTS_URL`.
