@@ -24,14 +24,14 @@ test('masque les chemins Windows échappés en JSON ou écrits avec des slashs',
 
 test('masque le home injecté qui contient un espace (macOS)', () => {
   assert.equal(
-    redactReportText('/Users/Jean Dupont/Library/Application Support/Karamon', '/Users/Jean Dupont'),
+    redactReportText('/Users/Jean Dupont/Library/Application Support/Karamon', { homeDir: '/Users/Jean Dupont' }),
     '<user>/Library/Application Support/Karamon',
   );
 });
 
 test('masque le home injecté même hors des chemins habituels', () => {
   assert.equal(
-    redactReportText('/srv/players/alice/game/logs/latest.log', '/srv/players/alice'),
+    redactReportText('/srv/players/alice/game/logs/latest.log', { homeDir: '/srv/players/alice' }),
     '<user>/game/logs/latest.log',
   );
 });
@@ -70,7 +70,69 @@ test('masque les adresses IPv4 et IPv6 sans masquer une version Minecraft', () =
 test('applique tous les masques en un seul passage', () => {
   const output = redactReportText(
     String.raw`C:\Users\Alice\game lancé sur 10.0.0.2 avec --accessToken ultra-secret-token`,
-    String.raw`C:\Users\Alice`,
+    { homeDir: String.raw`C:\Users\Alice` },
   );
   assert.equal(output, String.raw`<user>\game lancé sur <ip> avec --accessToken [masqué]`);
+});
+
+test('masque les adresses e-mail', () => {
+  const output = redactReportText('Compte sacha.ketchum+mc@outlook.fr connecté, contact support@karamon.fr');
+  assert.ok(!output.includes('sacha.ketchum'), output);
+  assert.ok(!output.includes('support@karamon.fr'), output);
+  assert.match(output, /Compte <email> connecté/);
+});
+
+test('reste linéaire sur un log de 1 Mio sans séparateur (pas de retour arrière quadratique)', () => {
+  for (const filler of ['c', 'a', '1', 'f:']) {
+    const text = filler.repeat(Math.ceil((1024 * 1024) / filler.length));
+    const start = performance.now();
+    redactReportText(text, { homeDir: '/home/alice', hostName: 'PC-DE-SACHA' });
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1500, `motif « ${filler} » : ${Math.round(elapsed)} ms`);
+  }
+});
+
+test('masque les paramètres des URL mais garde le chemin', () => {
+  const output = redactReportText(
+    'GET https://login.live.com/oauth20_desktop.srf?code=M.C507_BAY.2.U.abc&state=xyz#frag puis https://karamon.fr/downloads/pack.json',
+  );
+  assert.ok(!output.includes('M.C507'), output);
+  assert.ok(!output.includes('state=xyz'), output);
+  assert.match(output, /https:\/\/login\.live\.com\/oauth20_desktop\.srf\?\[masqué\]/);
+  assert.match(output, /https:\/\/karamon\.fr\/downloads\/pack\.json/);
+});
+
+test('masque le nom de la machine, quelle que soit la casse', () => {
+  const output = redactReportText('Hôte DESKTOP-7QK2LM9 / desktop-7qk2lm9.local prêt', { hostName: 'DESKTOP-7QK2LM9' });
+  assert.equal(output, 'Hôte <host> / <host>.local prêt');
+});
+
+test('un nom de machine trop court ou générique ne masque pas tout le texte', () => {
+  assert.equal(redactReportText('mod pc chargé', { hostName: 'pc' }), 'mod pc chargé');
+  assert.equal(redactReportText('mod localhost chargé', { hostName: 'localhost' }), 'mod localhost chargé');
+});
+
+test('masque les jetons Microsoft, Xbox et Minecraft (JWT)', () => {
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJ4dWlkIjoiMjUzNTQwIn0.c2lnbmF0dXJlLXNlY3JldA';
+  const input = [
+    `token ${jwt}`,
+    'refresh M.C507_BL2.0.U.-CgMlnK7xM!secret-refresh-value$',
+    'xbl EwAIA+pvBAAUKods63Ys1fGlwiccIFJ+qE1hANsAAeqe5kQsecretxbl==',
+    'XBL3.0 x=2535400000000000;eyJhbGciOiJSUzI1NiJ9.eyJzIjoxfQ.sig-part',
+  ].join('\n');
+  const output = redactReportText(input);
+  for (const secret of ['eyJhbGciOiJIUzI1NiJ9', 'secret-refresh-value', 'secretxbl', '2535400000000000', 'sig-part']) {
+    assert.ok(!output.includes(secret), `le jeton ${secret} reste visible:\n${output}`);
+  }
+});
+
+test('masque les arguments JVM et de lancement porteurs de jetons ou d’identité', () => {
+  const input =
+    'java -Dfml.accessToken=jvm-secret-1 -Dminecraft.api.session=jvm-secret-2 -Dauth.token=jvm-secret-3 ' +
+    '--username Sacha --uuid 0f1e2d3c4b5a69788796a5b4c3d2e1f0 --xuid 2535400000000001 --clientId Y2xpZW50LWlk --version 1.21.1';
+  const output = redactReportText(input);
+  for (const secret of ['jvm-secret-1', 'jvm-secret-2', 'jvm-secret-3', 'Sacha', '0f1e2d3c4b5a6978', '2535400000000001', 'Y2xpZW50LWlk']) {
+    assert.ok(!output.includes(secret), `${secret} reste visible:\n${output}`);
+  }
+  assert.match(output, /--version 1\.21\.1/);
 });

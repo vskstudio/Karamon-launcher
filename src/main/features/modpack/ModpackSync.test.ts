@@ -30,12 +30,17 @@ function sha1(data: Buffer): string {
 function fakeHttp(
   files: Record<string, string>,
   releaseAssets: { name: string; size: number; digest?: string }[],
+  packJson: { version?: string } = {},
 ): HttpClient {
   return {
     async getText(url: string): Promise<string> {
       throw new Error(`HTTP 404 for ${url}`);
     },
     async getJson(url: string): Promise<unknown> {
+      if (url.endsWith('/pack.json')) {
+        if (!packJson.version) throw new Error(`HTTP 503 for ${url}`);
+        return { id: 'karamon-client', version: packJson.version };
+      }
       if (url.includes('/releases/')) {
         return {
           tag_name: 'pack-latest',
@@ -100,6 +105,7 @@ test('sync installs mods and assets from two zips', async () => {
     'resourcepacks/Karamon UI.zip': fs.readFileSync(uiZip),
   });
 
+  const packJson: { version?: string } = { version: '0.9.18' };
   const sync = new ModpackSync({
     http: fakeHttp(
       { 'mods.zip': modsZip, 'assets.zip': assetsZip },
@@ -107,10 +113,12 @@ test('sync installs mods and assets from two zips', async () => {
         { name: 'mods.zip', size: fs.statSync(modsZip).size },
         { name: 'assets.zip', size: fs.statSync(assetsZip).size },
       ],
+      packJson,
     ),
     optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
 
+  assert.equal(ModpackSync.installedPackVersion(game), undefined, 'aucune version avant la première sync');
   const statuses: string[] = [];
   await sync.sync(
     'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
@@ -124,7 +132,10 @@ test('sync installs mods and assets from two zips', async () => {
   assert.ok(fs.existsSync(path.join(game, 'resourcepacks', 'Karamon UI', 'pack.mcmeta')));
   assert.ok(fs.existsSync(path.join(game, 'config', 'lumymon.json')));
   assert.match(statuses.at(-1) ?? '', /1 mods, 2 resource packs/);
+  assert.equal(ModpackSync.installedPackVersion(game), '0.9.18', 'la sync enregistre la version installée');
 
+  // pack.json unreachable: the sync still succeeds and the recorded version stays.
+  packJson.version = undefined;
   const again: string[] = [];
   await sync.sync(
     'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
@@ -133,6 +144,7 @@ test('sync installs mods and assets from two zips', async () => {
     () => undefined,
   );
   assert.equal(again.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
+  assert.equal(ModpackSync.installedPackVersion(game), '0.9.18');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

@@ -17,11 +17,10 @@ function fixture() {
   const collector = new ReportCollector({
     dataDir,
     launcherVersion: '2.1.0',
-    bundledPackVersion: '0.9.4',
-    getPackVersion: async () => '0.9.5',
+    installedPackVersion: () => '0.9.5',
     getJavaVersion: async () => '21.0.8',
     getGpu: async () => 'GPU test',
-    getPlayerName: () => 'Sacha',
+    hostName: 'PC-DE-SACHA',
     platform: 'linux',
     arch: 'x64',
     homeDir: '/home/alice',
@@ -52,9 +51,10 @@ test('collecte les métadonnées et anonymise les fins de logs aux limites prév
 
   assert.equal(report.reportId, '123e4567-e89b-42d3-a456-426614174000');
   assert.deepEqual(
-    { launcherVersion: report.launcherVersion, packVersion: report.packVersion, os: report.os, arch: report.arch, javaVersion: report.javaVersion, ramMb: report.ramMb, gpu: report.gpu, playerName: report.playerName },
-    { launcherVersion: '2.1.0', packVersion: '0.9.5', os: 'linux', arch: 'x64', javaVersion: '21.0.8', ramMb: 8192, gpu: 'GPU test', playerName: 'Sacha' },
+    { launcherVersion: report.launcherVersion, packVersion: report.packVersion, os: report.os, arch: report.arch, javaVersion: report.javaVersion, ramMb: report.ramMb, gpu: report.gpu },
+    { launcherVersion: '2.1.0', packVersion: '0.9.5', os: 'linux', arch: 'x64', javaVersion: '21.0.8', ramMb: 8192, gpu: 'GPU test' },
   );
+  assert.ok(!('playerName' in report), 'le pseudo ne sert pas au diagnostic');
   assert.equal(report.summary[0], 'Erreur sur <user> à <ip>');
   assert.equal(report.summary.length, 20);
   assert.ok(report.summary.every((tag) => tag.trim().length > 0 && tag.length <= 200));
@@ -74,17 +74,15 @@ test('utilise les replis et omet proprement les métadonnées facultatives', asy
   const collector = new ReportCollector({
     dataDir: f.dataDir,
     launcherVersion: '2.1.0',
-    bundledPackVersion: '0.9.4',
-    getPackVersion: async () => { throw new Error('offline'); },
+    installedPackVersion: () => undefined,
     getJavaVersion: async () => '',
     getGpu: async () => undefined,
-    getPlayerName: () => undefined,
     platform: 'darwin',
     arch: 'arm64',
     uuid: () => '123e4567-e89b-42d3-a456-426614174001',
   });
   const report = await collector.collect({ trigger: 'manual', summary: ['Envoi manuel'], gameDir: f.gameDir, ramMb: 6144 });
-  assert.equal(report.packVersion, '0.9.4');
+  assert.equal(report.packVersion, 'inconnu', 'sans version installée : inconnu, jamais la version embarquée au build');
   assert.equal(report.javaVersion, 'inconnu');
   assert.ok(!('gpu' in report));
   assert.ok(!('playerName' in report));
@@ -99,5 +97,30 @@ test('réduit un JSON pathologique sous 5 Mio', async () => {
   write(path.join(f.gameDir, 'hs_err_pid9.log'), controls);
   const report = await f.collector.collect({ trigger: 'crash_early', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096 });
   assert.ok(Buffer.byteLength(JSON.stringify(report)) <= 5 * 1024 * KIB);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('refuse les liens symboliques, fichiers comme dossiers', async () => {
+  const f = fixture();
+  const outside = path.join(f.root, 'outside');
+  write(path.join(outside, 'secret.txt'), 'contenu hors du jeu');
+  write(path.join(outside, 'crash-reports', 'crash-evil.txt'), 'contenu hors du jeu');
+  fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(f.gameDir, 'logs', 'latest.log'));
+  fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(f.gameDir, 'hs_err_pid7.log'));
+  fs.rmSync(path.join(f.gameDir, 'crash-reports'), { recursive: true });
+  fs.symlinkSync(path.join(outside, 'crash-reports'), path.join(f.gameDir, 'crash-reports'));
+  write(path.join(f.dataDir, 'logs', 'launcher.log'), 'journal légitime');
+
+  const report = await f.collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  assert.deepEqual(report.files.map((file) => file.name), ['launcher.log']);
+  assert.ok(!JSON.stringify(report).includes('hors du jeu'));
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('masque aussi le nom de la machine dans les fichiers et le résumé', async () => {
+  const f = fixture();
+  write(path.join(f.gameDir, 'logs', 'latest.log'), 'Connexion depuis PC-DE-SACHA.local');
+  const report = await f.collector.collect({ trigger: 'crash', summary: ['Hôte pc-de-sacha'], gameDir: f.gameDir, ramMb: 4096 });
+  assert.ok(!JSON.stringify(report).toLowerCase().includes('pc-de-sacha'));
   fs.rmSync(f.root, { recursive: true, force: true });
 });

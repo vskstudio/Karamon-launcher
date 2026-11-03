@@ -14,14 +14,14 @@ const SUMMARY_TAG_LENGTH = 200;
 export interface ReportCollectorOptions {
   dataDir: string;
   launcherVersion: string;
-  bundledPackVersion: string;
-  getPackVersion?: () => Promise<string | undefined>;
+  /** Pack version recorded by the last sync, read from disk (no network during collection). */
+  installedPackVersion?: () => string | undefined;
   getJavaVersion?: () => Promise<string | undefined>;
   getGpu?: () => Promise<string | undefined>;
-  getPlayerName?: () => string | undefined;
   platform?: string;
   arch?: string;
   homeDir?: string;
+  hostName?: string;
   uuid?: () => string;
 }
 
@@ -40,17 +40,21 @@ export class ReportCollector {
   }
 
   async collect(input: CollectReportInput): Promise<LauncherReport> {
-    const [packVersion, javaVersion, gpu] = await Promise.all([
-      this.optional(this.options.getPackVersion, this.options.bundledPackVersion),
+    const [javaVersion, gpu] = await Promise.all([
       this.optional(this.options.getJavaVersion, 'inconnu'),
       this.optional(this.options.getGpu, undefined),
     ]);
+    let packVersion: string | undefined;
+    try {
+      packVersion = this.options.installedPackVersion?.();
+    } catch {
+      packVersion = undefined;
+    }
     const files = this.collectFiles(input.gameDir);
-    const playerName = this.options.getPlayerName?.();
     const report: LauncherReport = {
       reportId: (this.options.uuid ?? crypto.randomUUID)(),
       launcherVersion: this.options.launcherVersion,
-      packVersion: packVersion || this.options.bundledPackVersion,
+      packVersion: packVersion || 'inconnu',
       os: this.options.platform ?? process.platform,
       arch: this.options.arch ?? process.arch,
       javaVersion: javaVersion || 'inconnu',
@@ -62,21 +66,22 @@ export class ReportCollector {
         .slice(0, SUMMARY_MAX_TAGS),
       files,
       ...(gpu ? { gpu: this.redact(gpu) } : {}),
-      ...(playerName ? { playerName } : {}),
     };
     return fitReport(report);
   }
 
   private collectFiles(gameDir: string): ReportFile[] {
-    const candidates: Array<{ file: string | null; limit: number }> = [
-      { file: path.join(this.options.dataDir, 'logs', 'launcher.log'), limit: 256 * KIB },
-      { file: path.join(gameDir, 'logs', 'latest.log'), limit: 512 * KIB },
-      { file: newestFile(path.join(gameDir, 'crash-reports'), (name) => /^crash-.*\.txt$/i.test(name)), limit: MIB },
-      { file: newestFile(gameDir, (name) => /^hs_err_pid\d+\.log$/i.test(name)), limit: MIB },
+    const dataRoot = realDir(this.options.dataDir);
+    const gameRoot = realDir(gameDir);
+    const candidates: Array<{ file: string | null; root: string | null; limit: number }> = [
+      { file: path.join(this.options.dataDir, 'logs', 'launcher.log'), root: dataRoot, limit: 256 * KIB },
+      { file: path.join(gameDir, 'logs', 'latest.log'), root: gameRoot, limit: 512 * KIB },
+      { file: newestFile(path.join(gameDir, 'crash-reports'), (name) => /^crash-.*\.txt$/i.test(name)), root: gameRoot, limit: MIB },
+      { file: newestFile(gameDir, (name) => /^hs_err_pid\d+\.log$/i.test(name)), root: gameRoot, limit: MIB },
     ];
     const files: ReportFile[] = [];
-    for (const { file, limit } of candidates) {
-      if (!file) continue;
+    for (const { file, root, limit } of candidates) {
+      if (!file || !root || !safeFileUnder(file, root)) continue;
       const content = readUtf8Tail(file, limit);
       if (!content) continue;
       files.push({ name: path.basename(file), content: this.redact(content) });
@@ -85,7 +90,10 @@ export class ReportCollector {
   }
 
   private redact(value: string): string {
-    return redactReportText(value, this.options.homeDir ?? os.homedir());
+    return redactReportText(value, {
+      homeDir: this.options.homeDir ?? os.homedir(),
+      hostName: this.options.hostName ?? os.hostname(),
+    });
   }
 
   private async optional<T>(getter: (() => Promise<T | undefined>) | undefined, fallback: T): Promise<T> {
@@ -104,7 +112,7 @@ function newestFile(dir: string, accepts: (name: string) => boolean): string | n
     for (const name of fs.readdirSync(dir)) {
       if (!accepts(name)) continue;
       const file = path.join(dir, name);
-      const stat = fs.statSync(file);
+      const stat = fs.lstatSync(file);
       if (!stat.isFile()) continue;
       if (!newest || stat.mtimeMs > newest.mtime) newest = { file, mtime: stat.mtimeMs };
     }
@@ -112,6 +120,28 @@ function newestFile(dir: string, accepts: (name: string) => boolean): string | n
     return null;
   }
   return newest?.file ?? null;
+}
+
+function realDir(dir: string): string | null {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A fixed internal path, read only if it is a regular file (not a link) and
+ * its real path, folders included, stays under the allowed root.
+ */
+function safeFileUnder(file: string, root: string): boolean {
+  try {
+    if (!fs.lstatSync(file).isFile()) return false;
+    const rel = path.relative(root, fs.realpathSync(file));
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
 }
 
 export function readUtf8Tail(file: string, limitBytes: number): string {

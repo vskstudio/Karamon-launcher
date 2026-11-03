@@ -16,7 +16,6 @@ export interface LauncherReport {
   gpu?: string;
   trigger: ReportTrigger;
   summary: string[];
-  playerName?: string;
   files: ReportFile[];
 }
 

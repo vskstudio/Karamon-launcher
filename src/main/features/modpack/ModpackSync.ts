@@ -16,6 +16,9 @@ import { installOverrides } from './OverridesInstaller.ts';
 import { FileVerifier, crc32File, sha1File, type ExpectedFile } from '../integrity/FileVerifier.ts';
 
 const CACHE_FILE = '.karamon-sync-cache.json';
+/** Version of the pack installed by the last successful sync (labels diagnostic reports). */
+const PACK_VERSION_FILE = '.karamon-pack-version.json';
+const PACK_VERSION_TIMEOUT_MS = 3000;
 const MODS_ZIP_NAME = 'mods.zip';
 const MODS_ZIP_TMP = '.karamon-mods.zip';
 // One {name, size, sha1} per jar inside mods.zip. Optional: older packs don't publish it.
@@ -208,6 +211,8 @@ export class ModpackSync {
     const dirs = this.ensureDirs(gameDir);
     const zipUrl = base + MODS_ZIP_NAME;
     const verifier = new FileVerifier(gameDir, { force: verifyAll });
+    // Read in parallel with the sync; recorded only once the sync succeeded.
+    const publishedVersion = this.fetchPackVersion(base);
 
     onStatus(verifyAll ? 'Vérification complète des fichiers du pack...' : 'Vérification du pack...');
     onProgress(0.02);
@@ -244,7 +249,45 @@ export class ModpackSync {
       verifier.save();
       this.shaders.save();
     }
+    ModpackSync.recordPackVersion(gameDir, await publishedVersion);
     return { damaged: verifier.damaged };
+  }
+
+  /** Pack version of the last successful sync, from disk only (diagnostic reports). */
+  static installedPackVersion(gameDir: string): string | undefined {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(gameDir, PACK_VERSION_FILE), 'utf8')) as { version?: unknown };
+      return typeof data.version === 'string' && data.version ? data.version : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private static recordPackVersion(gameDir: string, version: string | undefined): void {
+    if (!version) return;
+    try {
+      writeFileAtomic(path.join(gameDir, PACK_VERSION_FILE), JSON.stringify({ version }));
+    } catch {
+      /* best-effort: only used to label diagnostic reports */
+    }
+  }
+
+  /** Published pack.json version, or undefined after PACK_VERSION_TIMEOUT_MS or any error. */
+  private async fetchPackVersion(base: string): Promise<string | undefined> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), PACK_VERSION_TIMEOUT_MS);
+      timer.unref?.();
+    });
+    const read = this.http
+      .getJson<{ version?: unknown }>(base + 'pack.json')
+      .then((pack) => (typeof pack?.version === 'string' && pack.version ? pack.version : undefined))
+      .catch(() => undefined);
+    try {
+      return await Promise.race([read, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

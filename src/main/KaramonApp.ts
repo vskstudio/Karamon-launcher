@@ -152,20 +152,14 @@ export class KaramonApp {
     const collector = new ReportCollector({
       dataDir: this.paths.dataDir,
       launcherVersion: app.getVersion(),
-      bundledPackVersion: this.pack.version,
-      // No installed pack version is stored locally: the published one is what the sync installs.
-      getPackVersion: () =>
-        Promise.race([
-          this.http.getJson<{ version?: string }>(new URL('pack.json', this.pack.cdnBaseUrl).toString()).then((pack) => pack.version),
-          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000).unref()),
-        ]),
+      // Written by the last successful sync: no network call while collecting.
+      installedPackVersion: () => ModpackSync.installedPackVersion(this.currentInstanceDir()),
       getJavaVersion: async () => {
         const javaPath = this.config.get().javaPath;
         const list = await this.getJavaList();
         return (list.find((java) => java.path === javaPath) ?? list.find((java) => java.version.startsWith('21')) ?? list[0])?.version;
       },
       getGpu: () => KaramonApp.gpuLabel(),
-      getPlayerName: () => this.auth.state().active?.name,
     });
     return new ReportManager({
       collector,
