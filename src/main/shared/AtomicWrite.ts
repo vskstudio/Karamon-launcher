@@ -6,11 +6,11 @@ import path from 'path';
  * directory, is flushed to disk, then renamed over the target. A power cut leaves
  * either the old file or the new one, never a zero-filled or truncated mix.
  */
-export function writeFileAtomic(target: string, data: Buffer | string): void {
+export function writeFileAtomic(target: string, data: Buffer | string, mode?: number): void {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = tempPathFor(target);
   try {
-    const fd = fs.openSync(tmp, 'w');
+    const fd = fs.openSync(tmp, 'w', mode);
     try {
       fs.writeFileSync(fd, data);
       fs.fsyncSync(fd);

@@ -3,10 +3,12 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { ReportQueue } from './ReportQueue.ts';
-import type { LauncherReport } from './ReportTypes.ts';
+import { REPORT_TTL_MS, ReportQueue } from './ReportQueue.ts';
+import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
 
-function report(id: string): LauncherReport {
+const DAY = 24 * 60 * 60 * 1000;
+
+function report(id: string, trigger: ReportTrigger = 'crash'): LauncherReport {
   return {
     reportId: id,
     launcherVersion: '2.1.0',
@@ -15,50 +17,160 @@ function report(id: string): LauncherReport {
     arch: 'x64',
     javaVersion: '21',
     ramMb: 8192,
-    trigger: 'crash',
+    trigger,
     summary: [`crash ${id}`],
     files: [],
   };
 }
 
+function tempRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-queue-'));
+}
+
+function reportFiles(root: string): string[] {
+  return fs.readdirSync(path.join(root, 'reports')).filter((name) => name.endsWith('.json.gz'));
+}
+
 test('persiste des rapports gzip et leurs états entre deux instances', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-queue-'));
+  const root = tempRoot();
   const queue = new ReportQueue(root);
   queue.enqueue(report('a'), 'awaiting-consent', 10);
   queue.enqueue(report('b'), 'approved', 20);
 
   const restored = new ReportQueue(root);
-  assert.deepEqual(restored.list().map((item) => [item.report.reportId, item.state]), [
-    ['a', 'awaiting-consent'],
-    ['b', 'approved'],
+  assert.deepEqual(restored.list(undefined, 30).map((item) => [item.report.reportId, item.state, item.attempts]), [
+    ['a', 'awaiting-consent', 0],
+    ['b', 'approved', 0],
   ]);
-  assert.deepEqual(restored.list('approved').map((item) => item.report.reportId), ['b']);
-  assert.ok(fs.readdirSync(path.join(root, 'reports')).every((name) => name.endsWith('.json.gz')));
+  assert.deepEqual(restored.list('approved', 30).map((item) => item.report.reportId), ['b']);
+  assert.equal(reportFiles(root).length, 2);
   assert.ok(!fs.readdirSync(path.join(root, 'reports')).some((name) => name.includes('karamon-tmp')));
 
-  restored.approve('a');
-  assert.equal(new ReportQueue(root).list()[0].state, 'approved');
+  restored.approve('a', 30);
+  assert.equal(new ReportQueue(root).list(undefined, 30)[0].state, 'approved');
   restored.remove('b');
-  assert.deepEqual(new ReportQueue(root).list().map((item) => item.report.reportId), ['a']);
+  assert.deepEqual(new ReportQueue(root).list(undefined, 30).map((item) => item.report.reportId), ['a']);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('ne garde que les trois rapports les plus récents', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-queue-'));
+test('dossier en 0700 et fichiers en 0600', { skip: process.platform === 'win32' }, () => {
+  const root = tempRoot();
+  fs.mkdirSync(path.join(root, 'reports'), { mode: 0o755 });
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('a'), 'approved', 10);
+  queue.markAutoSent('crash', 10);
+  queue.markManualSent(10);
+  const dir = path.join(root, 'reports');
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+  for (const name of fs.readdirSync(dir)) {
+    assert.equal(fs.statSync(path.join(dir, name)).mode & 0o777, 0o600, name);
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('supprime les rapports de plus de sept jours', () => {
+  const root = tempRoot();
+  const logs: string[] = [];
+  const queue = new ReportQueue(root, { log: (message) => logs.push(message) });
+  queue.enqueue(report('vieux'), 'approved', 1_000);
+  queue.enqueue(report('récent'), 'approved', 1_000 + REPORT_TTL_MS);
+  assert.equal(REPORT_TTL_MS, 7 * DAY);
+  assert.deepEqual(queue.list(undefined, 1_001 + REPORT_TTL_MS).map((item) => item.report.reportId), ['récent']);
+  assert.equal(reportFiles(root).length, 1);
+  assert.ok(logs.some((line) => line.includes('expiré')));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('l’éviction retire d’abord les automatiques non consentis et garde manuels et approuvés', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('manuel', 'manual'), 'approved', 1);
+  queue.enqueue(report('attente-1'), 'awaiting-consent', 2);
+  queue.enqueue(report('approuvé'), 'approved', 3);
+  queue.enqueue(report('attente-2'), 'awaiting-consent', 4);
+  assert.deepEqual(queue.list(undefined, 5).map((item) => item.report.reportId), ['manuel', 'approuvé', 'attente-2']);
+  queue.enqueue(report('attente-3'), 'awaiting-consent', 6);
+  assert.deepEqual(queue.list(undefined, 7).map((item) => item.report.reportId), ['manuel', 'approuvé', 'attente-3']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('les expirés partent avant tout autre rapport', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('expiré', 'manual'), 'approved', 1);
+  const later = 2 + REPORT_TTL_MS;
+  queue.enqueue(report('attente'), 'awaiting-consent', later);
+  queue.enqueue(report('a'), 'approved', later + 1);
+  queue.enqueue(report('b'), 'approved', later + 2);
+  assert.deepEqual(queue.list(undefined, later + 3).map((item) => item.report.reportId), ['attente', 'a', 'b']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('jamais plus de trois rapports, même sans automatique en attente', () => {
+  const root = tempRoot();
   const queue = new ReportQueue(root);
   for (let i = 1; i <= 4; i++) queue.enqueue(report(String(i)), 'approved', i);
-  assert.deepEqual(queue.list().map((item) => item.report.reportId), ['2', '3', '4']);
+  assert.equal(queue.list(undefined, 5).length, 3);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('un fichier corrompu est supprimé et journalisé sans planter', () => {
+  const root = tempRoot();
+  const logs: string[] = [];
+  const queue = new ReportQueue(root, { log: (message) => logs.push(message) });
+  queue.enqueue(report('sain'), 'approved', 10);
+  const broken = path.join(root, 'reports', '5-casse.json.gz');
+  fs.writeFileSync(broken, 'pas du gzip');
+  fs.writeFileSync(path.join(root, 'reports', 'state.json'), '{pas du json');
+  assert.deepEqual(queue.list(undefined, 20).map((item) => item.report.reportId), ['sain']);
+  assert.ok(!fs.existsSync(broken));
+  assert.ok(logs.some((line) => line.includes('corrompu')));
+  assert.equal(queue.mayAutoSend('crash', 20), true, 'un state.json illisible ne bloque rien');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('enregistre les tentatives et la prochaine date d’essai', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('a'), 'approved', 10);
+  queue.recordAttempt('a', 5_000);
+  queue.recordAttempt('a', 9_000);
+  const [item] = new ReportQueue(root).list(undefined, 20);
+  assert.equal(item.attempts, 2);
+  assert.equal(item.nextAttemptAt, 9_000);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('retirer le consentement supprime les approuvés non envoyés seulement', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  queue.enqueue(report('attente'), 'awaiting-consent', 1);
+  queue.enqueue(report('auto'), 'approved', 2);
+  queue.enqueue(report('manuel', 'manual'), 'approved', 3);
+  assert.equal(queue.removeApproved(), 2);
+  assert.deepEqual(queue.list(undefined, 4).map((item) => item.report.reportId), ['attente']);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('applique dix minutes par trigger et persiste le délai', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-queue-'));
+  const root = tempRoot();
   const queue = new ReportQueue(root);
   assert.equal(queue.mayAutoSend('crash', 1_000), true);
   queue.markAutoSent('crash', 1_000);
   assert.equal(queue.mayAutoSend('crash', 1_000 + 599_999), false);
   assert.equal(new ReportQueue(root).mayAutoSend('crash', 1_000 + 600_000), true);
   assert.equal(queue.mayAutoSend('sync_failed', 1_001), true);
-  assert.equal(queue.mayAutoSend('manual', 1_001), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('limite l’envoi manuel à trois par tranche de dix minutes', () => {
+  const root = tempRoot();
+  const queue = new ReportQueue(root);
+  for (const at of [1_000, 2_000, 3_000]) {
+    assert.equal(queue.mayManualSend(at), true);
+    queue.markManualSent(at);
+  }
+  assert.equal(queue.mayManualSend(4_000), false);
+  assert.equal(new ReportQueue(root).mayManualSend(1_000 + 600_000), true, 'le plus ancien sort de la fenêtre');
   fs.rmSync(root, { recursive: true, force: true });
 });

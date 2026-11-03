@@ -70,16 +70,21 @@ export interface ReportConsentRequest {
   summary: string[];
 }
 
+/** What the player decided for one report: nothing else crosses from the renderer. */
 export interface ReportConsentAnswer {
   reportId: string;
   send: boolean;
   always: boolean;
 }
 
-export type ReportSendResult = {
-  status: 'sent' | 'queued' | 'skipped' | 'failed';
-  code?: string;
-};
+export type ReportSkipReason = 'cooldown' | 'manual_limit' | 'declined' | 'unknown_report';
+
+/** supportCode comes from the panel once it accepted the report (null if it sent none). */
+export type ReportSendResult =
+  | { status: 'sent'; supportCode: string | null }
+  | { status: 'queued'; nextAttemptAt: number | null }
+  | { status: 'skipped'; reason: ReportSkipReason }
+  | { status: 'failed'; reason: string; retryable: boolean };
 
 export interface GameState {
   running: boolean;

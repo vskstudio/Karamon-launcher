@@ -24,12 +24,18 @@ export type ReportQueueState = 'awaiting-consent' | 'approved';
 export interface QueuedReport {
   state: ReportQueueState;
   createdAt: number;
+  /** Failed delivery attempts so far. */
+  attempts: number;
+  /** Not retried before this time (Retry-After, backoff). */
+  nextAttemptAt?: number;
   report: LauncherReport;
 }
 
-export type ReportSendStatus = 'sent' | 'queued' | 'skipped' | 'failed';
+export type ReportSkipReason = 'cooldown' | 'manual_limit' | 'declined' | 'unknown_report';
 
-export interface ReportSendResult {
-  status: ReportSendStatus;
-  code?: string;
-}
+/** Outcome of a report action, as seen by the renderer. */
+export type ReportSendResult =
+  | { status: 'sent'; supportCode: string | null }
+  | { status: 'queued'; nextAttemptAt: number | null }
+  | { status: 'skipped'; reason: ReportSkipReason }
+  | { status: 'failed'; reason: string; retryable: boolean };

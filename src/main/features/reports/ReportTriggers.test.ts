@@ -5,15 +5,25 @@ import { LaunchPhaseError, exitTrigger, failureTrigger, failureSummary } from '.
 const MIN = 60 * 1000;
 
 test('une sortie non nulle avant deux minutes est un crash précoce, après un crash', () => {
-  assert.equal(exitTrigger(1, 0, 30_000), 'crash_early');
-  assert.equal(exitTrigger(-1, 0, 2 * MIN), 'crash_early');
-  assert.equal(exitTrigger(1, 0, 2 * MIN + 1), 'crash');
-  assert.equal(exitTrigger(null, 0, 10 * MIN), 'crash');
+  assert.equal(exitTrigger({ code: 1 }, 0, 30_000), 'crash_early');
+  assert.equal(exitTrigger({ code: -1 }, 0, 2 * MIN), 'crash_early');
+  assert.equal(exitTrigger({ code: 1 }, 0, 2 * MIN + 1), 'crash');
+  assert.equal(exitTrigger({ code: null }, 0, 10 * MIN), 'crash');
 });
 
 test('une sortie normale ne produit aucun rapport', () => {
-  assert.equal(exitTrigger(0, 0, 1_000), null);
-  assert.equal(exitTrigger(0, 0, 60 * MIN), null);
+  assert.equal(exitTrigger({ code: 0 }, 0, 1_000), null);
+  assert.equal(exitTrigger({ code: 0 }, 0, 60 * MIN), null);
+});
+
+test('un arrêt demandé par le joueur ou le launcher n’est pas un crash', () => {
+  assert.equal(exitTrigger({ code: 1, stopRequested: true }, 0, 30_000), null);
+  assert.equal(exitTrigger({ code: null, signal: 'SIGTERM' }, 0, 10 * MIN), null);
+  assert.equal(exitTrigger({ code: null, signal: 'SIGINT' }, 0, 10 * MIN), null);
+  assert.equal(exitTrigger({ code: null, signal: 'SIGHUP' }, 0, 10 * MIN), null);
+  // SIGKILL / SIGSEGV : manque de mémoire ou plantage de la JVM, c'est bien un problème.
+  assert.equal(exitTrigger({ code: null, signal: 'SIGKILL' }, 0, 10 * MIN), 'crash');
+  assert.equal(exitTrigger({ code: null, signal: 'SIGSEGV' }, 0, 30_000), 'crash_early');
 });
 
 test('un échec de synchronisation pendant Jouer reste sync_failed', () => {

@@ -329,7 +329,7 @@ export class SettingsPage implements Page {
         }),
         settingRow({
           label: 'Envoyer automatiquement les rapports de problème',
-          hint: "Après un crash ou un échec de lancement, les logs anonymisés partent à l'équipe Karamon sans te le demander. Décoché, le launcher te pose la question à chaque fois.",
+          hint: "Après un crash ou un échec de lancement, les journaux partent à l'équipe Karamon sans te le demander, une fois tes infos personnelles masquées. Décoché, le launcher te pose la question à chaque fois et supprime les rapports pas encore envoyés.",
           control: this.autoSendReports.root,
         }),
         settingRow({

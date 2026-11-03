@@ -63,6 +63,12 @@ export class WindowManager {
     return !!this.window && !this.window.isDestroyed();
   }
 
+  /** True when an IPC call comes from the launcher's own page (not a frame or another window). */
+  isOwnSender(sender: { id: number } | null | undefined, frameUrl?: string): boolean {
+    if (!this.exists() || !sender || sender.id !== this.window!.webContents.id) return false;
+    return frameUrl === undefined || frameUrl.startsWith('file:');
+  }
+
   minimize(): void {
     this.window?.minimize();
   }

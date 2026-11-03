@@ -52,10 +52,11 @@ export class ReportConsent {
         h('p', { text: CONSENT_TEXT.question }),
         request.summary.length > 0 ? h('p', { className: 'report-consent__summary', text: request.summary.slice(0, 3).join(' · ') }) : null,
         h('p', { className: 'report-consent__detail', text: CONSENT_TEXT.detail }),
+        h('p', { className: 'report-consent__detail', text: CONSENT_TEXT.declineHint }),
         h('label', { className: 'report-consent__always' }, always, h('span', { text: CONSENT_TEXT.always })),
       ],
       foot: [
-        button({ label: CONSENT_TEXT.later, variant: 'ghost', onClick: () => answer(false) }),
+        button({ label: CONSENT_TEXT.decline, variant: 'ghost', onClick: () => answer(false) }),
         button({ label: CONSENT_TEXT.send, variant: 'primary', onClick: () => answer(true) }),
       ],
       // Closed without an answer: the report stays on disk and is asked again at the next launch.

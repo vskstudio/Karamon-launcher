@@ -19,9 +19,13 @@ import {
   type PingResult,
   type RepairResult,
   type ReportConsentAnswer,
+  type ReportSendResult,
   type SetupResult,
   type SystemInfo,
 } from '../ipc/contract';
+
+/** Answer to a report IPC call that did not come from the launcher's own page. */
+const REJECTED_SENDER: ReportSendResult = { status: 'failed', reason: 'émetteur refusé', retryable: false };
 import { Paths } from './shared/Paths';
 import { HttpClient } from './shared/HttpClient';
 import { loadPackProfile, type PackProfile } from './shared/PackProfile';
@@ -163,7 +167,7 @@ export class KaramonApp {
     });
     return new ReportManager({
       collector,
-      queue: new ReportQueue(this.paths.dataDir),
+      queue: new ReportQueue(this.paths.dataDir, { log: (msg) => this.fileLog.warn(`[Rapports] ${msg}`) }),
       transport: new ReportTransport(),
       context: () => ({ gameDir: this.currentInstanceDir(), ramMb: this.config.get().memoryMb }),
       autoSend: () => this.config.get().autoSendReports,
@@ -179,7 +183,8 @@ export class KaramonApp {
       .detect(trigger, summary)
       .then((result) => {
         if (result.status === 'sent') {
-          this.window.send(Channels.eventStatus, `Rapport envoyé à l'équipe Karamon (code ${result.code}).`);
+          const code = result.supportCode ? ` (code ${result.supportCode})` : '';
+          this.window.send(Channels.eventStatus, `Rapport envoyé à l'équipe Karamon${code}.`);
         }
       })
       .catch((e) => this.fileLog.warn(`[Rapports] ${(e as Error).message}`));
@@ -286,6 +291,7 @@ export class KaramonApp {
       const before = this.config.get();
       this.config.set(updates);
       const after = this.config.get();
+      if (before.autoSendReports && !after.autoSendReports) this.reports.autoSendDisabled();
       if (after.potatoMode !== before.potatoMode) this.minecraft.applyPotatoMode(after, this.statusEmitter());
       if (after.disableSodium !== before.disableSodium) this.minecraft.applySodiumOff(after, this.statusEmitter());
       return after;
@@ -327,10 +333,14 @@ export class KaramonApp {
     ipcMain.handle(Channels.crashesReveal, (_e, name: string) =>
       shell.showItemInFolder(this.crashes.reportPath(this.currentInstanceDir(), name)),
     );
-    ipcMain.handle(Channels.reportsSendManual, () => this.reports.sendManual());
-    ipcMain.handle(Channels.reportsConsent, (_e, answer: ReportConsentAnswer) =>
-      this.reports.answerConsent(String(answer?.reportId ?? ''), answer?.send === true, answer?.always === true),
+    ipcMain.handle(Channels.reportsSendManual, (e): Promise<ReportSendResult> | ReportSendResult =>
+      this.window.isOwnSender(e.sender, e.senderFrame?.url) ? this.reports.sendManual() : REJECTED_SENDER,
     );
+    // Only the report id and the player's choice cross over; the manager checks the report's state.
+    ipcMain.handle(Channels.reportsConsent, (e, answer: ReportConsentAnswer): Promise<ReportSendResult> | ReportSendResult => {
+      if (!this.window.isOwnSender(e.sender, e.senderFrame?.url)) return REJECTED_SENDER;
+      return this.reports.answerConsent(String(answer?.reportId ?? ''), answer?.send === true, answer?.always === true);
+    });
     ipcMain.handle(Channels.backupCreate, () =>
       this.backup.create(this.currentInstanceDir()),
     );

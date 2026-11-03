@@ -32,7 +32,7 @@ export interface LaunchSpec {
 export interface LaunchEvents {
   onStatus: (msg: string) => void;
   onProgress: (fraction: number) => void;
-  onExit: (code: number | null) => void;
+  onExit: (code: number | null, signal?: NodeJS.Signals | null) => void;
   onLog: (line: string) => void;
 }
 
@@ -94,9 +94,9 @@ export class GameLauncher {
         if (line.trim()) events.onLog(line);
       }
     });
-    child.on('exit', (code) => {
+    child.on('exit', (code, signal) => {
       this.running.delete(account);
-      events.onExit(code);
+      events.onExit(code, signal);
     });
     child.on('error', (err) => {
       this.running.delete(account);

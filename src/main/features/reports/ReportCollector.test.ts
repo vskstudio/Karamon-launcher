@@ -34,7 +34,7 @@ function write(file: string, content: string | Buffer): void {
   fs.writeFileSync(file, content);
 }
 
-test('collecte les métadonnées et anonymise les fins de logs aux limites prévues', async () => {
+test('collecte les métadonnées et masque les fins de logs aux limites prévues', async () => {
   const f = fixture();
   write(path.join(f.dataDir, 'logs', 'launcher.log'), Buffer.concat([Buffer.from('é'), Buffer.alloc(256 * KIB - 1, 97)]));
   write(path.join(f.gameDir, 'logs', 'latest.log'), `${'b'.repeat(512 * KIB)}\n/home/alice 192.168.1.2`);

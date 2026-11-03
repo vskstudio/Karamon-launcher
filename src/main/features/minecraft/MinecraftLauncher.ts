@@ -163,12 +163,13 @@ export class MinecraftLauncher {
         onStatus: events.onStatus,
         onProgress: (p) => events.onProgress(0.35 + p * 0.65),
         onLog: events.onLog,
-        onExit: (code) => {
+        onExit: (code, signal) => {
           const endedAt = Date.now();
           const corruption = isEarlyCrash(code, spawnedAt, endedAt)
             ? detectCorruption(readCrashEvidence(gameDir, spawnedAt))
             : [];
-          events.onExit(code, corruption, exitTrigger(code, spawnedAt, endedAt));
+          // The launcher never stops the game itself today: stopRequested stays false.
+          events.onExit(code, corruption, exitTrigger({ code, signal, stopRequested: false }, spawnedAt, endedAt));
         },
       },
     );
