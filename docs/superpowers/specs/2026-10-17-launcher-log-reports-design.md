@@ -89,7 +89,8 @@ Coordonne collecte, consentement, file et transport, et ne lève jamais d'erreur
 
 - Envoi automatique actif : le rapport est approuvé et envoyé. Sinon il attend le consentement et le renderer reçoit une demande (identifiant, trigger, résumé masqué).
 - Au démarrage (fenêtre chargée, sans la retarder) : il réessaie les approuvés dont la date d'essai est passée, puis repropose les consentements en attente.
-- Réessais : 5 tentatives au plus, avec un délai d'au moins 1 min, 5 min, 30 min, puis 2 h, ou plus si `Retry-After` le demande. Les réessais ont lieu au lancement suivant. Après la cinquième tentative, le rapport est supprimé.
+- Réessais : un essai à chaque lancement du launcher, sauf si `Retry-After` demande d'attendre plus longtemps. Après 5 envois ratés (`failedDeliveries`, repris de #35/#36), le rapport est supprimé. Un rapport retiré de la file pendant son envoi n'est pas compté comme abandonné.
+- TTL : chaque rapport porte `expiresAt` (création + 7 jours). Un rapport écrit par une version antérieure, sans ce champ, reçoit 7 jours à partir de sa première lecture.
 - Un échec d'envoi ne déclenche jamais de nouvelle collecte ni de nouveau rapport.
 - Un même rapport n'est jamais posté deux fois en parallèle.
 
@@ -166,7 +167,7 @@ La branche passe le typecheck, toute la suite de tests et le build. La PR n'est 
 
 - les plafonds de 1 Mio pour `crash-*.txt` et `hs_err_pid*.log` ;
 - la file à 3 rapports, avec les manuels et approuvés évincés en dernier recours si la file en est pleine ;
-- l'abandon après 5 tentatives et le calendrier des délais ;
+- l'abandon après 5 envois ratés, avec un essai par lancement ;
 - le traitement des réponses : 400, 401, 403, 404 et 413 abandonnés ; 408, 429 et 5xx réessayés ;
 - le réessai au lancement suivant uniquement (pas de minuterie pendant la session) ;
 - `inconnu` pour une version absente (pack jamais synchronisé, Java non détecté) ;
