@@ -9,10 +9,10 @@ import {
   type ProgressEmitter,
 } from '../modpack/ModpackSync';
 import { repairCorruptConfigs, repairMessage, type ConfigRepairResult } from '../integrity/ConfigRepair';
-import { detectCorruption, isEarlyCrash, readCrashEvidence } from '../integrity/CrashDiagnosis';
+import { detectCorruption, isEarlyCrash, readCrashEvidence, stoppedCleanly } from '../integrity/CrashDiagnosis';
 import { ServersDat } from './ServersDat';
 import { PotatoMode, potatoSummary, type PotatoReport } from '../potato/PotatoMode';
-import { potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
+import { PACK_MIN_MEMORY_MB, potatoJvmArgs, potatoMemoryMb } from '../potato/PotatoSettings';
 import { SodiumOff, sodiumSummary } from '../sodium/SodiumOff';
 import type { ParkingReport } from '../modpack/JarParking';
 import type { GameLauncher } from './GameLauncher';
@@ -149,6 +149,11 @@ export class MinecraftLauncher {
         `Mode PC modeste : le jeu démarre avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire (réglage : ${MinecraftLauncher.go(memoryMb)}).`,
       );
     }
+    if (jvm.memoryMb < PACK_MIN_MEMORY_MB) {
+      events.onStatus(
+        `Attention : avec ${MinecraftLauncher.go(jvm.memoryMb)} de mémoire, le pack risque de planter au chargement (il lui faut ${MinecraftLauncher.go(PACK_MIN_MEMORY_MB)}).`,
+      );
+    }
 
     let spawnedAt = Date.now();
     await this.gameLauncher.launch(
@@ -169,7 +174,8 @@ export class MinecraftLauncher {
             ? detectCorruption(readCrashEvidence(gameDir, spawnedAt))
             : [];
           // The launcher never stops the game itself today: stopRequested stays false.
-          events.onExit(code, corruption, exitTrigger({ code, signal, stopRequested: false }, spawnedAt, endedAt));
+          const clean = code !== 0 && stoppedCleanly(gameDir, spawnedAt);
+          events.onExit(code, corruption, exitTrigger({ code, signal, stopRequested: false }, spawnedAt, endedAt, clean));
         },
       },
     );

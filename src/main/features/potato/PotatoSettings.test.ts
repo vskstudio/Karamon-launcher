@@ -158,10 +158,10 @@ test('lowEndReasons: RAM, Intel-only GPU, few threads', () => {
 
 test('potato memory: capped on 8 Go or less, never raised, untouched above', () => {
   assert.equal(potatoMemoryCapMb(16000), null);
-  assert.equal(potatoMemoryCapMb(7900), 3072);
-  assert.equal(potatoMemoryCapMb(6000), 2560);
+  assert.equal(potatoMemoryCapMb(7900), 4096);
+  assert.equal(potatoMemoryCapMb(6000), 4096);
   assert.equal(potatoMemoryCapMb(3900), 2048);
-  assert.equal(potatoMemoryMb(7900, 12288), 3072);
+  assert.equal(potatoMemoryMb(7900, 12288), 4096);
   assert.equal(potatoMemoryMb(7900, 2560), 2560);
   assert.equal(potatoMemoryMb(16000, 12288), 12288);
   for (const total of [3000, 4000, 6000, 8192, 8704]) {

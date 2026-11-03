@@ -139,7 +139,8 @@ export class GameLauncher {
     events.onStatus('Téléchargement des librairies...');
     await this.libraries.downloadAll(version.libraries ?? [], this.opts.paths.librariesDir, (frac, label) => {
       events.onProgress(0.1 + frac * 0.3);
-      events.onStatus(`Librairies: ${label}`);
+      // UI only: one line per file would push the useful part out of launcher.log (and the reports).
+      events.onLog(`Librairies: ${label}`);
     });
 
     events.onStatus('Extraction des natives...');
@@ -151,7 +152,7 @@ export class GameLauncher {
       events.onStatus('Téléchargement des assets...');
       await this.assets.download(version.assetIndex, this.opts.paths.assetsDir, (frac, label) => {
         events.onProgress(0.45 + frac * 0.5);
-        events.onStatus(label);
+        events.onLog(label);
       });
     }
 

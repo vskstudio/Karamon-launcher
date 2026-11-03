@@ -32,7 +32,7 @@ export interface SetupResult {
   path: string;
 }
 
-export type LaunchResult = { ok: true } | { ok: false; error: string };
+export type LaunchResult = { ok: true } | { ok: false; error: string; loginRequired?: boolean };
 
 export type RepairResult =
   | { ok: true; summary: string; damaged: number; configs: number }

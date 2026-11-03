@@ -24,9 +24,11 @@ export type ReportQueueState = 'awaiting-consent' | 'approved';
 export interface QueuedReport {
   state: ReportQueueState;
   createdAt: number;
-  /** Failed delivery attempts so far. */
-  attempts: number;
-  /** Not retried before this time (Retry-After, backoff). */
+  /** Deleted after this time (TTL). Missing on entries written before the TTL existed. */
+  expiresAt?: number;
+  /** Failed deliveries so far (#35/#36); missing on older entries, read as 0. */
+  failedDeliveries?: number;
+  /** Not retried before this time (the panel's Retry-After). */
   nextAttemptAt?: number;
   report: LauncherReport;
 }

@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { MAX_SEND_ATTEMPTS, ReportManager } from './ReportManager.ts';
-import { ReportQueue } from './ReportQueue.ts';
+import { ReportManager } from './ReportManager.ts';
+import { MAX_FAILED_DELIVERIES, ReportQueue } from './ReportQueue.ts';
 import type { ReportTransportResult } from './ReportTransport.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
 
@@ -16,7 +16,10 @@ function setup(options: { automatic?: boolean } = {}) {
   const queue = new ReportQueue(root);
   let automatic = options.automatic ?? false;
   let transport: ReportTransportResult | Error = SENT;
-  let clock = 1_000_000;
+  // Real time: the queue's TTL compares with Date.now() when list() gets no date.
+  let clock = Date.now();
+  const logs: string[] = [];
+  let duringSend: (report: LauncherReport) => void = () => {};
   let next = 1;
   let collects = 0;
   let posts = 0;
@@ -34,8 +37,9 @@ function setup(options: { automatic?: boolean } = {}) {
     },
     queue,
     transport: {
-      send: async () => {
+      send: async (report) => {
         posts++;
+        duringSend(report);
         if (transport instanceof Error) throw transport;
         return transport;
       },
@@ -44,12 +48,17 @@ function setup(options: { automatic?: boolean } = {}) {
     autoSend: () => automatic,
     setAutoSend: (value) => { automatic = value; },
     requestConsent: (request) => { consent.push(request); },
+    log: (message) => { logs.push(message); },
     now: () => clock,
   });
   return {
-    root, queue, manager, consent,
+    root, queue, manager, consent, logs,
     automatic: () => automatic,
-    setTransport: (value: ReportTransportResult | Error) => { transport = value; },
+    /** Also takes the short names used by the #35/#36 tests. */
+    setTransport: (value: ReportTransportResult | Error | 'sent' | 'retry' | 'discard') => {
+      transport = value === 'sent' ? SENT : value === 'retry' ? RETRY : value === 'discard' ? { kind: 'discard', reason: 'HTTP 400' } : value;
+    },
+    setDuringSend: (hook: typeof duringSend) => { duringSend = hook; },
     advance: (ms: number) => { clock += ms; },
     now: () => clock,
     counts: () => ({ collects, posts }),
@@ -97,7 +106,7 @@ test('toujours envoyer active le réglage et met en attente hors ligne', async (
   await f.manager.detect('crash_early', ['Crash tôt']);
   const result = await f.manager.answerConsent(f.consent[0].reportId, true, true);
   assert.equal(result.status, 'queued');
-  assert.ok(result.status === 'queued' && result.nextAttemptAt! > f.now());
+  assert.ok(result.status === 'queued' && result.nextAttemptAt === null, 'sans Retry-After : prochain lancement');
   assert.equal(f.automatic(), true);
   assert.equal(f.queue.list('approved', f.now()).length, 1);
   const second = await f.manager.detect('sync_failed', ['Réseau']);
@@ -128,7 +137,7 @@ test('respecte Retry-After et abandonne après cinq tentatives', async () => {
   assert.equal(f.counts().posts, 1, 'pas de nouvel essai avant la date annoncée');
 
   f.setTransport(RETRY);
-  for (let attempt = 2; attempt < MAX_SEND_ATTEMPTS; attempt++) {
+  for (let attempt = 2; attempt < MAX_FAILED_DELIVERIES; attempt++) {
     f.advance(24 * 60 * 60 * 1000);
     await f.manager.start();
     assert.equal(f.counts().posts, attempt);
@@ -136,7 +145,7 @@ test('respecte Retry-After et abandonne après cinq tentatives', async () => {
   }
   f.advance(24 * 60 * 60 * 1000);
   await f.manager.start();
-  assert.equal(f.counts().posts, MAX_SEND_ATTEMPTS);
+  assert.equal(f.counts().posts, MAX_FAILED_DELIVERIES);
   assert.equal(f.queue.list(undefined, f.now()).length, 0, 'abandon après la cinquième tentative');
   f.done();
 });
@@ -247,4 +256,34 @@ test('au démarrage réessaie les approuvés et repropose les consentements', as
   assert.equal(f.queue.list('approved', f.now()).length, 0);
   assert.deepEqual(f.consent.map((item) => item.trigger), ['launch_failed']);
   f.done();
+});
+
+test('limite les doublons automatiques mais jamais le bouton manuel', async () => {
+  const f = setup();
+  await f.manager.detect('crash', ['premier'], undefined, 1_000);
+  assert.equal((await f.manager.detect('crash', ['doublon'], undefined, 2_000)).status, 'skipped');
+  assert.equal((await f.manager.sendManual()).status, 'sent');
+  assert.equal((await f.manager.sendManual()).status, 'sent');
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('abandonne un rapport après cinq envois ratés', async () => {
+  const f = setup();
+  f.setTransport('retry');
+  assert.equal((await f.manager.sendManual()).status, 'queued');
+  for (let failed = 2; failed < MAX_FAILED_DELIVERIES; failed++) await f.manager.start();
+  assert.equal(f.queue.list('approved').length, 1);
+  await f.manager.start();
+  assert.equal(f.queue.list().length, 0);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('un rapport retiré de la file pendant son envoi n’est pas annoncé comme abandonné', async () => {
+  const f = setup();
+  f.setTransport('retry');
+  f.setDuringSend((report) => f.queue.remove(report.reportId));
+  assert.equal((await f.manager.sendManual()).status, 'failed');
+  assert.ok(f.logs.some((line) => line.includes('retiré de la file pendant son envoi')));
+  assert.ok(!f.logs.some((line) => line.includes('abandonné')));
+  fs.rmSync(f.root, { recursive: true, force: true });
 });

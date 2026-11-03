@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { REPORT_TTL_MS, ReportQueue } from './ReportQueue.ts';
+import zlib from 'zlib';
+import { MAX_FAILED_DELIVERIES, REPORT_TTL_MS, ReportQueue } from './ReportQueue.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -38,7 +39,7 @@ test('persiste des rapports gzip et leurs états entre deux instances', () => {
   queue.enqueue(report('b'), 'approved', 20);
 
   const restored = new ReportQueue(root);
-  assert.deepEqual(restored.list(undefined, 30).map((item) => [item.report.reportId, item.state, item.attempts]), [
+  assert.deepEqual(restored.list(undefined, 30).map((item) => [item.report.reportId, item.state, item.failedDeliveries]), [
     ['a', 'awaiting-consent', 0],
     ['b', 'approved', 0],
   ]);
@@ -129,15 +130,18 @@ test('un fichier corrompu est supprimé et journalisé sans planter', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('enregistre les tentatives et la prochaine date d’essai', () => {
+test('enregistre les envois ratés et la date demandée par Retry-After', () => {
   const root = tempRoot();
   const queue = new ReportQueue(root);
   queue.enqueue(report('a'), 'approved', 10);
-  queue.recordAttempt('a', 5_000);
-  queue.recordAttempt('a', 9_000);
-  const [item] = new ReportQueue(root).list(undefined, 20);
-  assert.equal(item.attempts, 2);
+  assert.equal(queue.recordFailedDelivery('a', 5_000), 'counted');
+  assert.equal(queue.recordFailedDelivery('a', 9_000), 'counted');
+  let [item] = new ReportQueue(root).list(undefined, 20);
+  assert.equal(item.failedDeliveries, 2);
   assert.equal(item.nextAttemptAt, 9_000);
+  queue.recordFailedDelivery('a');
+  [item] = new ReportQueue(root).list(undefined, 20);
+  assert.equal(item.nextAttemptAt, undefined, 'sans Retry-After, nouvel essai au prochain lancement');
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -202,5 +206,35 @@ test('supprime un rapport dont le nom de fichier ne correspond pas au contenu', 
   fs.renameSync(path.join(dir, reportFiles(root)[0]), path.join(dir, 'renomme.json.gz'));
   queue.remove('a');
   assert.deepEqual(reportFiles(root), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('un rapport en file sans compteur d’échecs part de zéro', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-queue-'));
+  const dir = path.join(root, 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  const legacy = { state: 'approved', createdAt: 5, report: report('ancien') };
+  fs.writeFileSync(path.join(dir, '5-ancien.json.gz'), zlib.gzipSync(Buffer.from(JSON.stringify(legacy), 'utf8')));
+  const queue = new ReportQueue(root);
+  for (let failed = 1; failed < MAX_FAILED_DELIVERIES; failed++) {
+    assert.equal(queue.recordFailedDelivery('ancien'), 'counted');
+    assert.equal(new ReportQueue(root).list()[0].failedDeliveries, failed);
+  }
+  assert.equal(queue.recordFailedDelivery('ancien'), 'dropped');
+  assert.deepEqual(new ReportQueue(root).list(), []);
+  assert.equal(queue.recordFailedDelivery('ancien'), 'missing');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('un rapport hérité sans date d’expiration reçoit sept jours à sa première lecture', () => {
+  const root = tempRoot();
+  const dir = path.join(root, 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  const legacy = { state: 'approved', createdAt: 5, report: report('vieux') };
+  fs.writeFileSync(path.join(dir, '5-vieux.json.gz'), zlib.gzipSync(Buffer.from(JSON.stringify(legacy), 'utf8')));
+  const before = Date.now();
+  const [item] = new ReportQueue(root).list();
+  assert.ok(item.expiresAt! >= before + REPORT_TTL_MS, 'la date est posée et enregistrée');
+  assert.equal(new ReportQueue(root).list(undefined, item.expiresAt! + 1).length, 0, 'puis il expire comme les autres');
   fs.rmSync(root, { recursive: true, force: true });
 });

@@ -12,22 +12,52 @@ function quoted(value: string, replacement: string): string {
   return quote && value.length > 1 && value.endsWith(quote) ? `${quote}${replacement}${quote}` : replacement;
 }
 
+const LOCAL = '<local>';
+const MIN_FREE_WORD_LENGTH = 3;
+const GENERIC_NAMES = new Set([
+  'admin',
+  'default',
+  'desktop',
+  'dev',
+  'guest',
+  'home',
+  'java',
+  'laptop',
+  'linux',
+  'localhost',
+  'mac',
+  'macbook',
+  'minecraft',
+  'pc',
+  'root',
+  'server',
+  'ubuntu',
+  'user',
+  'windows',
+]);
+const IDENTITY_KEY = String.raw`(?<![A-Za-z0-9_])(?:user(?:[ ._-]?name)?|utilisateur|nom d'utilisateur|host(?:[ _-]?name)?|computer[ _-]?name|machine)`;
+
 export interface RedactOptions {
   /** OS home directory, masked wherever it appears. */
   homeDir?: string;
   /** Machine name (os.hostname()), masked case-insensitively. */
   hostName?: string;
+  /** Local machine and account names, masked as <local> (see maskLocalNames). */
+  localNames?: readonly string[];
 }
 
 /**
  * Masks local identity, credentials and network addresses in diagnostic text.
  * Best effort: it removes what the launcher knows to look for, it does not
  * guarantee the text is anonymous.
+ *
+ * Also accepts the positional form `(text, homeDir, localNames)` from #35/#36.
  */
-export function redactReportText(text: string, options: RedactOptions = {}): string {
+export function redactReportText(text: string, options?: RedactOptions | string, localNames?: readonly string[]): string {
+  const opts: RedactOptions = typeof options === 'object' ? options : { homeDir: options, localNames };
   let result = text;
 
-  const { homeDir, hostName } = options;
+  const { homeDir, hostName } = opts;
   // A home dir of one character ('/') would eat every separator.
   if (homeDir && homeDir.replace(/[\\/]+$/, '').length > 1) {
     const home = homeDir.replace(/[\\/]+$/, '');
@@ -36,6 +66,7 @@ export function redactReportText(text: string, options: RedactOptions = {}): str
   if (hostName && hostName.length >= MIN_HOST_LENGTH && !GENERIC_HOSTS.has(hostName.toLowerCase())) {
     result = result.replace(new RegExp(`(?<![A-Za-z0-9-])${escapeRegex(hostName)}(?![A-Za-z0-9-])`, 'gi'), '<host>');
   }
+  result = maskLocalNames(result, opts.localNames ?? []);
 
   // Every pattern below either always succeeds once started or is bounded, so a
   // hostile log of repeated prefixes stays linear.
@@ -73,7 +104,10 @@ export function redactReportText(text: string, options: RedactOptions = {}): str
     .replace(
       /((?:["']?(?:accessToken|access_token|refreshToken|refresh_token|clientToken|session)["']?)\s*[:=]\s*)("[^"\r\n]{0,4096}"|'[^'\r\n]{0,4096}'|[^\s"',;}\]]+)/gi,
       (_match, prefix: string, value: string) => prefix + quoted(value, MASKED),
-    );
+    )
+    // Discord identity and players' chat (#35/#36).
+    .replace(/(connecté en tant que |logged in as )\S+/gi, `$1${MASKED}`)
+    .replace(/(\[CHAT\] ).*$/gm, `$1${MASKED}`);
 
   result = result.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, (candidate) =>
     net.isIP(candidate) === 4 ? '<ip>' : candidate,
@@ -87,6 +121,28 @@ export function redactReportText(text: string, options: RedactOptions = {}): str
   );
 
   return result;
+}
+
+function maskLocalNames(text: string, localNames: readonly string[]): string {
+  let result = text;
+  for (const raw of localNames) {
+    const name = raw.trim();
+    if (name.length === 0) continue;
+    const escaped = escapeRegex(name);
+    const generic = isGenericName(name);
+    const separator = generic ? String.raw`\s*[:=]\s*` : String.raw`(?:\s*[:=]\s*|\s+)`;
+    result = result.replace(new RegExp(`(${IDENTITY_KEY}["']?${separator}["']?)${escaped}(?![A-Za-z0-9_])`, 'gi'), `$1${LOCAL}`);
+    if (generic) continue;
+    result = result.replace(new RegExp(`(?<=[\\\\/])${escaped}(?=[\\\\/]|$|[\\s"'])`, 'gim'), LOCAL);
+    if (name.length >= MIN_FREE_WORD_LENGTH) {
+      result = result.replace(new RegExp(`(?<![A-Za-z0-9_./\\\\])${escaped}(?![A-Za-z0-9_/\\\\]|\\.[A-Za-z0-9_])`, 'gi'), LOCAL);
+    }
+  }
+  return result;
+}
+
+export function isGenericName(name: string): boolean {
+  return GENERIC_NAMES.has(name.trim().toLowerCase());
 }
 
 function escapeRegex(value: string): string {

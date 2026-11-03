@@ -3,7 +3,6 @@ import path from 'path';
 import { loadClientOptions, type ClientOptions } from './ClientOptions';
 
 export interface PackProfile {
-  version: string;
   minecraft: string;
   fabricVersion: string;
   cdnBaseUrl: string;
@@ -15,7 +14,6 @@ export interface PackProfile {
 }
 
 const DEFAULTS: PackProfile = {
-  version: 'inconnu',
   minecraft: '1.21.1',
   fabricVersion: '0.18.4',
   cdnBaseUrl: 'https://karamon.fr/downloads/',
@@ -27,7 +25,6 @@ const DEFAULTS: PackProfile = {
 };
 
 interface PackJson {
-  version?: string;
   minecraft?: string;
   loaderVersion?: string;
   cdnBaseUrl?: string;
@@ -45,7 +42,6 @@ export function loadPackProfile(distDir: string): PackProfile {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as PackJson;
       return {
         ...DEFAULTS,
-        version: typeof raw.version === 'string' && raw.version ? raw.version : DEFAULTS.version,
         minecraft: typeof raw.minecraft === 'string' && raw.minecraft ? raw.minecraft : DEFAULTS.minecraft,
         fabricVersion:
           typeof raw.loaderVersion === 'string' && raw.loaderVersion

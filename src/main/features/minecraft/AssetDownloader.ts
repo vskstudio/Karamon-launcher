@@ -11,7 +11,11 @@ interface AssetIndex {
 }
 
 export class AssetDownloader {
-  constructor(private readonly http: HttpClient) {}
+  private readonly http: HttpClient;
+
+  constructor(http: HttpClient) {
+    this.http = http;
+  }
 
   async download(
     index: MojangAssetIndex,
@@ -30,23 +34,23 @@ export class AssetDownloader {
     }
 
     const parsed = JSON.parse(indexText) as AssetIndex;
-    const entries = Object.entries(parsed.objects);
+    // Several names can share one object: two workers on the same hash race on its .tmp file.
+    const hashes = [...new Set(Object.values(parsed.objects).map((info) => info.hash))];
     const objectsDir = path.join(assetsDir, 'objects');
 
     let done = 0;
-    const total = entries.length;
-    const queue = entries.slice();
+    const total = hashes.length;
+    const queue = hashes.slice();
 
     const worker = async (): Promise<void> => {
       while (queue.length > 0) {
-        const next = queue.shift();
-        if (!next) break;
-        const [, info] = next;
-        const sub = info.hash.substring(0, 2);
-        const dest = path.join(objectsDir, sub, info.hash);
+        const hash = queue.shift();
+        if (!hash) break;
+        const sub = hash.substring(0, 2);
+        const dest = path.join(objectsDir, sub, hash);
         if (!fs.existsSync(dest)) {
-          const url = `${RESOURCES_BASE}/${sub}/${info.hash}`;
-          await this.http.download(url, dest, { expectedSha1: info.hash });
+          const url = `${RESOURCES_BASE}/${sub}/${hash}`;
+          await this.http.download(url, dest, { expectedSha1: hash });
         }
         done++;
         if (done % 25 === 0 || done === total) {

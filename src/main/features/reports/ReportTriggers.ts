@@ -27,10 +27,19 @@ export interface GameExit {
 /** Signals someone sends to close a program on purpose (player, session logout, launcher). */
 const REQUESTED_STOP_SIGNALS = new Set<string>(['SIGTERM', 'SIGINT', 'SIGHUP']);
 
-/** Trigger d'une sortie de Minecraft ; null pour une fermeture normale ou demandée. */
-export function exitTrigger(exit: GameExit, startedAt: number, endedAt: number): 'crash_early' | 'crash' | null {
-  if (exit.code === 0 || exit.stopRequested) return null;
-  if (exit.signal && REQUESTED_STOP_SIGNALS.has(exit.signal)) return null;
+/**
+ * Trigger d'une sortie de Minecraft ; null pour une fermeture normale ou demandée, même terminée
+ * par un crash natif après l'arrêt propre du jeu (`stoppedCleanly`, #35/#36).
+ */
+export function exitTrigger(
+  exit: GameExit | number | null,
+  startedAt: number,
+  endedAt: number,
+  stoppedCleanly = false,
+): 'crash_early' | 'crash' | null {
+  const game: GameExit = typeof exit === 'object' && exit !== null ? exit : { code: exit };
+  if (game.code === 0 || game.stopRequested || stoppedCleanly) return null;
+  if (game.signal && REQUESTED_STOP_SIGNALS.has(game.signal)) return null;
   return endedAt - startedAt <= EARLY_CRASH_WINDOW_MS ? 'crash_early' : 'crash';
 }
 

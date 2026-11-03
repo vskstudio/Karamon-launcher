@@ -58,7 +58,7 @@ export class CrashReports {
     return path.join(gameDir, 'crash-reports', name);
   }
 
-  static summarize(content: string): string {
+  private static summarize(content: string): string {
     for (const { regex, tag } of CAUSE_PATTERNS) {
       if (regex.test(content)) return tag;
     }

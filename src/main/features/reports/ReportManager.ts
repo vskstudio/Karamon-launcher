@@ -1,12 +1,8 @@
 import type { CollectReportInput } from './ReportCollector.ts';
-import type { ReportQueue } from './ReportQueue.ts';
+import { MAX_FAILED_DELIVERIES, type ReportQueue } from './ReportQueue.ts';
 import type { ReportTransportResult } from './ReportTransport.ts';
 import type { LauncherReport, QueuedReport, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
 
-/** Delivery attempts per report before it is dropped. */
-export const MAX_SEND_ATTEMPTS = 5;
-/** Wait after the n-th failure (unless the panel asks for longer with Retry-After). */
-const BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000];
 
 export interface ReportConsentRequest {
   reportId: string;
@@ -18,7 +14,7 @@ export interface ReportManagerOptions {
   collector: { collect(input: CollectReportInput): Promise<LauncherReport> };
   queue: Pick<
     ReportQueue,
-    | 'enqueue' | 'list' | 'approve' | 'remove' | 'recordAttempt' | 'removeApproved'
+    | 'enqueue' | 'list' | 'approve' | 'remove' | 'recordFailedDelivery' | 'removeApproved'
     | 'mayAutoSend' | 'markAutoSent' | 'mayManualSend' | 'markManualSent'
   >;
   transport: { send(report: LauncherReport): Promise<ReportTransportResult> };
@@ -44,7 +40,7 @@ export class ReportManager {
     this.now = options.now ?? Date.now;
   }
 
-  /** Retries due approved reports and asks again for pending consents. */
+  /** Retries approved reports (one try per launch, Retry-After respected) and asks again for pending consents. */
   async start(): Promise<void> {
     const now = this.now();
     for (const item of this.options.queue.list('approved', now)) {
@@ -56,12 +52,17 @@ export class ReportManager {
     }
   }
 
-  async detect(trigger: Exclude<ReportTrigger, 'manual'>, summary: string[]): Promise<ReportSendResult> {
-    const now = this.now();
+  /** `since` : début de la session concernée, pour ne pas joindre les crashs des sessions précédentes. */
+  async detect(
+    trigger: Exclude<ReportTrigger, 'manual'>,
+    summary: string[],
+    since?: number,
+    now = this.now(),
+  ): Promise<ReportSendResult> {
     if (!this.options.queue.mayAutoSend(trigger, now)) return { status: 'skipped', reason: 'cooldown' };
     // Marked before the await: a simultaneous detection of the same type sees the cooldown.
     this.options.queue.markAutoSent(trigger, now);
-    const report = await this.collect(trigger, summary);
+    const report = await this.collect(trigger, summary, since);
     if (!report) return collectFailed();
     if (this.options.autoSend()) {
       return await this.deliver(this.options.queue.enqueue(report, 'approved', now));
@@ -102,9 +103,9 @@ export class ReportManager {
     if (removed > 0) this.log(`Envoi automatique désactivé : ${removed} rapport(s) en attente supprimé(s).`);
   }
 
-  private async collect(trigger: ReportTrigger, summary: string[]): Promise<LauncherReport | null> {
+  private async collect(trigger: ReportTrigger, summary: string[], since?: number): Promise<LauncherReport | null> {
     try {
-      return await this.options.collector.collect({ trigger, summary, ...this.options.context() });
+      return await this.options.collector.collect({ trigger, summary, since, ...this.options.context() });
     } catch (error) {
       this.log(`Collecte du rapport impossible : ${(error as Error).message}`);
       return null;
@@ -144,15 +145,16 @@ export class ReportManager {
       this.log(`Rapport ${shortId(report)} refusé par le panel (${outcome.reason}), supprimé.`);
       return { status: 'failed', reason: outcome.reason, retryable: false };
     }
-    const attempts = item.attempts + 1;
-    if (attempts >= MAX_SEND_ATTEMPTS) {
-      this.options.queue.remove(report.reportId);
-      this.log(`Rapport ${shortId(report)} abandonné après ${attempts} tentatives (${outcome.reason}).`);
+    const nextAttemptAt = outcome.retryAfterMs ? this.now() + outcome.retryAfterMs : null;
+    const counted = this.options.queue.recordFailedDelivery(report.reportId, nextAttemptAt ?? undefined);
+    if (counted === 'dropped') {
+      this.log(`Rapport ${shortId(report)} abandonné après ${MAX_FAILED_DELIVERIES} envois ratés (${outcome.reason}).`);
       return { status: 'failed', reason: outcome.reason, retryable: false };
     }
-    const backoff = BACKOFF_MS[Math.min(attempts, BACKOFF_MS.length) - 1];
-    const nextAttemptAt = this.now() + Math.max(backoff, outcome.retryAfterMs ?? 0);
-    this.options.queue.recordAttempt(report.reportId, nextAttemptAt);
+    if (counted === 'missing') {
+      this.log(`Rapport ${shortId(report)} retiré de la file pendant son envoi.`);
+      return { status: 'failed', reason: 'retiré de la file', retryable: false };
+    }
     this.log(`Rapport ${shortId(report)} non envoyé (${outcome.reason}), nouvel essai au prochain lancement.`);
     return { status: 'queued', nextAttemptAt };
   }

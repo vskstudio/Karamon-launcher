@@ -1,6 +1,6 @@
 import type { AuthSessionResult, MinecraftProfile } from '../../../ipc/contract';
 import { offlineNameProblem } from '../../../shared/OfflineName';
-import { MicrosoftAuth, type MicrosoftToken } from './MicrosoftAuth';
+import { MicrosoftAuth, MicrosoftSessionExpired, type MicrosoftToken } from './MicrosoftAuth';
 import { XboxAuth } from './XboxAuth';
 import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth';
 import { TokenStore } from './TokenStore';
@@ -80,9 +80,7 @@ export class AuthSession {
     if (active.kind === 'offline') {
       this.accounts.removeOffline(active.id);
     } else {
-      this.store.clear();
-      this.current = null;
-      this.accounts.setActive(null);
+      this.forgetMicrosoftSession();
     }
     return this.state();
   }
@@ -95,8 +93,21 @@ export class AuthSession {
   private async refresh(): Promise<ActiveSession> {
     const stored = this.store.load();
     if (!stored) throw new Error('Aucune session stockée, connexion requise');
-    const ms = await this.microsoft.refresh(stored.refreshToken);
+    let ms: MicrosoftToken;
+    try {
+      ms = await this.microsoft.refresh(stored.refreshToken);
+    } catch (e) {
+      if (e instanceof MicrosoftSessionExpired) this.forgetMicrosoftSession();
+      throw e;
+    }
+    this.store.save(ms.refreshToken, stored.profile);
     return await this.completeChain(ms);
+  }
+
+  private forgetMicrosoftSession(): void {
+    this.store.clear();
+    this.current = null;
+    if (this.accounts.load().active === MICROSOFT_ACTIVE) this.accounts.setActive(null);
   }
 
   private async completeChain(ms: MicrosoftToken): Promise<ActiveSession> {

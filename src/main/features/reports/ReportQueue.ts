@@ -10,6 +10,10 @@ const AUTO_COOLDOWN_MS = 10 * 60 * 1000;
 export const REPORT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MANUAL_WINDOW_MS = 10 * 60 * 1000;
 export const MANUAL_MAX_PER_WINDOW = 3;
+/** Failed deliveries before a report is dropped (#35/#36). */
+export const MAX_FAILED_DELIVERIES = 5;
+
+export type FailedDeliveryOutcome = 'counted' | 'dropped' | 'missing';
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
 
@@ -40,7 +44,7 @@ export class ReportQueue {
   }
 
   enqueue(report: LauncherReport, state: ReportQueueState, createdAt = Date.now()): QueuedReport {
-    const item: QueuedReport = { state, createdAt, attempts: 0, report };
+    const item: QueuedReport = { state, createdAt, expiresAt: createdAt + REPORT_TTL_MS, failedDeliveries: 0, report };
     this.write(item);
     this.evict(createdAt, report.reportId);
     return item;
@@ -49,7 +53,7 @@ export class ReportQueue {
   /** Live reports, oldest first. Expired and corrupted entries are deleted on the way. */
   list(state?: ReportQueueState, now = Date.now()): QueuedReport[] {
     const items = this.readAll().filter((item) => {
-      if (now - item.createdAt <= REPORT_TTL_MS) return true;
+      if (now <= (item.expiresAt ?? now)) return true;
       this.delete(item);
       this.log(`Rapport ${item.report.reportId.slice(0, 8)} expiré, supprimé.`);
       return false;
@@ -65,12 +69,23 @@ export class ReportQueue {
     return approved;
   }
 
-  recordAttempt(reportId: string, nextAttemptAt: number): QueuedReport | null {
+  /**
+   * Counts a failed delivery; drops the report at MAX_FAILED_DELIVERIES.
+   * `missing`: the report left the queue meanwhile (declined, consent withdrawn).
+   */
+  recordFailedDelivery(reportId: string, nextAttemptAt?: number): FailedDeliveryOutcome {
     const item = this.readAll().find((candidate) => candidate.report.reportId === reportId);
-    if (!item) return null;
-    const updated: QueuedReport = { ...item, attempts: item.attempts + 1, nextAttemptAt };
+    if (!item) return 'missing';
+    const failedDeliveries = (item.failedDeliveries ?? 0) + 1;
+    if (failedDeliveries >= MAX_FAILED_DELIVERIES) {
+      this.remove(reportId);
+      return 'dropped';
+    }
+    const updated: QueuedReport = { ...item, failedDeliveries };
+    if (nextAttemptAt === undefined) delete updated.nextAttemptAt;
+    else updated.nextAttemptAt = nextAttemptAt;
     this.write(updated);
-    return updated;
+    return 'counted';
   }
 
   remove(reportId: string): void {
@@ -154,8 +169,13 @@ export class ReportQueue {
         if (!item?.report?.reportId || typeof item.createdAt !== 'number' || !['awaiting-consent', 'approved'].includes(item.state)) {
           throw new Error('format inattendu');
         }
-        items.push({ ...item, attempts: typeof item.attempts === 'number' ? item.attempts : 0 });
         this.sourceFiles.set(item.report.reportId, file);
+        if (typeof item.expiresAt !== 'number') {
+          // Written before the TTL existed: a week from now, persisted so it does not slide.
+          item.expiresAt = Date.now() + REPORT_TTL_MS;
+          this.write(item);
+        }
+        items.push({ ...item, failedDeliveries: typeof item.failedDeliveries === 'number' ? item.failedDeliveries : 0 });
       } catch (error) {
         // A broken entry can never be sent safely: drop it instead of failing every read.
         fs.rmSync(file, { force: true });
