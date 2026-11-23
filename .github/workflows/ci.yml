@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Windows icon
+        run: node scripts/convert-icon.cjs && git diff --exit-code assets/icon.ico
