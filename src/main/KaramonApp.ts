@@ -9,6 +9,7 @@ import type { GameInstance } from './shared/GameInstance.ts';
 import { HttpClient } from './shared/HttpClient.ts';
 import { FileLog } from './shared/FileLog.ts';
 import { GameKeepAlive } from './GameKeepAlive.ts';
+import type { SingleInstance } from './SingleInstance.ts';
 import { SystemCertificates } from './shared/SystemCertificates.ts';
 import { loadKaramonProfile, type KaramonProfile } from './shared/KaramonProfile.ts';
 import { Config } from './features/config/Config.ts';
@@ -161,7 +162,7 @@ export class KaramonApp {
     });
   }
 
-  start(): void {
+  start(instanceLock: SingleInstance): void {
     this.fileLog.info(`Karamon Launcher ${app.getVersion()} démarré (${process.platform} ${process.arch}, Electron ${process.versions.electron})`);
     this.trustSystemCertificates();
     process.on('uncaughtException', (e) => this.fileLog.error('Exception non gérée', e));
@@ -184,6 +185,7 @@ export class KaramonApp {
       this.updater.start();
       this.discord.start();
       app.on('activate', () => this.keepAlive.windowRequested());
+      instanceLock.whenRelaunched(() => this.keepAlive.windowRequested());
     });
     app.on('window-all-closed', () => this.keepAlive.allWindowsClosed());
     app.on('before-quit', () => {
