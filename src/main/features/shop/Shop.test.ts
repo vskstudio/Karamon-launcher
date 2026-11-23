@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { MinecraftProfile } from '../../../ipc/contract.ts';
+import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpResponse } from '../../shared/HttpClient.ts';
 import { parseOffers, Shop } from './Shop.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
@@ -167,7 +167,7 @@ test('checkout pays for the account the shop resolves, with the terms accepted',
 
 test('checkout refuses a signed-out launcher without calling the shop', async () => {
   const { shop, lookups, posted } = shopAgainst({ profile: null });
-  assert.deepEqual(await shop.checkout('karamon_koins_100'), { status: 'error', error: 'Connecte-toi pour acheter.' });
+  await assert.rejects(shop.checkout('karamon_koins_100'), { message: 'Connecte-toi pour acheter.' });
   assert.deepEqual(lookups, []);
   assert.deepEqual(posted, []);
 });
@@ -175,7 +175,7 @@ test('checkout refuses a signed-out launcher without calling the shop', async ()
 test('an empty or oversized offer id is refused before any request', async () => {
   for (const offerId of ['', '   ', 'x'.repeat(129)]) {
     const { shop, lookups, posted } = shopAgainst({});
-    assert.equal((await shop.checkout(offerId)).status, 'error');
+    await assert.rejects(shop.checkout(offerId), /Cette offre n'existe plus/);
     assert.deepEqual(lookups, []);
     assert.deepEqual(posted, []);
   }
@@ -195,9 +195,7 @@ test('API refusals are explained in French', async () => {
   ];
   for (const [server, message] of cases) {
     const { shop, opened } = shopAgainst(server);
-    const result = await shop.checkout('karamon_koins_100');
-    assert.equal(result.status, 'error');
-    assert.match((result as { error: string }).error, message);
+    await assert.rejects(shop.checkout('karamon_koins_100'), message);
     assert.deepEqual(opened, []);
   }
 });
@@ -205,7 +203,7 @@ test('API refusals are explained in French', async () => {
 test('a checkout URL that is not a Stripe Checkout page is never opened', async () => {
   for (const url of ['https://evil.example/pay', 'http://checkout.stripe.com/c/pay/x', 'https://checkout.stripe.com.evil.example/']) {
     const { shop, opened } = shopAgainst({ checkout: respond(200, { url }) });
-    assert.equal((await shop.checkout('karamon_koins_100')).status, 'error', url);
+    await assert.rejects(shop.checkout('karamon_koins_100'), /Le paiement n'a pas pu démarrer/, url);
     assert.deepEqual(opened, [], url);
   }
 });
@@ -215,7 +213,7 @@ test('a second purchase cannot start while the payment window is open', async ()
   const { shop, posted } = shopAgainst({ paymentWindow: () => new Promise((resolve) => (finishFirst = resolve)) });
   const first = shop.checkout('karamon_koins_100');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal((await shop.checkout('karamon_koins_300')).status, 'error');
+  await assert.rejects(shop.checkout('karamon_koins_300'), /Un paiement est déjà ouvert/);
   assert.equal(posted.length, 1);
   finishFirst('paid');
   assert.deepEqual(await first, { status: 'paid' });

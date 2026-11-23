@@ -15,9 +15,11 @@ export function ConsoleDrawer() {
   if (!consoleOpen.value) return null;
 
   const exportLogs = async () => {
-    const result = await api.exportLogs(logText());
-    if (result.ok) toast('Journaux exportés.');
-    else if (result.error) toast(result.error, 'error');
+    try {
+      if (await api.exportLogs(logText())) toast('Journaux exportés.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error), 'error');
+    }
   };
 
   const copyLogs = async () => {

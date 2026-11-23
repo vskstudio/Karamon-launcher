@@ -1,13 +1,7 @@
 import type { CollectReportInput } from './ReportCollector.ts';
 import { MAX_FAILED_DELIVERIES, type ReportQueue } from './ReportQueue.ts';
 import type { ReportTransportResult } from './ReportTransport.ts';
-import type { LauncherReport, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
-
-export interface ReportConsentRequest {
-  reportId: string;
-  trigger: ReportTrigger;
-  summary: string[];
-}
+import type { LauncherReport, ReportConsentRequest, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
 
 export interface ReportManagerOptions {
   collector: { collect(input: CollectReportInput): Promise<LauncherReport> };
@@ -17,6 +11,7 @@ export interface ReportManagerOptions {
   autoSend: () => boolean;
   setAutoSend: (value: boolean) => void;
   requestConsent: (request: ReportConsentRequest) => void;
+  announce?: (message: string) => void;
   log?: (message: string) => void;
 }
 
@@ -59,6 +54,14 @@ export class ReportManager {
       this.log(`Collecte du rapport impossible: ${(error as Error).message}`);
       return { status: 'failed' };
     }
+  }
+
+  reportInBackground(trigger: Exclude<ReportTrigger, 'manual'>, summary: string[], since: number): void {
+    this.detect(trigger, summary, since)
+      .then((sent) => {
+        if (sent.status === 'sent') this.options.announce?.(`Rapport envoyé à l'équipe Karamon (code ${sent.code}).`);
+      })
+      .catch((error: unknown) => this.log((error as Error).message));
   }
 
   async sendManual(): Promise<ReportSendResult> {

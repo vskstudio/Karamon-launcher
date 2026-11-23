@@ -1,7 +1,20 @@
 import { app } from 'electron/main';
 import { shell } from 'electron/common';
 import { autoUpdater, type UpdateInfo as ElectronUpdateInfo } from 'electron-updater';
-import type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../../../ipc/contract';
+
+export type UpdateInstall = 'restart' | 'download';
+
+export interface UpdateInfo {
+  version: string;
+  install: UpdateInstall;
+}
+
+export type UpdateCheckResult =
+  | { status: 'no-update'; currentVersion: string }
+  | { status: 'downloading'; version: string }
+  | { status: 'downloaded'; version: string }
+  | { status: 'available'; version: string }
+  | { status: 'unsupported' };
 
 export interface AutoUpdaterOptions {
   onReady: (info: UpdateInfo) => void;
@@ -73,7 +86,7 @@ export class AutoUpdater {
     if (!app.isPackaged) return { status: 'unsupported' };
     if (this.readyVersion) return this.readyResult(this.readyVersion);
 
-    return new Promise<UpdateCheckResult>((resolve) => {
+    return new Promise<UpdateCheckResult>((resolve, reject) => {
       const cleanup = (): void => {
         autoUpdater.removeListener('update-available', onAvailable);
         autoUpdater.removeListener('update-not-available', onNotAvail);
@@ -100,7 +113,7 @@ export class AutoUpdater {
       };
       const onError = (e: Error): void => {
         cleanup();
-        resolve({ status: 'error', error: e.message });
+        reject(e);
       };
 
       autoUpdater.once('update-available', onAvailable);

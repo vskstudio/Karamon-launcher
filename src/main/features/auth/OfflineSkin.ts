@@ -8,6 +8,12 @@ export const SKIN_MAX_BYTES = 32 * 1024;
 
 export type SkinModel = 'classic' | 'slim';
 
+export interface OfflineSkinRequest {
+  name: string;
+  png: string;
+  model: SkinModel;
+}
+
 /** Width and height of a PNG (its IHDR chunk), or null when the bytes are not a PNG. */
 export function pngSize(png: Buffer): { width: number; height: number } | null {
   if (png.length < 24 || png.readUInt32BE(0) !== 0x89504e47 || png.readUInt32BE(4) !== 0x0d0a1a0a) return null;

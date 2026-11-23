@@ -1,6 +1,29 @@
 import fs from 'fs';
 import path from 'path';
-import type { AppConfig, AppConfigUpdate } from '../../../ipc/contract';
+
+export interface ServerInfo {
+  host: string;
+  port: number;
+}
+
+export interface AppConfig {
+  mcGameDir: string;
+  memoryMb: number;
+  secondInstanceMemoryMb: number;
+  javaPath: string;
+  jvmArgs: string;
+  closeLauncherOnGameStart: boolean;
+  devMode: boolean;
+  potatoMode: boolean;
+  potatoHintDismissed: boolean;
+  disableSodium: boolean;
+  autoSendReports: boolean;
+  server: ServerInfo;
+}
+
+export type AppConfigUpdate = Partial<Omit<AppConfig, 'server'>> & {
+  server?: Partial<ServerInfo>;
+};
 
 const MAX_TEXT_LENGTH = 4096;
 const MIN_MEMORY_MB = 512;

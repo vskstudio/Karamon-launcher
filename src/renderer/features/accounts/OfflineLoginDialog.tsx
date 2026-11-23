@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { AuthLoginResult, NameCheckResult } from '../../../ipc/contract';
+import type { MinecraftProfile, NameStatus } from '../../../ipc/contract';
 import { OFFLINE_NAME_MAX, OFFLINE_NAME_TAKEN, offlineNameProblem } from '../../../shared/OfflineName';
 import { accountsDialogView, closeAccountsDialog } from '../../state/accounts';
 import { api } from '../../state/api';
@@ -18,15 +18,17 @@ interface Hint {
 
 const initialHint: Hint = { text: 'De 3 à 16 caractères : lettres, chiffres et _.', tone: 'dim' };
 
-function hintForCheck(result: NameCheckResult): Hint {
+function hintForCheck(result: NameStatus): Hint {
   if (result === 'taken') return { text: `${OFFLINE_NAME_TAKEN} Si c’est le tien, connecte-toi avec Microsoft.`, tone: 'warn' };
   if (result === 'free') return { text: 'Pseudo libre.', tone: 'ok' };
   return { text: 'Mojang ne répond pas, impossible de vérifier ce pseudo. Tu peux continuer.', tone: 'dim' };
 }
 
-async function loginOffline(name: string): Promise<AuthLoginResult> {
+type OfflineLogin = { ok: true; profile: MinecraftProfile } | { ok: false; error: string };
+
+async function loginOffline(name: string): Promise<OfflineLogin> {
   try {
-    return await api.authLoginOffline(name);
+    return { ok: true, profile: await api.authLoginOffline(name) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -63,7 +65,7 @@ export function OfflineLoginDialog() {
     checkTimer.current = setTimeout(() => {
       void api
         .authCheckName(value)
-        .catch((): NameCheckResult => 'unknown')
+        .catch((): NameStatus => 'unknown')
         .then((result) => {
           if (id !== checkId.current) return;
           setTaken(result === 'taken');

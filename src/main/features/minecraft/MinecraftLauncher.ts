@@ -2,7 +2,7 @@ import { DevMode } from '../../shared/DevMode';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { AppConfig } from '../../../ipc/contract';
+import type { AppConfig } from '../config/Config';
 import {
   ModpackSync,
   type StatusEmitter,
@@ -26,7 +26,6 @@ export interface MinecraftLauncherOptions {
   defaultHost: string;
   profileName: string;
   modpackSync: ModpackSync;
-  serversDatFactory: (dir: string) => ServersDat;
   gameLauncher: GameLauncher;
   javaProvisioner: JavaProvisioner;
 }
@@ -56,7 +55,6 @@ export class MinecraftLauncher {
   private readonly defaultHost: string;
   private readonly profileName: string;
   private readonly modpackSync: ModpackSync;
-  private readonly serversDatFactory: (dir: string) => ServersDat;
   private readonly gameLauncher: GameLauncher;
   private readonly javaProvisioner: JavaProvisioner;
 
@@ -67,7 +65,6 @@ export class MinecraftLauncher {
     defaultHost,
     profileName,
     modpackSync,
-    serversDatFactory,
     gameLauncher,
     javaProvisioner,
   }: MinecraftLauncherOptions) {
@@ -77,7 +74,6 @@ export class MinecraftLauncher {
     this.defaultHost = defaultHost;
     this.profileName = profileName;
     this.modpackSync = modpackSync;
-    this.serversDatFactory = serversDatFactory;
     this.gameLauncher = gameLauncher;
     this.javaProvisioner = javaProvisioner;
   }
@@ -93,7 +89,7 @@ export class MinecraftLauncher {
   ensureServerLists(gameDir: string, host: string, name: string, devMode = false): ServerListSetupResult[] {
     return this.serverListDirs(gameDir).map((dir) => {
       try {
-        const servers = this.serversDatFactory(dir);
+        const servers = new ServersDat(dir);
         servers.ensureServer(host, name, devMode);
         // Dev mode: a ready entry for a server running on this machine.
         if (devMode) servers.ensureServer('localhost', `${name} (local)`, true);
@@ -211,11 +207,12 @@ export class MinecraftLauncher {
     return { damaged: sync.damaged, configs };
   }
 
-  /**
-   * Applies the mode PC modeste to the game folder right away (mode on) or puts
-   * back what it changed (mode off). Not while the game runs: its jars are open.
-   */
-  applyPotatoMode(config: AppConfig, onStatus: StatusEmitter): void {
+  applyModToggles(before: AppConfig, after: AppConfig, onStatus: StatusEmitter): void {
+    if (after.potatoMode !== before.potatoMode) this.applyPotatoMode(after, onStatus);
+    if (after.disableSodium !== before.disableSodium) this.applySodiumOff(after, onStatus);
+  }
+
+  private applyPotatoMode(config: AppConfig, onStatus: StatusEmitter): void {
     if (this.isRunning()) {
       onStatus('Mode PC modeste : appliqué au prochain lancement du jeu.');
       return;
@@ -225,7 +222,7 @@ export class MinecraftLauncher {
     MinecraftLauncher.reportPotato(config.potatoMode, report, onStatus, true);
   }
 
-  applySodiumOff(config: AppConfig, onStatus: StatusEmitter): void {
+  private applySodiumOff(config: AppConfig, onStatus: StatusEmitter): void {
     if (this.isRunning()) {
       onStatus('Désactiver Sodium : appliqué au prochain lancement du jeu.');
       return;

@@ -8,7 +8,6 @@ import { PassThrough } from 'stream';
 import AdmZip from 'adm-zip';
 import { ModpackSync } from './ModpackSync.ts';
 import { RangeUnsupportedError, type HttpClient, type RangeRequest } from '../../shared/HttpClient.ts';
-import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
 
 /** A karamon.fr-like server: ETag per file, HEAD, Range, full downloads; counts bytes sent. */
 function server(files: Map<string, Buffer>, { ranges = true } = {}) {
@@ -113,7 +112,7 @@ test('ne retélécharge que le mod qui a changé, et rien quand tout est à jour
   const jars = { 'big-1.0.jar': jar('big', 400), 'small-1.0.jar': jar('small', 20), 'other-1.0.jar': jar('other', 200) };
   const files = pack(jars);
   const { http, sent } = server(files);
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d) });
+  const sync = new ModpackSync({ http });
 
   const first = await run(sync, game);
   assert.equal(sent.full, 0, 'aucun téléchargement complet');
@@ -149,7 +148,7 @@ test('répare un mod abîmé en ne retéléchargeant que lui', async () => {
   const game = path.join(dir, 'game');
   const files = pack({ 'big-1.0.jar': jar('big', 400), 'small-1.0.jar': jar('small', 20) });
   const { http, sent } = server(files);
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d) });
+  const sync = new ModpackSync({ http });
   await run(sync, game);
 
   const broken = path.join(game, 'mods', 'small-1.0.jar');
@@ -177,7 +176,7 @@ test('garde le shader et les réglages du joueur aux MAJ, sauf quand le pack rel
   const jars = { 'a-1.0.jar': jar('a', 10) };
   const files = pack(jars, 'pack v1\n');
   const { http } = server(files);
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d) });
+  const sync = new ModpackSync({ http });
   const iris = path.join(game, 'config', 'iris.properties');
   const txt = path.join(game, 'shaderpacks', 'KARAMON - Shader.txt');
   const choose = (): void => {
@@ -225,7 +224,7 @@ test('ne supprime jamais un shader ou un réglage ajouté par le joueur, mais re
   const game = path.join(dir, 'game');
   const files = pack({ 'a-1.0.jar': jar('a', 10) });
   const { http } = server(files);
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d) });
+  const sync = new ModpackSync({ http });
   await run(sync, game);
   fs.writeFileSync(path.join(game, 'shaderpacks', 'MonShader.zip'), 'zip du joueur');
   fs.writeFileSync(path.join(game, 'shaderpacks', 'MonShader.zip.txt'), 'réglages du joueur');
@@ -249,7 +248,7 @@ test('retombe sur le téléchargement complet si le serveur ignore Range', async
   const game = path.join(dir, 'game');
   const files = pack({ 'a-1.0.jar': jar('a', 10) });
   const { http, sent } = server(files, { ranges: false });
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d) });
+  const sync = new ModpackSync({ http });
   await run(sync, game);
   assert.equal(sent.full, 2);
   assert.ok(fs.existsSync(path.join(game, 'mods', 'a-1.0.jar')));
@@ -264,7 +263,7 @@ test('mode PC modeste : un mod parqué reste en .disabled, rien n’est retélé
   const files = pack(jars);
   const { http, sent } = server(files);
   let parked: string[] = [];
-  const sync = new ModpackSync({ http, optionsWriterFactory: (d) => new OptionsWriter(d), parkedJars: () => parked });
+  const sync = new ModpackSync({ http, parkedJars: () => parked });
   await run(sync, game);
   const mods = path.join(game, 'mods');
 

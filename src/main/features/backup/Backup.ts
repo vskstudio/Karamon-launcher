@@ -1,7 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import type { BackupEntry, BackupListResult } from '../../../ipc/contract';
+
+export interface BackupEntry {
+  name: string;
+  path: string;
+  size: number;
+  mtime: number;
+}
+
+export interface BackupListResult {
+  dir: string;
+  backups: BackupEntry[];
+}
 
 const TARGETS = ['saves', 'config'];
 const MAX_KEPT = 10;

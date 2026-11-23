@@ -1,5 +1,6 @@
 import type { HttpClient } from '../../shared/HttpClient';
-import type { MinecraftProfile } from '../../../ipc/contract';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
+import { savedSkinDataUrl } from './OfflineSkin.ts';
 
 const SESSION_PROFILE_URL = 'https://sessionserver.mojang.com/session/minecraft/profile/';
 const ELY_TEXTURES_URL = 'https://skinsystem.ely.by/textures/';
@@ -44,8 +45,9 @@ export class SkinLookup {
     this.http = http;
   }
 
-  skinFor(profile: MinecraftProfile): Promise<string | null> {
-    return profile.kind === 'offline' ? this.elySkinUrl(profile.name) : this.skinUrl(profile.id);
+  async skinFor(profile: MinecraftProfile, gameDir: string): Promise<string | null> {
+    if (profile.kind === 'microsoft') return await this.skinUrl(profile.id);
+    return savedSkinDataUrl(gameDir, profile.name) ?? (await this.elySkinUrl(profile.name));
   }
 
   skinUrl(profileId: string): Promise<string | null> {

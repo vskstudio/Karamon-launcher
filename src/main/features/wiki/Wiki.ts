@@ -1,7 +1,8 @@
-import type { WikiGroup, WikiPage } from '../../../ipc/contract.ts';
+import { WIKI_SLUG } from '../../../shared/WikiSlug.ts';
+import type { WikiGroup, WikiPage } from './WikiTypes.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import { JsonFileCache } from '../../shared/JsonFileCache.ts';
-import { parseWikiIndex, parseWikiPage, WIKI_ORIGIN, WIKI_SLUG } from './WikiParser.ts';
+import { parseWikiIndex, parseWikiPage, WIKI_ORIGIN } from './WikiParser.ts';
 
 const WIKI_FETCH_TIMEOUT_MS = 8000;
 const INDEX_CACHE_NAME = 'index';

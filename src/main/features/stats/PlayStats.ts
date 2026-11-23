@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import type { PlayStats as PlayStatsData } from '../../../ipc/contract';
+
+export interface PlayStatsData {
+  totalPlayMs: number;
+  sessions: number;
+  lastPlayedAt: number | null;
+  firstPlayedAt: number | null;
+}
 
 const EMPTY: PlayStatsData = {
   totalPlayMs: 0,

@@ -1,13 +1,30 @@
-import type {
-  MinecraftProfile,
-  ShopCatalog,
-  ShopCheckoutResult,
-  ShopOffer,
-  ShopOfferKind,
-} from '../../../ipc/contract.ts';
+import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpClient, HttpResponse } from '../../shared/HttpClient.ts';
 import { isStripeCheckoutPage } from './CheckoutNavigation.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
+
+export type ShopOfferKind = 'pack' | 'subscription';
+
+export interface ShopOffer {
+  id: string;
+  kind: ShopOfferKind;
+  name: string;
+  description: string;
+  image: string;
+  lumis: number;
+  bonus: number;
+  priceCents: number;
+  currency: string;
+  taxExclusive: boolean;
+  features: string[];
+}
+
+export interface ShopCatalog {
+  offers: ShopOffer[];
+  portalUrl: string | null;
+}
+
+export type ShopCheckoutResult = { status: 'paid' } | { status: 'cancelled' };
 
 const SHOP_API = 'https://karamon.fr/api/shop';
 const OFFERS_URL = `${SHOP_API}/offers`;
@@ -117,7 +134,16 @@ function readApiAnswer(response: HttpResponse): ApiAnswer {
   return { ok: false, code: response.status === HTTP_TOO_MANY_REQUESTS ? 'rate_limited' : 'unknown' };
 }
 
-const failure = (error: string): ShopCheckoutResult => ({ status: 'error', error });
+class ShopRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ShopRefusal';
+  }
+}
+
+function refuse(message: string): never {
+  throw new ShopRefusal(message);
+}
 
 interface ShopPlayer {
   uuid: string;
@@ -156,15 +182,14 @@ export class Shop {
   }
 
   async checkout(offerId: string): Promise<ShopCheckoutResult> {
-    if (offerId.trim() === '' || offerId.length > OFFER_ID_MAX_LENGTH) return failure(shopErrorMessage('unknown_offer'));
-    const profile = this.options.activeProfile();
-    if (!profile) return failure(SIGNED_OUT);
-    if (this.checkoutOpen) return failure(CHECKOUT_ALREADY_OPEN);
+    if (offerId.trim() === '' || offerId.length > OFFER_ID_MAX_LENGTH) refuse(shopErrorMessage('unknown_offer'));
+    const profile = this.options.activeProfile() ?? refuse(SIGNED_OUT);
+    if (this.checkoutOpen) refuse(CHECKOUT_ALREADY_OPEN);
     this.checkoutOpen = true;
     try {
       return await this.runCheckout(offerId, profile.name);
-    } catch {
-      return failure(SHOP_UNREACHABLE);
+    } catch (error) {
+      throw error instanceof ShopRefusal ? error : new ShopRefusal(SHOP_UNREACHABLE);
     } finally {
       this.checkoutOpen = false;
     }
@@ -172,9 +197,9 @@ export class Shop {
 
   private async runCheckout(offerId: string, username: string): Promise<ShopCheckoutResult> {
     const lookup = readApiAnswer(await this.options.http.get(PLAYER_URL + encodeURIComponent(username)));
-    if (!lookup.ok) return failure(shopErrorMessage(lookup.code));
+    if (!lookup.ok) refuse(shopErrorMessage(lookup.code));
     const player: ShopPlayer = { uuid: text(lookup.body.uuid), username: text(lookup.body.username) };
-    if (!player.uuid || !player.username) return failure(shopErrorMessage('player_lookup_failed'));
+    if (!player.uuid || !player.username) refuse(shopErrorMessage('player_lookup_failed'));
 
     const started = readApiAnswer(
       await this.options.http.postJson(CHECKOUT_URL, {
@@ -185,12 +210,12 @@ export class Shop {
         terms_version: SHOP_TERMS_VERSION,
       }),
     );
-    if (!started.ok) return failure(shopErrorMessage(started.code));
+    if (!started.ok) refuse(shopErrorMessage(started.code));
     const checkoutUrl = text(started.body.url);
-    if (!isStripeCheckoutPage(checkoutUrl)) return failure(shopErrorMessage('checkout_failed'));
+    if (!isStripeCheckoutPage(checkoutUrl)) refuse(shopErrorMessage('checkout_failed'));
 
     const outcome = await this.options.openCheckout(checkoutUrl);
-    if (outcome === 'failed') return failure(CHECKOUT_PAGE_FAILED);
+    if (outcome === 'failed') refuse(CHECKOUT_PAGE_FAILED);
     return { status: outcome };
   }
 }

@@ -1,20 +1,15 @@
 import { Client } from '@xhayper/discord-rpc';
-import type { ServerPing } from '../server/ServerPing';
+import type { ServerStatus } from '../server/ServerStatus';
 
 const APP_ID = '1550981242508410994';
 const LARGE_IMAGE_KEY = 'karamon';
 const PING_INTERVAL_MS = 60_000;
 const RECONNECT_INTERVAL_MS = 30_000;
-const PING_TIMEOUT_MS = 4_000;
 
 export type RpcState = 'menu' | 'playing';
 
 export interface DiscordRpcOptions {
-  serverHost: string;
-  serverPort: number;
-  /** Tried when the primary host does not answer a status ping. */
-  fallbackHosts?: string[];
-  pinger: ServerPing;
+  status: Pick<ServerStatus, 'ping'>;
   log?: (msg: string) => void;
 }
 
@@ -109,31 +104,9 @@ export class DiscordRpc {
     }
   }
 
-  private hosts(): string[] {
-    const seen = new Set<string>();
-    const hosts: string[] = [];
-    for (const host of [this.opts.serverHost, ...(this.opts.fallbackHosts ?? [])]) {
-      const trimmed = host.trim();
-      if (!trimmed || seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      hosts.push(trimmed);
-    }
-    return hosts;
-  }
-
   private async refreshPlayerCount(): Promise<void> {
-    for (const host of this.hosts()) {
-      try {
-        const result = await this.opts.pinger.ping(host, this.opts.serverPort, PING_TIMEOUT_MS);
-        if (!result.online) continue;
-        this.playerCount = result.players;
-        this.push();
-        return;
-      } catch {
-        /* try the next host */
-      }
-    }
-    this.playerCount = null;
+    const result = await this.opts.status.ping();
+    this.playerCount = result.online ? result.players : null;
     this.push();
   }
 

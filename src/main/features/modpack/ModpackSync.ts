@@ -122,9 +122,19 @@ interface JarRepairContext {
   onStatus: StatusEmitter;
 }
 
+export interface ModEntry {
+  name: string;
+  size: number;
+  disabled?: boolean;
+}
+
+export interface ModsListResult {
+  dir: string;
+  mods: ModEntry[];
+}
+
 export interface ModpackSyncOptions {
   http: HttpClient;
-  optionsWriterFactory: (dir: string) => OptionsWriter;
   disabledJarPrefixes?: string[];
   fallbackClientOptions?: ClientOptions | null;
   /** Pack jars kept as `<name>.disabled` in this game folder (see PARKED_JAR_SUFFIX). */
@@ -133,7 +143,6 @@ export interface ModpackSyncOptions {
 
 export class ModpackSync {
   private readonly http: HttpClient;
-  private readonly optionsWriterFactory: (dir: string) => OptionsWriter;
   private readonly disabledJarPrefixes: string[];
   private readonly fallbackClientOptions: ClientOptions | null;
   private readonly parkedJars: (gameDir: string) => Iterable<string>;
@@ -146,13 +155,11 @@ export class ModpackSync {
 
   constructor({
     http,
-    optionsWriterFactory,
     disabledJarPrefixes,
     fallbackClientOptions,
     parkedJars,
   }: ModpackSyncOptions) {
     this.http = http;
-    this.optionsWriterFactory = optionsWriterFactory;
     this.disabledJarPrefixes = (disabledJarPrefixes ?? []).map((prefix) => prefix.toLowerCase());
     this.fallbackClientOptions = fallbackClientOptions ?? null;
     this.parkedJars = parkedJars ?? (() => []);
@@ -174,8 +181,12 @@ export class ModpackSync {
     return fs.existsSync(file) ? file : null;
   }
 
-  static listMods(gameDir: string): { name: string; size: number; disabled?: boolean }[] {
+  static listMods(gameDir: string): ModsListResult {
     const dir = path.join(gameDir, 'mods');
+    return { dir, mods: ModpackSync.modsIn(dir) };
+  }
+
+  private static modsIn(dir: string): ModEntry[] {
     const parked = '.jar' + PARKED_JAR_SUFFIX;
     try {
       return fs
@@ -259,7 +270,7 @@ export class ModpackSync {
    * shader choice only when ShaderPolicy says the pack must impose it.
    */
   private applyClientOptions(gameDir: string, options: ClientOptions | null, onStatus?: StatusEmitter): void {
-    const writer = this.optionsWriterFactory(gameDir);
+    const writer = new OptionsWriter(gameDir);
     try {
       if (options) {
         writer.forceResourcePacks(options.resourcePacks);

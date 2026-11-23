@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app, safeStorage } from 'electron/main';
-import type { MinecraftProfile } from '../../../ipc/contract';
+import type { MinecraftProfile } from './MinecraftProfile';
 
 interface StoredSession {
   refreshTokenEnc: string;

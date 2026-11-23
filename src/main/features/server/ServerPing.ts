@@ -1,5 +1,20 @@
 import net from 'net';
-import type { PingResult } from '../../../ipc/contract';
+
+export interface SamplePlayer {
+  name: string;
+  id?: string;
+}
+
+export type PingResult =
+  | {
+      online: true;
+      players: number;
+      maxPlayers: number;
+      motd: string;
+      version: string;
+      sample?: SamplePlayer[];
+    }
+  | { online: false };
 
 class VarInt {
   static write(value: number): Buffer {

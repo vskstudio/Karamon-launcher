@@ -3,7 +3,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
-import type { JavaCandidate } from '../../../ipc/contract';
+
+export interface JavaCandidate {
+  path: string;
+  version: string;
+  vendor: string;
+}
 
 const execFileP = promisify(execFile);
 

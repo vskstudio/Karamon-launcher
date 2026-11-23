@@ -7,7 +7,6 @@ import path from 'path';
 import AdmZip from 'adm-zip';
 import { ModpackSync } from './ModpackSync.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
-import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
 
 function zipFiles(filePath: string, files: Record<string, string | Buffer>): void {
   const zip = new AdmZip();
@@ -108,7 +107,6 @@ test('sync installs mods and assets from two zips', async () => {
         { name: 'assets.zip', size: fs.statSync(assetsZip).size },
       ],
     ),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
 
   const statuses: string[] = [];
@@ -162,7 +160,6 @@ test('sync keeps installed zips when pack-latest gets a new asset id', async () 
       { name: 'mods.zip', size: fs.statSync(modsZip).size, digest },
       { name: 'assets.zip', size: fs.statSync(assetsZip).size, digest: assetsDigest },
     ]),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
   await first.sync(base, game, () => undefined, () => undefined);
 
@@ -188,7 +185,6 @@ test('sync keeps installed zips when pack-latest gets a new asset id', async () 
         throw new Error('should not download');
       },
     } as unknown as HttpClient,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
   const statuses: string[] = [];
   await second.sync(base, game, (msg) => statuses.push(msg), () => undefined);
@@ -244,7 +240,6 @@ test('sync keeps the loose-file layout when assets.zip is absent', async () => {
         fs.copyFileSync(src, dest);
       },
     } as unknown as HttpClient,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
 
   await sync.sync(
@@ -298,7 +293,6 @@ test('sync reinstalls only the damaged files listed with a sha1', async () => {
   }) as HttpClient['download'];
   const sync = new ModpackSync({
     http,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
     disabledJarPrefixes: ['oldjava'],
   });
   await sync.sync(base, game, () => undefined, () => undefined);
@@ -365,7 +359,6 @@ test('sync keeps the overrides archive so configs can be restored', async () => 
       { name: 'mods.zip', size: fs.statSync(modsZip).size },
       { name: 'assets.zip', size: fs.statSync(assetsZip).size },
     ]),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
   });
   const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
   await sync.sync(base, game, () => undefined, () => undefined);
@@ -413,7 +406,6 @@ test('a parked jar is verified and repaired as <name>.disabled, never put back a
   }) as HttpClient['download'];
   const sync = new ModpackSync({
     http,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
     parkedJars: () => ['VOXY-0.2.jar'],
   });
   const mods = path.join(game, 'mods');
@@ -423,10 +415,13 @@ test('a parked jar is verified and repaired as <name>.disabled, never put back a
   assert.deepEqual(fs.readFileSync(parked), voxy);
   assert.equal(fs.existsSync(path.join(mods, 'voxy-0.2.jar')), false);
   assert.deepEqual(ModpackSync.packJars(game), new Set(['demo-mod-1.0.0.jar', 'voxy-0.2.jar']));
-  assert.deepEqual(ModpackSync.listMods(game), [
-    { name: 'demo-mod-1.0.0.jar', size: demo.length },
-    { name: 'voxy-0.2.jar', size: voxy.length, disabled: true },
-  ]);
+  assert.deepEqual(ModpackSync.listMods(game), {
+    dir: mods,
+    mods: [
+      { name: 'demo-mod-1.0.0.jar', size: demo.length },
+      { name: 'voxy-0.2.jar', size: voxy.length, disabled: true },
+    ],
+  });
 
   downloads.length = 0;
   const statuses: string[] = [];

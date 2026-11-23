@@ -1,4 +1,4 @@
-import type { MinecraftProfile } from '../../../ipc/contract';
+import type { MinecraftProfile } from './MinecraftProfile';
 
 const LOGIN_URL = 'https://api.minecraftservices.com/authentication/login_with_xbox';
 const PROFILE_URL = 'https://api.minecraftservices.com/minecraft/profile';

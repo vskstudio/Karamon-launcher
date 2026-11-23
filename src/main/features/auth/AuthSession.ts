@@ -1,13 +1,18 @@
-import type { AuthSessionResult, MinecraftProfile } from '../../../ipc/contract';
-import { offlineNameProblem } from '../../../shared/OfflineName';
+import { OFFLINE_NAME_TAKEN, offlineNameProblem } from '../../../shared/OfflineName';
+import type { MinecraftProfile } from './MinecraftProfile';
 import { MicrosoftAuth, MicrosoftSessionExpired, type MicrosoftToken } from './MicrosoftAuth';
 import { XboxAuth } from './XboxAuth';
 import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth';
 import { TokenStore } from './TokenStore';
 import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore';
-import { OFFLINE_ACCESS_TOKEN } from './OfflineAccount';
+import { OFFLINE_ACCESS_TOKEN, mojangNameStatus } from './OfflineAccount';
 
 const REFRESH_LEEWAY_MS = 60_000;
+
+export interface AuthSessionResult {
+  active: MinecraftProfile | null;
+  accounts: MinecraftProfile[];
+}
 
 export interface ActiveSession {
   profile: MinecraftProfile;
@@ -45,10 +50,10 @@ export class AuthSession {
     return session.profile;
   }
 
-  /** Remembers a player without a Minecraft licence. No network: the server asks for the Karamon password. */
-  loginOffline(name: string): MinecraftProfile {
+  async loginOffline(name: string): Promise<MinecraftProfile> {
     const problem = offlineNameProblem(name);
     if (problem) throw new Error(problem);
+    if ((await mojangNameStatus(name)) === 'taken') throw new Error(OFFLINE_NAME_TAKEN);
     const entry = this.accounts.addOffline(name);
     return { id: entry.id, name: entry.name, kind: 'offline' };
   }

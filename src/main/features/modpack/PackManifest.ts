@@ -1,5 +1,4 @@
 import fs from 'fs';
-import type { PackInfo } from '../../../ipc/contract.ts';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 
@@ -7,6 +6,15 @@ const MANIFEST_FETCH_TIMEOUT_MS = 8000;
 const MANIFEST_FRESH_MS = 5 * 60 * 1000;
 const REMEMBERED_VERSIONS = 10;
 const DATE_FIELDS = ['publishedAt', 'releasedAt', 'date', 'updatedAt'] as const;
+
+export interface PackInfo {
+  version: string | null;
+  minecraft: string;
+  loader: string;
+  loaderVersion: string;
+  baseName: string | null;
+  upToDate: boolean | null;
+}
 
 export interface RemotePack {
   version: string;

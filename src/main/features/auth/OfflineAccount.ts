@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { isValidOfflineName } from '../../../shared/OfflineName.ts';
 
 const NAME_LOOKUP_URL = 'https://api.minecraftservices.com/minecraft/profile/lookup/name/';
 const NAME_LOOKUP_TIMEOUT_MS = 4000;
@@ -18,7 +19,6 @@ export function offlineUuid(name: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** `taken`: a Mojang account has this name; `unknown`: Mojang did not answer clearly. */
 export type NameStatus = 'free' | 'taken' | 'unknown';
 
 type Fetch = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<{ status: number }>;
@@ -36,4 +36,8 @@ export async function mojangNameStatus(name: string, fetchImpl: Fetch = fetch): 
   } catch {
     return 'unknown';
   }
+}
+
+export async function offlineNameStatus(name: string): Promise<NameStatus> {
+  return isValidOfflineName(name) ? await mojangNameStatus(name) : 'unknown';
 }

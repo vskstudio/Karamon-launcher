@@ -1,6 +1,20 @@
 import fs from 'fs';
 import path from 'path';
-import type { CrashReport, CrashReportsListResult } from '../../../ipc/contract';
+
+export interface CrashReport {
+  name: string;
+  mtime: number;
+  size: number;
+  summary: string;
+  excerpt: string;
+}
+
+export interface CrashReportsListResult {
+  dir: string;
+  reports: CrashReport[];
+}
+
+const RECENT_CRASH_WINDOW_MS = 10 * 60 * 1000;
 
 const CAUSE_PATTERNS: Array<{ regex: RegExp; tag: string }> = [
   { regex: /java\.lang\.OutOfMemoryError/i, tag: 'Mémoire insuffisante (OOM)' },
@@ -39,6 +53,17 @@ export class CrashReports {
     }
     reports.sort((a, b) => b.mtime - a.mtime);
     return { dir, reports };
+  }
+
+  recentCrashCause(gameDir: string, now = Date.now()): string[] {
+    try {
+      const recent = this.list(gameDir)
+        .reports.filter((report) => report.name.startsWith('crash-') && now - report.mtime < RECENT_CRASH_WINDOW_MS)
+        .sort((a, b) => b.mtime - a.mtime)[0];
+      return recent ? [recent.summary] : [];
+    } catch {
+      return [];
+    }
   }
 
   read(gameDir: string, name: string): string {

@@ -1,10 +1,11 @@
 import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
-import type { IpcEventContract } from '../ipc/contract';
+import type { EventRoute } from '../ipc/Route';
+import type { EventSink } from './ipc/IpcRouter';
 import { ASPECT_RATIO, initialWindowSize, interfaceScale, minimumWindowSize } from './shared/WindowSize';
 
-export class WindowManager {
+export class WindowManager implements EventSink {
   private window: BrowserWindow | null = null;
 
   constructor(private readonly distDir: string, private readonly assetsDir: string) {}
@@ -77,9 +78,9 @@ export class WindowManager {
     this.window?.close();
   }
 
-  send<K extends keyof IpcEventContract>(channel: K, payload: IpcEventContract[K]): void {
+  emit<Payload>(route: EventRoute<Payload>, payload: NoInfer<Payload>): void {
     if (this.exists()) {
-      this.window!.webContents.send(channel, payload);
+      this.window!.webContents.send(route.channel, payload);
     }
   }
 }

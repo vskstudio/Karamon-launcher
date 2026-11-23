@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { MinecraftProfile, OfflineSkinResult } from '../../../ipc/contract';
+import type { MinecraftProfile } from '../../../ipc/contract';
 import { api } from '../../state/api';
 import { applySession } from '../../state/session';
 import { forgetSkin } from '../../state/skins';
@@ -45,9 +45,12 @@ async function decodePng(file: File): Promise<{ url: string; image: HTMLImageEle
   }
 }
 
-async function callSkinApi(call: () => Promise<OfflineSkinResult>): Promise<OfflineSkinResult> {
+type SkinChange = { ok: true } | { ok: false; error: string };
+
+async function callSkinApi(call: () => Promise<void>): Promise<SkinChange> {
   try {
-    return await call();
+    await call();
+    return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -119,7 +122,7 @@ export function OfflineSkinEditor({ profile, current, currentLoading }: OfflineS
     const result = await callSkinApi(() => api.skinOfflineSet(request));
     setBusy(null);
     if (!result.ok) {
-      fail(result.error ?? 'Skin non enregistré.');
+      fail(result.error);
       return;
     }
     await finish('Skin enregistré : tu le porteras dès ta prochaine connexion au serveur.');
@@ -131,7 +134,7 @@ export function OfflineSkinEditor({ profile, current, currentLoading }: OfflineS
     const result = await callSkinApi(() => api.skinOfflineReset(profile.name));
     setBusy(null);
     if (!result.ok) {
-      fail(result.error ?? 'Impossible de revenir au skin par défaut.');
+      fail(result.error);
       return;
     }
     await finish('Skin par défaut à ta prochaine connexion (celui d’Ely.by ou TLauncher, sinon Steve).');

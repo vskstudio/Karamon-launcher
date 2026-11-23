@@ -2,7 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import { protocol, net } from 'electron';
 import { pathToFileURL } from 'url';
-import type { ScreenshotEntry, ScreenshotsListResult } from '../../../ipc/contract';
+
+export interface ScreenshotEntry {
+  name: string;
+  url: string;
+  size: number;
+  mtime: number;
+}
+
+export interface ScreenshotsListResult {
+  dir: string;
+  screenshots: ScreenshotEntry[];
+}
 
 const SCHEME = 'karamon-shot';
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
