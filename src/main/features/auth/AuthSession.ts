@@ -87,20 +87,21 @@ export class AuthSession {
 
   private microsoftProfile(): MinecraftProfile | null {
     if (this.current) return this.current.profile;
-    return this.store.load()?.profile ?? null;
+    return this.store.storedProfile();
   }
 
   private async refresh(): Promise<ActiveSession> {
-    const stored = this.store.load();
-    if (!stored) throw new Error('Aucune session stockée, connexion requise');
+    const profile = this.store.storedProfile();
+    const refreshToken = await this.store.refreshToken();
+    if (!profile || !refreshToken) throw new Error('Aucune session stockée, connexion requise');
     let ms: MicrosoftToken;
     try {
-      ms = await this.microsoft.refresh(stored.refreshToken);
+      ms = await this.microsoft.refresh(refreshToken);
     } catch (e) {
       if (e instanceof MicrosoftSessionExpired) this.forgetMicrosoftSession();
       throw e;
     }
-    this.store.save(ms.refreshToken, stored.profile);
+    await this.store.save(ms.refreshToken, profile);
     return await this.completeChain(ms);
   }
 
@@ -114,7 +115,7 @@ export class AuthSession {
     const xbox = await this.xbox.authenticate(ms.accessToken);
     const mc: MinecraftToken = await this.minecraft.login(xbox.userHash, xbox.token);
     const profile = await this.minecraft.fetchProfile(mc.accessToken);
-    this.store.save(ms.refreshToken, profile);
+    await this.store.save(ms.refreshToken, profile);
     this.current = { profile, accessToken: mc.accessToken, userType: 'msa', expiresAt: mc.expiresAt };
     return this.current;
   }

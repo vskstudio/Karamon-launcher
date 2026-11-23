@@ -9,11 +9,6 @@ interface StoredSession {
   savedAt: number;
 }
 
-export interface LoadedSession {
-  refreshToken: string;
-  profile: MinecraftProfile;
-}
-
 export class TokenStore {
   constructor(private readonly file: string) {}
 
@@ -23,38 +18,52 @@ export class TokenStore {
     app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
   }
 
-  save(refreshToken: string, profile: MinecraftProfile): void {
-    if (!TokenStore.encryptionAvailable()) {
+  async save(refreshToken: string, profile: MinecraftProfile): Promise<void> {
+    if (!(await TokenStore.encryptionAvailable())) {
       throw new Error('Stockage chiffré indisponible sur ce système');
     }
-    const encrypted = safeStorage.encryptString(refreshToken).toString('base64');
+    const encrypted = (await safeStorage.encryptStringAsync(refreshToken)).toString('base64');
     const data: StoredSession = { refreshTokenEnc: encrypted, profile, savedAt: Date.now() };
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, JSON.stringify(data, null, 2), 'utf8');
   }
 
-  load(): LoadedSession | null {
-    if (!fs.existsSync(this.file)) return null;
-    if (!TokenStore.encryptionAvailable()) return null;
+  storedProfile(): MinecraftProfile | null {
+    const stored = this.read();
+    return stored ? { id: stored.profile.id, name: stored.profile.name, kind: 'microsoft' } : null;
+  }
+
+  async refreshToken(): Promise<string | null> {
+    const stored = this.read();
+    if (!stored || !(await TokenStore.encryptionAvailable())) return null;
     try {
-      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
-      if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
-      const refreshToken = safeStorage.decryptString(Buffer.from(raw.refreshTokenEnc, 'base64'));
-      return { refreshToken, profile: { id: raw.profile.id, name: raw.profile.name, kind: 'microsoft' } };
+      const { result } = await safeStorage.decryptStringAsync(Buffer.from(stored.refreshTokenEnc, 'base64'));
+      return result;
     } catch {
       return null;
     }
   }
 
-  private static encryptionAvailable(): boolean {
-    if (safeStorage.isEncryptionAvailable()) return true;
+  clear(): void {
+    if (fs.existsSync(this.file)) fs.unlinkSync(this.file);
+  }
+
+  private read(): StoredSession | null {
+    if (!fs.existsSync(this.file)) return null;
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
+      if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
+      return raw;
+    } catch {
+      return null;
+    }
+  }
+
+  private static async encryptionAvailable(): Promise<boolean> {
+    if (await safeStorage.isAsyncEncryptionAvailable()) return true;
     if (process.platform !== 'linux' || !app.isReady()) return false;
     if (safeStorage.getSelectedStorageBackend() !== 'basic_text') return false;
     safeStorage.setUsePlainTextEncryption(true);
-    return safeStorage.isEncryptionAvailable();
-  }
-
-  clear(): void {
-    if (fs.existsSync(this.file)) fs.unlinkSync(this.file);
+    return await safeStorage.isAsyncEncryptionAvailable();
   }
 }

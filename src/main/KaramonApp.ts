@@ -1,6 +1,6 @@
 import { DevMode } from './shared/DevMode';
-import { app, ipcMain, dialog } from 'electron/main';
-import { clipboard, shell } from 'electron/common';
+import { app, clipboard, dialog, ipcMain } from 'electron/main';
+import { shell } from 'electron/common';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';

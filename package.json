@@ -5,6 +5,9 @@
   "author": "Karamon",
   "type": "module",
   "main": "dist/main.cjs",
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\"",
@@ -22,19 +25,22 @@
   },
   "dependencies": {
     "@preact/signals": "^2.11.4",
-    "@xhayper/discord-rpc": "^1.3.4",
-    "adm-zip": "^0.5.16",
-    "electron-updater": "^6.8.3",
+    "@xhayper/discord-rpc": "^1.5.1",
+    "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.11",
     "node-html-parser": "^9.0.7",
     "preact": "^11.2.0"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.8",
-    "@types/node": "^26.6.5",
-    "electron": "^41.5.0",
-    "electron-builder": "^26.8.1",
-    "esbuild": "^0.24.2",
-    "png-to-ico": "^2.1.8",
-    "typescript": "^5.9.3"
+    "@types/node": "^26.6.6",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "png-to-ico": "^3.0.2",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "electron-winstaller": true
   }
 }

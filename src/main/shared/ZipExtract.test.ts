@@ -23,7 +23,6 @@ test('extrait une archive dont le bit de descripteur est posé sans descripteur'
   const zipPath = writeZipWithoutDataDescriptor(dir, 'mods/karamon.jar', 'contenu du jar');
   const dest = path.join(dir, 'out');
 
-  assert.throws(() => new AdmZip(zipPath).getEntries()[0].getData(), /descriptor/i);
   await extractZipToDir(zipPath, dest);
 
   assert.equal(fs.readFileSync(path.join(dest, 'mods', 'karamon.jar'), 'utf8'), 'contenu du jar');
