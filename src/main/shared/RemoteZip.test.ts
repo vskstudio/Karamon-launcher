@@ -7,7 +7,7 @@ import path from 'path';
 import { PassThrough } from 'stream';
 import AdmZip from 'adm-zip';
 import { RemoteZip } from './RemoteZip.ts';
-import { ResourceChangedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
+import { RangeUnsupportedError, ResourceChangedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
 
 function fakeServer(file: () => Buffer, etag: () => string) {
   const stats = { requests: 0, bytes: 0 };
@@ -122,4 +122,12 @@ test('lit le répertoire central quand il ne tient pas dans la fin de fichier', 
   await remote.extractTo(e, path.join(dir, 'f.json'));
   assert.equal(fs.readFileSync(path.join(dir, 'f.json'), 'utf8'), '{"i":1499}');
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('une ETag faible ou absente est traitée comme un serveur sans plages, pas comme une archive qui change', async () => {
+  for (const etag of ['W/"v1"', '']) {
+    const { http, stats } = fakeServer(() => packZip(), () => etag);
+    await assert.rejects(RemoteZip.open(http, 'https://x/pack.zip'), (e: Error) => e instanceof RangeUnsupportedError);
+    assert.equal(stats.requests, 1);
+  }
 });

@@ -191,7 +191,7 @@ function contentRange(headers: IncomingHttpHeaders): { start: number; end: numbe
   return { start: Number(match[1]), end: Number(match[2]), total: Number(match[3]) };
 }
 
-function isStrongEtag(etag: string): boolean {
+export function isStrongEtag(etag: string): boolean {
   return etag.length > 0 && !etag.startsWith('W/');
 }
 

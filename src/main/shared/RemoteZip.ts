@@ -1,5 +1,5 @@
 import { Transform, type TransformCallback } from 'stream';
-import { withNetworkRetries, type HttpClient } from './HttpClient.ts';
+import { RangeUnsupportedError, isStrongEtag, withNetworkRetries, type HttpClient } from './HttpClient.ts';
 import {
   LOCAL_HEADER_SIZE,
   ZIP_TAIL_SIZE,
@@ -35,7 +35,7 @@ export class RemoteZip {
   static async open(http: HttpClient, url: string): Promise<RemoteZip> {
     const tail = await http.getRange(url, { start: -ZIP_TAIL_SIZE });
     const etag = tail.etag;
-    if (!etag) throw new Error(`Pas d'ETag pour ${url}: lecture partielle impossible`);
+    if (!etag || !isStrongEtag(etag)) throw new RangeUnsupportedError(`Pas d'ETag forte pour ${url}: lecture partielle impossible`);
     const tailStart = tail.total - tail.body.length;
     const loc = await RemoteZip.locate(http, url, tail.body, tailStart, etag);
 
