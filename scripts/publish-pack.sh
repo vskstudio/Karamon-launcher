@@ -30,6 +30,14 @@ release_exists() {
   gh release view "$1" --repo "$REPO" >/dev/null 2>&1
 }
 
+release_id() {
+  gh api "repos/${REPO}/releases/tags/$1" --jq .id
+}
+
+retag_release() {
+  gh api -X PATCH "repos/${REPO}/releases/$1" -f tag_name="$2" >/dev/null
+}
+
 delete_tag_ref() {
   gh api -X DELETE "repos/${REPO}/git/refs/tags/$1" >/dev/null 2>&1 || true
 }
@@ -54,10 +62,21 @@ gh release create "$STAGING_TAG" "$@" \
   --latest=false \
   --notes "$LATEST_NOTES"
 
+STAGING_ID="$(release_id "$STAGING_TAG")"
+LATEST_ID=""
 if release_exists "$LATEST_TAG"; then
-  gh release edit "$LATEST_TAG" --repo "$REPO" --tag "$RETIRED_TAG"
+  LATEST_ID="$(release_id "$LATEST_TAG")"
 fi
-gh release edit "$STAGING_TAG" --repo "$REPO" --tag "$LATEST_TAG"
+if [[ -n "$LATEST_ID" ]]; then
+  retag_release "$LATEST_ID" "$RETIRED_TAG"
+fi
+if ! retag_release "$STAGING_ID" "$LATEST_TAG"; then
+  if [[ -n "$LATEST_ID" ]]; then
+    retag_release "$LATEST_ID" "$LATEST_TAG"
+  fi
+  echo "Bascule de ${LATEST_TAG} échouée, l'ancienne release a été remise sous ${LATEST_TAG}" >&2
+  exit 1
+fi
 delete_tag_ref "$STAGING_TAG"
 
 if release_exists "$RETIRED_TAG"; then
