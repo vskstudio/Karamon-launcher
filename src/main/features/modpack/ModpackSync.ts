@@ -43,6 +43,7 @@ export type ProgressEmitter = (fraction: number) => void;
 export interface PlayerSettingsKeeper {
   setRevision(revision: number): void;
   keepSettings(target: string, packCrc: number | null): Promise<boolean>;
+  settingsInstalled(target: string, packCrc: number | null): void;
 }
 
 export interface SyncRequest {
@@ -432,7 +433,8 @@ class SyncRun {
           continue;
         }
         const target = resolveInside(dir, entry.name);
-        const current = group.isPlayerSettings(entry.name)
+        const playerSettings = group.isPlayerSettings(entry.name);
+        const current = playerSettings
           ? await this.req.playerSettings.keepSettings(target, crc ?? null)
           : crc !== undefined
             ? await this.verifier.matchesZipEntry(target, entry.size, crc)
@@ -441,7 +443,8 @@ class SyncRun {
           plan.keptBytes += entry.size;
           continue;
         }
-        plan.items.push(this.entryItem(await fileSource(), target, `+ ${entry.name}`));
+        const item = this.entryItem(await fileSource(), target, `+ ${entry.name}`);
+        plan.items.push(playerSettings ? this.recordingPlayerSettings(item, crc) : item);
       }
     }
     return plan;
@@ -467,6 +470,17 @@ class SyncRun {
       onFetched: () => {
         if (source.kind === 'entry') this.verifier.remember(target, source.entry.crc);
         this.req.onStatus(label);
+      },
+    };
+  }
+
+  private recordingPlayerSettings(item: FetchItem, planCrc: number | undefined): FetchItem {
+    const packCrc = item.source.kind === 'entry' ? item.source.entry.crc : (planCrc ?? null);
+    return {
+      ...item,
+      onFetched: () => {
+        item.onFetched?.();
+        this.req.playerSettings.settingsInstalled(item.target, packCrc);
       },
     };
   }

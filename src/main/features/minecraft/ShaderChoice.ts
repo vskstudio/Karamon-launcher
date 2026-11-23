@@ -31,9 +31,21 @@ export class ShaderPolicy {
   }
 
   async keepSettings(target: string, packCrc: number | null): Promise<boolean> {
-    const key = this.instance.relative(target);
-    const recorded = this.settings[key];
-    if (packCrc !== null) this.settings[key] = packCrc;
+    const keep = await this.playerKeepsSettings(target, packCrc);
+    if (keep) this.remember(target, packCrc);
+    return keep;
+  }
+
+  settingsInstalled(target: string, packCrc: number | null): void {
+    this.remember(target, packCrc);
+  }
+
+  private remember(target: string, packCrc: number | null): void {
+    if (packCrc !== null) this.settings[this.instance.relative(target)] = packCrc;
+  }
+
+  private async playerKeepsSettings(target: string, packCrc: number | null): Promise<boolean> {
+    const recorded = this.settings[this.instance.relative(target)];
     if (!fs.existsSync(target)) return false;
     if (this.bumped) return false;
     if (!this.state || packCrc === null) return true;

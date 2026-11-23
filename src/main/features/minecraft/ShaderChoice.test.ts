@@ -97,12 +97,14 @@ test('réglages .txt : modifiés par le joueur = gardés, intacts = mis à jour,
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v1')), false);
   fs.writeFileSync(txt, 'v1');
+  policy.settingsInstalled(txt, crc('v1'));
   policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, 1);
   policy.save();
   policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v2')), false);
   fs.writeFileSync(txt, 'v2');
+  policy.settingsInstalled(txt, crc('v2'));
   policy.save();
   fs.writeFileSync(txt, 'mes réglages');
   policy = new ShaderPolicy(new GameInstance(dir));
@@ -113,6 +115,28 @@ test('réglages .txt : modifiés par le joueur = gardés, intacts = mis à jour,
   policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(2);
   assert.equal(await policy.keepSettings(txt, crc('v3')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('réglages .txt : une synchro interrompue avant l’écriture ne fait pas passer l’ancienne version pour celle du joueur', async () => {
+  const dir = game();
+  const txt = path.join(dir, 'shaderpacks', 'KARAMON - Shader.txt');
+  let policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  await policy.keepSettings(txt, crc('v1'));
+  fs.writeFileSync(txt, 'v1');
+  policy.settingsInstalled(txt, crc('v1'));
+  policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, 1);
+  policy.save();
+
+  policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  assert.equal(await policy.keepSettings(txt, crc('v2')), false);
+  policy.save();
+
+  policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  assert.equal(await policy.keepSettings(txt, crc('v2')), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

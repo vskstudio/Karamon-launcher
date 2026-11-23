@@ -7,6 +7,7 @@ import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 import { PackServer, RELEASE_BASE, jarOf, launcherHarness, publishPack, sha1Of, zipOf } from './PackServer.fixture.ts';
 import { ModpackSync, type SyncRequest } from './ModpackSync.ts';
 import { ResourceChangedError } from '../../shared/HttpClient.ts';
+import { ShaderPolicy } from '../minecraft/ShaderChoice.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
 import { writeInstalledPack, readInstalledPack } from './InstalledPack.ts';
 
@@ -163,12 +164,18 @@ test('un état de synchronisation tronqué ne bloque pas : le pack est revérifi
   h.cleanup();
 });
 
-function directSync(server: PackServer, game: string, sync: ModpackSync, onStatus: (line: string) => void = () => undefined) {
+function directSync(
+  server: PackServer,
+  game: string,
+  sync: ModpackSync,
+  onStatus: (line: string) => void = () => undefined,
+  playerSettings: SyncRequest['playerSettings'] = { setRevision: () => undefined, keepSettings: async () => true, settingsInstalled: () => undefined },
+) {
   const request: SyncRequest = {
     baseUrl: server.base,
     instance: new GameInstance(game),
     parkedJars: new Set(),
-    playerSettings: { setRevision: () => undefined, keepSettings: async () => true },
+    playerSettings,
     onStatus,
     onProgress: () => undefined,
   };
@@ -279,6 +286,30 @@ test('un pack qui change sans cesse pendant la synchronisation donne une erreur 
   });
 
   await assert.rejects(directSync(server, h.game, new ModpackSync({ http })), /Le pack change en ce moment sur le serveur/);
+  h.cleanup();
+});
+
+test('une synchro qui échoue avant d’écrire les réglages du shader ne bloque pas leur mise à jour à la suivante', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) }, shaderTxt: 'shadowDistance=4\n' });
+  const h = launcherHarness(server);
+  await h.sync();
+  const instance = new GameInstance(h.game);
+  const txt = path.join(instance.shaderPacksDir, 'KARAMON - Shader.txt');
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) }, shaderTxt: 'shadowDistance=8\n' });
+
+  const cutBeforeFetch = (line: string): void => {
+    if (line.includes('à mettre à jour')) throw new Error('connexion coupée');
+  };
+  const interrupted = new ShaderPolicy(instance);
+  await assert.rejects(directSync(server, h.game, new ModpackSync({ http: server.http }), cutBeforeFetch, interrupted), /connexion coupée/);
+  interrupted.save();
+  assert.equal(fs.readFileSync(txt, 'utf8'), 'shadowDistance=4\n');
+
+  const next = new ShaderPolicy(instance);
+  await directSync(server, h.game, new ModpackSync({ http: server.http }), () => undefined, next);
+  next.save();
+  assert.equal(fs.readFileSync(txt, 'utf8'), 'shadowDistance=8\n');
   h.cleanup();
 });
 
