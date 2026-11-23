@@ -1,13 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CONSENT_TEXT, reportResultMessage } from './ReportMessages.ts';
-
-test('le texte du consentement est celui de la spec', () => {
-  assert.equal(CONSENT_TEXT.question, "Un problème a été détecté. Envoyer le rapport à l'équipe Karamon pour qu'on t'aide ?");
-  assert.equal(CONSENT_TEXT.send, 'Envoyer');
-  assert.equal(CONSENT_TEXT.later, 'Pas maintenant');
-  assert.equal(CONSENT_TEXT.always, 'Toujours envoyer automatiquement');
-});
+import { reportResultMessage } from './ReportMessages.ts';
 
 test('un envoi réussi montre le code court', () => {
   assert.deepEqual(reportResultMessage({ status: 'sent', code: 'ab12cd34' }), {

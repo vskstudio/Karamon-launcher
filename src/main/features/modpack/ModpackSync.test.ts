@@ -1,443 +1,332 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import crypto from 'crypto';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { ModpackSync } from './ModpackSync.ts';
-import type { HttpClient } from '../../shared/HttpClient.ts';
-import { OptionsWriter } from '../minecraft/OptionsWriter.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
+import { PackServer, RELEASE_BASE, jarOf, launcherHarness, publishPack, sha1Of, zipOf } from './PackServer.fixture.ts';
+import { ModpackSync, type SyncRequest } from './ModpackSync.ts';
+import { ResourceChangedError } from '../../shared/HttpClient.ts';
+import { ShaderPolicy } from '../minecraft/ShaderChoice.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
+import { writeInstalledPack, readInstalledPack } from './InstalledPack.ts';
 
-function zipFiles(filePath: string, files: Record<string, string | Buffer>): void {
-  const zip = new AdmZip();
-  for (const [name, body] of Object.entries(files)) {
-    zip.addFile(name, Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'));
-  }
-  zip.writeZip(filePath);
-}
+test('installe les mods et les assets depuis les deux archives, puis ne retélécharge rien', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
 
-function jarBytes(id: string): Buffer {
-  const zip = new AdmZip();
-  zip.addFile('fabric.mod.json', Buffer.from(JSON.stringify({ id })));
-  return zip.toBuffer();
-}
+  await h.sync();
+  assert.deepEqual(server.stats.downloads.sort(), ['assets.zip', 'mods.zip']);
+  assert.ok(fs.existsSync(path.join(h.game, 'mods', 'demo-mod-1.0.0.jar')));
+  assert.ok(fs.existsSync(path.join(h.game, 'resourcepacks', 'Comforts.zip')));
+  assert.ok(fs.existsSync(path.join(h.game, 'resourcepacks', 'Karamon UI', 'pack.mcmeta')));
+  assert.ok(fs.existsSync(path.join(h.game, 'shaderpacks', 'KARAMON - Shader', 'shaders', 'final.fsh')));
+  assert.ok(fs.existsSync(path.join(h.game, 'config', 'lumymon.json')));
+  assert.match(fs.readFileSync(path.join(h.game, 'options.txt'), 'utf8'), /resourcePacks:\["vanilla","file\/Comforts.zip","file\/Karamon UI"\]/);
+  assert.deepEqual(fs.readdirSync(h.game).filter((f) => f.endsWith('.tmp')), []);
 
-function sha1(data: Buffer): string {
-  return crypto.createHash('sha1').update(data).digest('hex');
-}
-
-function fakeHttp(
-  files: Record<string, string>,
-  releaseAssets: { name: string; size: number; digest?: string }[],
-): HttpClient {
-  return {
-    async getText(url: string): Promise<string> {
-      throw new Error(`HTTP 404 for ${url}`);
-    },
-    async getJson(url: string): Promise<unknown> {
-      if (url.includes('/releases/')) {
-        return {
-          tag_name: 'pack-latest',
-          assets: releaseAssets.map((asset, id) => ({
-            id: id + 1,
-            name: asset.name,
-            size: asset.size,
-            digest: asset.digest,
-            updated_at: '2026-09-20T00:00:00Z',
-          })),
-        };
-      }
-      throw new Error(`HTTP 404 for ${url}`);
-    },
-    async head(): Promise<Record<string, string>> {
-      return {};
-    },
-    async download(url: string, dest: string): Promise<void> {
-      const name = decodeURIComponent(url.split('/').pop() ?? '');
-      const src = files[name];
-      if (!src) throw new Error(`HTTP 404 downloading ${name}`);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(src, dest);
-    },
-  } as unknown as HttpClient;
-}
-
-test('sync installs mods and assets from two zips', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': jarBytes('demo') });
-
-  const uiZip = path.join(pack, 'Karamon UI.zip');
-  zipFiles(uiZip, { 'pack.mcmeta': '{"pack":{"pack_format":34}}' });
-  const rpZip = path.join(pack, 'Comforts.zip');
-  zipFiles(rpZip, { 'pack.mcmeta': 'rp-bytes' });
-  const overridesZip = path.join(pack, 'overrides.zip');
-  zipFiles(overridesZip, { 'config/lumymon.json': '{"ok":true}' });
-
-  const assetsZip = path.join(pack, 'assets.zip');
-  zipFiles(assetsZip, {
-    'client-options.json': JSON.stringify({
-      resourcePacks: ['vanilla', 'file/Comforts.zip', 'file/Karamon UI'],
-      shaderPack: 'COBBLEVERSE - Shaders',
-      enableShaders: true,
-    }),
-    'resourcepacks-manifest.json': JSON.stringify([
-      { name: 'Comforts.zip', size: fs.statSync(rpZip).size },
-      { name: 'Karamon UI.zip', size: fs.statSync(uiZip).size, extract: true },
-    ]),
-    'shaderpacks-manifest.json': JSON.stringify([]),
-    'overrides-manifest.json': JSON.stringify({
-      name: 'overrides.zip',
-      size: fs.statSync(overridesZip).size,
-    }),
-    'overrides.zip': fs.readFileSync(overridesZip),
-    'resourcepacks/Comforts.zip': fs.readFileSync(rpZip),
-    'resourcepacks/Karamon UI.zip': fs.readFileSync(uiZip),
-  });
-
-  const sync = new ModpackSync({
-    http: fakeHttp(
-      { 'mods.zip': modsZip, 'assets.zip': assetsZip },
-      [
-        { name: 'mods.zip', size: fs.statSync(modsZip).size },
-        { name: 'assets.zip', size: fs.statSync(assetsZip).size },
-      ],
-    ),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-  });
-
-  const statuses: string[] = [];
-  await sync.sync(
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
-    game,
-    (msg) => statuses.push(msg),
-    () => undefined,
-  );
-
-  assert.ok(fs.existsSync(path.join(game, 'mods', 'demo-mod-1.0.0.jar')));
-  assert.deepEqual(fs.readFileSync(path.join(game, 'resourcepacks', 'Comforts.zip')), fs.readFileSync(rpZip));
-  assert.ok(fs.existsSync(path.join(game, 'resourcepacks', 'Karamon UI', 'pack.mcmeta')));
-  assert.ok(fs.existsSync(path.join(game, 'config', 'lumymon.json')));
-  assert.match(statuses.at(-1) ?? '', /1 mods, 2 resource packs/);
-
-  const again: string[] = [];
-  await sync.sync(
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
-    game,
-    (msg) => again.push(msg),
-    () => undefined,
-  );
-  assert.equal(again.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
-  fs.rmSync(dir, { recursive: true, force: true });
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  h.cleanup();
 });
 
-test('sync keeps installed zips when pack-latest gets a new asset id', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-digest-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': jarBytes('demo') });
-  const assetsZip = path.join(pack, 'assets.zip');
-  zipFiles(assetsZip, {
-    'client-options.json': JSON.stringify({
-      resourcePacks: ['vanilla'],
-      shaderPack: 'none',
-      enableShaders: false,
-    }),
-    'resourcepacks-manifest.json': '[]',
-    'shaderpacks-manifest.json': '[]',
+test('garde les archives installées quand pack-latest reçoit un nouvel identifiant d’asset au même digest', async () => {
+  const server = new PackServer({
+    base: RELEASE_BASE,
+    ranges: false,
+    releaseDigests: {
+      'mods.zip': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'assets.zip': 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    },
   });
-  const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  const assetsDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
-  const files = { 'mods.zip': modsZip, 'assets.zip': assetsZip };
-  const first = new ModpackSync({
-    http: fakeHttp(files, [
-      { name: 'mods.zip', size: fs.statSync(modsZip).size, digest },
-      { name: 'assets.zip', size: fs.statSync(assetsZip).size, digest: assetsDigest },
-    ]),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-  });
-  await first.sync(base, game, () => undefined, () => undefined);
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
 
-  let downloads = 0;
-  const second = new ModpackSync({
-    http: {
-      async getText(): Promise<string> {
-        throw new Error('unexpected');
-      },
-      async getJson(): Promise<unknown> {
-        return {
-          assets: [
-            { id: 9001, name: 'mods.zip', size: 1, digest, updated_at: '2026-09-23T00:00:00Z' },
-            { id: 9002, name: 'assets.zip', size: 1, digest: assetsDigest, updated_at: '2026-09-23T00:00:00Z' },
-          ],
-        };
-      },
-      async head(): Promise<Record<string, string>> {
-        return {};
-      },
-      async download(): Promise<void> {
-        downloads++;
-        throw new Error('should not download');
-      },
-    } as unknown as HttpClient,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-  });
-  const statuses: string[] = [];
-  await second.sync(base, game, (msg) => statuses.push(msg), () => undefined);
-  assert.equal(downloads, 0);
-  assert.equal(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
-  fs.rmSync(dir, { recursive: true, force: true });
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  assert.deepEqual(server.stats.heads, []);
+  h.cleanup();
 });
 
-test('sync keeps the loose-file layout when assets.zip is absent', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-legacy-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': jarBytes('demo') });
-  const rpZip = path.join(pack, 'Comforts.zip');
-  zipFiles(rpZip, { 'pack.mcmeta': 'rp-bytes' });
-
-  const files: Record<string, string> = { 'mods.zip': modsZip, 'Comforts.zip': rpZip };
-  const sync = new ModpackSync({
-    http: {
-      async getText(url: string): Promise<string> {
-        if (url.endsWith('resourcepacks-manifest.json')) {
-          return JSON.stringify([{ name: 'Comforts.zip', size: fs.statSync(rpZip).size }]);
-        }
-        if (url.endsWith('shaderpacks-manifest.json')) return '[]';
-        if (url.endsWith('overrides-manifest.json')) throw new Error('HTTP 404');
-        if (url.endsWith('client-options.json')) {
-          return JSON.stringify({
-            resourcePacks: ['vanilla', 'file/Comforts.zip'],
-            shaderPack: 'none',
-            enableShaders: false,
-          });
-        }
-        throw new Error(`HTTP 404 for ${url}`);
-      },
-      async getJson(url: string): Promise<unknown> {
-        if (url.includes('/releases/')) {
-          return {
-            assets: [{ id: 1, name: 'mods.zip', size: fs.statSync(modsZip).size, updated_at: '2026-09-20T00:00:00Z' }],
-          };
-        }
-        throw new Error(`HTTP 404 for ${url}`);
-      },
-      async head(): Promise<Record<string, string>> {
-        return {};
-      },
-      async download(url: string, dest: string): Promise<void> {
-        const name = decodeURIComponent(url.split('/').pop() ?? '');
-        const src = files[name];
-        if (!src) throw new Error(`HTTP 404 downloading ${name}`);
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.copyFileSync(src, dest);
-      },
-    } as unknown as HttpClient,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-  });
-
-  await sync.sync(
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/',
-    game,
-    () => undefined,
-    () => undefined,
+test('garde la disposition en fichiers séparés quand le pack ne publie pas assets.zip', async () => {
+  const server = new PackServer({ ranges: false });
+  const rp = zipOf({ 'pack.mcmeta': 'rp-bytes' });
+  server.files.set('mods.zip', zipOf({ 'demo-mod-1.0.0.jar': jarOf('demo') }));
+  server.files.set('resourcepacks-manifest.json', Buffer.from(JSON.stringify([{ name: 'Comforts.zip', size: rp.length }])));
+  server.files.set('shaderpacks-manifest.json', Buffer.from('[]'));
+  server.files.set('resourcepacks/Comforts.zip', rp);
+  server.files.set(
+    'client-options.json',
+    Buffer.from(JSON.stringify({ resourcePacks: ['vanilla', 'file/Comforts.zip'], shaderPack: 'none', enableShaders: false })),
   );
-  assert.ok(fs.existsSync(path.join(game, 'mods', 'demo-mod-1.0.0.jar')));
-  assert.deepEqual(fs.readFileSync(path.join(game, 'resourcepacks', 'Comforts.zip')), fs.readFileSync(rpZip));
-  fs.rmSync(dir, { recursive: true, force: true });
+  const h = launcherHarness(server);
+
+  await h.sync();
+  assert.ok(fs.existsSync(path.join(h.game, 'mods', 'demo-mod-1.0.0.jar')));
+  assert.deepEqual(fs.readFileSync(path.join(h.game, 'resourcepacks', 'Comforts.zip')), rp);
+
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  h.cleanup();
 });
 
-test('sync reinstalls only the damaged files listed with a sha1', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-repair-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-  const demo = jarBytes('demo');
-  const voxy = jarBytes('voxy');
-  const legacy = jarBytes('old-java');
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': demo, 'voxy-0.2.jar': voxy, 'oldjava-1.0.jar': legacy });
-  const rpZip = path.join(pack, 'Comforts.zip');
-  zipFiles(rpZip, { 'pack.mcmeta': '{"pack":{"pack_format":34}}' });
-  const rpBytes = fs.readFileSync(rpZip);
-  const assetsZip = path.join(pack, 'assets.zip');
-  zipFiles(assetsZip, {
-    'client-options.json': JSON.stringify({ resourcePacks: ['vanilla'], shaderPack: 'none', enableShaders: false }),
-    'mods-manifest.json': JSON.stringify([
-      { name: 'demo-mod-1.0.0.jar', size: demo.length, sha1: sha1(demo) },
-      { name: 'oldjava-1.0.jar', size: legacy.length, sha1: sha1(legacy) },
-      { name: 'voxy-0.2.jar', size: voxy.length, sha1: sha1(voxy) },
-    ]),
-    'resourcepacks-manifest.json': JSON.stringify([
-      { name: 'Comforts.zip', size: rpBytes.length, sha1: sha1(rpBytes) },
-    ]),
-    'shaderpacks-manifest.json': '[]',
-    'resourcepacks/Comforts.zip': rpBytes,
-  });
-  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
-  const downloads: string[] = [];
-  const http = fakeHttp({ 'mods.zip': modsZip, 'assets.zip': assetsZip }, [
-    { name: 'mods.zip', size: fs.statSync(modsZip).size },
-    { name: 'assets.zip', size: fs.statSync(assetsZip).size },
-  ]);
-  const download = http.download.bind(http);
-  http.download = (async (url: string, dest: string) => {
-    downloads.push(decodeURIComponent(url.split('/').pop() ?? ''));
-    await download(url, dest);
-  }) as HttpClient['download'];
-  const sync = new ModpackSync({
-    http,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-    disabledJarPrefixes: ['oldjava'],
-  });
-  await sync.sync(base, game, () => undefined, () => undefined);
-  assert.equal(fs.existsSync(path.join(game, 'mods', 'mods-disabled', 'oldjava-1.0.jar')), true);
+test('ne réinstalle que les fichiers abîmés, et la réparation complète les liste', async () => {
+  const server = new PackServer({ ranges: false });
+  const demo = jarOf('demo');
+  const voxy = jarOf('voxy');
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': demo, 'voxy-0.2.jar': voxy, 'oldjava-1.0.jar': jarOf('old-java') }, withManifests: true });
+  const h = launcherHarness(server, { disabledJarPrefixes: ['oldjava'] });
+  await h.sync();
+  const mods = path.join(h.game, 'mods');
+  const comforts = path.join(h.game, 'resourcepacks', 'Comforts.zip');
+  const comfortsBytes = fs.readFileSync(comforts);
+  assert.ok(fs.existsSync(path.join(mods, 'mods-disabled', 'oldjava-1.0.jar')));
+  assert.ok(!fs.existsSync(path.join(mods, 'oldjava-1.0.jar')));
 
-  // Crash: voxy keeps its size but its tail is zeroed; demo is swapped for a same-size valid jar.
-  const voxyPath = path.join(game, 'mods', 'voxy-0.2.jar');
+  const voxyPath = path.join(mods, 'voxy-0.2.jar');
   fs.writeFileSync(voxyPath, Buffer.concat([voxy.subarray(0, 8), Buffer.alloc(voxy.length - 8)]));
-  const other = jarBytes('dema');
+  const other = jarOf('dema');
   assert.equal(other.length, demo.length);
-  fs.writeFileSync(path.join(game, 'mods', 'demo-mod-1.0.0.jar'), other);
-  fs.writeFileSync(path.join(game, 'resourcepacks', 'Comforts.zip'), Buffer.alloc(rpBytes.length));
-  downloads.length = 0;
+  fs.writeFileSync(path.join(mods, 'demo-mod-1.0.0.jar'), other);
+  fs.writeFileSync(comforts, Buffer.alloc(comfortsBytes.length));
+  server.resetStats();
 
-  const report = await sync.sync(base, game, () => undefined, () => undefined);
-  assert.deepEqual(downloads.sort(), ['assets.zip', 'mods.zip']);
-  assert.deepEqual(report.damaged.sort(), [
-    'mods/demo-mod-1.0.0.jar',
-    'mods/voxy-0.2.jar',
-    'resourcepacks/Comforts.zip',
-  ]);
+  const report = await h.launcher.repair(h.config, () => undefined, () => undefined);
+  assert.deepEqual(server.stats.downloads.sort(), ['assets.zip', 'mods.zip']);
+  assert.deepEqual(report.damaged.sort(), ['mods/demo-mod-1.0.0.jar', 'mods/voxy-0.2.jar', 'resourcepacks/Comforts.zip']);
   assert.deepEqual(fs.readFileSync(voxyPath), voxy);
-  assert.deepEqual(fs.readFileSync(path.join(game, 'mods', 'demo-mod-1.0.0.jar')), demo);
-  assert.deepEqual(fs.readFileSync(path.join(game, 'resourcepacks', 'Comforts.zip')), rpBytes);
-  assert.equal(fs.existsSync(path.join(game, 'mods', 'oldjava-1.0.jar')), false);
+  assert.deepEqual(fs.readFileSync(path.join(mods, 'demo-mod-1.0.0.jar')), demo);
+  assert.deepEqual(fs.readFileSync(comforts), comfortsBytes);
 
-  downloads.length = 0;
+  server.resetStats();
   fs.writeFileSync(voxyPath, Buffer.concat([voxy.subarray(0, 8), Buffer.alloc(voxy.length - 8)]));
-  const onlyMods = await sync.sync(base, game, () => undefined, () => undefined);
-  assert.deepEqual(downloads, ['mods.zip']);
-  assert.deepEqual(onlyMods.damaged, ['mods/voxy-0.2.jar']);
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, ['mods.zip']);
+  assert.deepEqual(fs.readFileSync(voxyPath), voxy);
 
-  downloads.length = 0;
-  const clean = await sync.sync(base, game, () => undefined, () => undefined, { verifyAll: true });
-  assert.deepEqual(downloads, []);
+  server.resetStats();
+  const clean = await h.launcher.repair(h.config, () => undefined, () => undefined);
+  assert.deepEqual(server.stats.downloads, []);
   assert.deepEqual(clean.damaged, []);
-  fs.rmSync(dir, { recursive: true, force: true });
+  h.cleanup();
 });
 
-test('sync keeps the overrides archive so configs can be restored', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-overrides-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': jarBytes('demo') });
-  const overridesZip = path.join(pack, 'overrides.zip');
-  zipFiles(overridesZip, { 'config/lumymon.json': '{"ok":true}' });
-  const overridesBytes = fs.readFileSync(overridesZip);
-  const assetsZip = path.join(pack, 'assets.zip');
-  zipFiles(assetsZip, {
-    'client-options.json': JSON.stringify({ resourcePacks: ['vanilla'], shaderPack: 'none', enableShaders: false }),
-    'resourcepacks-manifest.json': '[]',
-    'shaderpacks-manifest.json': '[]',
-    'overrides-manifest.json': JSON.stringify({
-      name: 'overrides.zip',
-      size: overridesBytes.length,
-      sha1: sha1(overridesBytes),
-    }),
-    'overrides.zip': overridesBytes,
-  });
-  const sync = new ModpackSync({
-    http: fakeHttp({ 'mods.zip': modsZip, 'assets.zip': assetsZip }, [
-      { name: 'mods.zip', size: fs.statSync(modsZip).size },
-      { name: 'assets.zip', size: fs.statSync(assetsZip).size },
-    ]),
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-  });
-  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
-  await sync.sync(base, game, () => undefined, () => undefined);
-  const archive = ModpackSync.overridesArchive(game);
-  assert.ok(archive);
-  assert.deepEqual(fs.readFileSync(archive), overridesBytes);
+test('garde l’archive des configs du pack pour pouvoir les restaurer, et la reprend si elle disparaît', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') }, withManifests: true });
+  const h = launcherHarness(server);
+  await h.sync();
+  const archive = path.join(h.game, '.karamon-overrides.zip');
+  const overrides = new AdmZipView(server.files.get('assets.zip')!).entry('overrides.zip');
+  assert.deepEqual(fs.readFileSync(archive), overrides);
 
   fs.rmSync(archive);
-  const statuses: string[] = [];
-  await sync.sync(base, game, (msg) => statuses.push(msg), () => undefined);
-  assert.notEqual(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
-  assert.ok(ModpackSync.overridesArchive(game));
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.writeFileSync(path.join(h.game, 'config', 'lumymon.json'), Buffer.alloc(11));
+  await h.sync();
+  assert.deepEqual(fs.readFileSync(archive), overrides);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(h.game, 'config', 'lumymon.json'), 'utf8')).ok, true);
+  h.cleanup();
 });
 
-test('a parked jar is verified and repaired as <name>.disabled, never put back as .jar', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sync-parked-'));
-  const pack = path.join(dir, 'pack');
-  const game = path.join(dir, 'game');
-  fs.mkdirSync(pack, { recursive: true });
-  const demo = jarBytes('demo');
-  const voxy = jarBytes('voxy');
-  const modsZip = path.join(pack, 'mods.zip');
-  zipFiles(modsZip, { 'demo-mod-1.0.0.jar': demo, 'voxy-0.2.jar': voxy });
-  const assetsZip = path.join(pack, 'assets.zip');
-  zipFiles(assetsZip, {
-    'client-options.json': JSON.stringify({ resourcePacks: ['vanilla'], shaderPack: 'none', enableShaders: false }),
-    'mods-manifest.json': JSON.stringify([
-      { name: 'demo-mod-1.0.0.jar', size: demo.length, sha1: sha1(demo) },
-      { name: 'voxy-0.2.jar', size: voxy.length, sha1: sha1(voxy) },
-    ]),
-    'resourcepacks-manifest.json': '[]',
-    'shaderpacks-manifest.json': '[]',
-  });
-  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
-  const downloads: string[] = [];
-  const http = fakeHttp({ 'mods.zip': modsZip, 'assets.zip': assetsZip }, [
-    { name: 'mods.zip', size: fs.statSync(modsZip).size },
-    { name: 'assets.zip', size: fs.statSync(assetsZip).size },
-  ]);
-  const download = http.download.bind(http);
-  http.download = (async (url: string, dest: string) => {
-    downloads.push(decodeURIComponent(url.split('/').pop() ?? ''));
-    await download(url, dest);
-  }) as HttpClient['download'];
-  const sync = new ModpackSync({
-    http,
-    optionsWriterFactory: (gameDir) => new OptionsWriter(gameDir),
-    parkedJars: () => ['VOXY-0.2.jar'],
-  });
-  const mods = path.join(game, 'mods');
-  const parked = path.join(mods, 'voxy-0.2.jar.disabled');
+test('refuse une archive de configs qui ne correspond pas au manifeste', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') }, withManifests: true });
+  const assets = new AdmZipView(server.files.get('assets.zip')!);
+  const manifest = JSON.parse(assets.entry('overrides-manifest.json').toString()) as { sha1: string };
+  manifest.sha1 = sha1Of(Buffer.from('autre chose'));
+  server.files.set('assets.zip', assets.with('overrides-manifest.json', JSON.stringify(manifest)));
+  const h = launcherHarness(server);
 
-  await sync.sync(base, game, () => undefined, () => undefined);
-  assert.deepEqual(fs.readFileSync(parked), voxy);
-  assert.equal(fs.existsSync(path.join(mods, 'voxy-0.2.jar')), false);
-  assert.deepEqual(ModpackSync.packJars(game), new Set(['demo-mod-1.0.0.jar', 'voxy-0.2.jar']));
-  assert.deepEqual(ModpackSync.listMods(game), [
-    { name: 'demo-mod-1.0.0.jar', size: demo.length },
-    { name: 'voxy-0.2.jar', size: voxy.length, disabled: true },
-  ]);
-
-  downloads.length = 0;
-  const statuses: string[] = [];
-  await sync.sync(base, game, (msg) => statuses.push(msg), () => undefined);
-  assert.deepEqual(downloads, []);
-  assert.equal(statuses.at(-1), 'Pack déjà à jour, aucun téléchargement nécessaire.');
-
-  fs.writeFileSync(parked, Buffer.alloc(voxy.length));
-  const report = await sync.sync(base, game, () => undefined, () => undefined, { verifyAll: true });
-  assert.deepEqual(report.damaged, ['mods/voxy-0.2.jar.disabled']);
-  assert.deepEqual(fs.readFileSync(parked), voxy);
-  assert.equal(fs.existsSync(path.join(mods, 'voxy-0.2.jar')), false);
-  fs.rmSync(dir, { recursive: true, force: true });
+  await assert.rejects(h.sync(), /overrides\.zip: empreinte SHA-1 invalide/);
+  assert.ok(!fs.existsSync(path.join(h.game, '.karamon-overrides.zip')));
+  h.cleanup();
 });
+
+test('un état de synchronisation tronqué ne bloque pas : le pack est revérifié', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const state = path.join(h.game, '.karamon-sync-cache.json');
+  fs.writeFileSync(state, fs.readFileSync(state, 'utf8').slice(0, 20));
+
+  await h.sync();
+  await h.sync();
+  assert.ok(fs.existsSync(path.join(h.game, 'mods', 'demo-mod-1.0.0.jar')));
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  h.cleanup();
+});
+
+function directSync(
+  server: PackServer,
+  game: string,
+  sync: ModpackSync,
+  onStatus: (line: string) => void = () => undefined,
+  playerSettings: SyncRequest['playerSettings'] = { setRevision: () => undefined, keepSettings: async () => true, settingsInstalled: () => undefined },
+) {
+  const request: SyncRequest = {
+    baseUrl: server.base,
+    instance: new GameInstance(game),
+    parkedJars: new Set(),
+    playerSettings,
+    onStatus,
+    onProgress: () => undefined,
+  };
+  return sync.sync(request);
+}
+
+test('après la mise à jour du launcher, le pack déjà installé garde ses options client de l’ancien format', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const statePath = path.join(h.game, '.karamon-sync-cache.json');
+  const { clientOptions, ...oldFormat } = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  assert.ok(clientOptions);
+  fs.writeFileSync(statePath, JSON.stringify(oldFormat));
+  const installedOptions = { ...clientOptions, shaderPack: 'KARAMON - Shader installé', shaderRevision: 7 };
+  fs.writeFileSync(path.join(h.game, '.karamon-client-options.json'), JSON.stringify(installedOptions));
+  const bundled = { resourcePacks: ['vanilla'], shaderPack: 'COPIE EMBARQUÉE', enableShaders: false, shaderRevision: 0 };
+
+  server.resetStats();
+  const result = await directSync(server, h.game, new ModpackSync({ http: server.http, fallbackClientOptions: bundled }));
+
+  assert.deepEqual(server.stats.downloads, []);
+  assert.equal(result.clientOptions?.shaderPack, 'KARAMON - Shader installé');
+  assert.equal(result.clientOptions?.shaderRevision, 7);
+  h.cleanup();
+});
+
+test('l’ancien fichier d’options client disparaît une fois l’état réécrit, sans perdre les options', () => {
+  const game = makeTempDir('karamon-client-options-');
+  const instance = new GameInstance(game);
+  const legacy = { resourcePacks: ['vanilla', 'file/Karamon UI'], shaderPack: 'KARAMON - Shader', enableShaders: true, shaderRevision: 3 };
+  fs.writeFileSync(instance.syncState, JSON.stringify({ modsEtag: 'abc', jarNames: ['a.jar'] }));
+  fs.writeFileSync(instance.legacyClientOptions, JSON.stringify(legacy));
+
+  const read = readInstalledPack(instance);
+  assert.equal(read.kind, 'read');
+  if (read.kind !== 'read') return;
+  assert.equal(read.pack.clientOptions?.shaderRevision, 3);
+  writeInstalledPack(instance, read.pack, Date.now());
+
+  assert.equal(fs.existsSync(instance.legacyClientOptions), false);
+  const reread = readInstalledPack(instance);
+  assert.equal(reread.kind === 'read' && reread.pack.clientOptions?.shaderRevision, 3);
+});
+
+test('les archives temporaires d’une synchronisation interrompue sont supprimées à la suivante', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const instance = new GameInstance(h.game);
+  const leftovers = [
+    instance.tempFile('mods.zip') + '.tmp',
+    instance.tempFile('assets.zip'),
+    instance.tempFile('Karamon UI.zip', instance.resourcePacksDir),
+    instance.tempFile('KARAMON - Shader.zip', instance.shaderPacksDir) + '.tmp',
+  ];
+  for (const file of leftovers) fs.writeFileSync(file, Buffer.alloc(1024));
+  const kept = path.join(instance.resourcePacksDir, '.karamon-notes.txt');
+  fs.writeFileSync(kept, 'à garder');
+
+  const lines = await h.sync();
+
+  assert.deepEqual(leftovers.filter((file) => fs.existsSync(file)), []);
+  assert.ok(fs.existsSync(kept));
+  assert.ok(fs.existsSync(instance.syncState));
+  assert.ok(lines.some((line) => line.includes('4 fichier(s) temporaire(s)')));
+  h.cleanup();
+});
+
+test('un pack republié pendant la synchronisation est revérifié en entier avec ses nouvelles clés', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) } });
+  const h = launcherHarness(server);
+  await h.sync();
+
+  publishPack(server, { jars: { 'demo-2.0.jar': jarOf('demo2', 64) } });
+  const release = server.holdDownloads();
+  const lines: string[] = [];
+  const running = h.sync((line) => lines.push(line));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  publishPack(server, { jars: { 'demo-3.0.jar': jarOf('demo3', 64) } });
+  release();
+  await running;
+
+  assert.deepEqual(fs.readdirSync(path.join(h.game, 'mods')).filter((f) => f.endsWith('.jar')), ['demo-3.0.jar']);
+  assert.ok(lines.some((line) => line.includes('mis à jour sur le serveur pendant la synchronisation')));
+  assert.ok(!lines.some((line) => line.includes('Téléchargement partiel impossible')));
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  assert.equal(server.stats.bytes, 0);
+  h.cleanup();
+});
+
+test('un pack qui change sans cesse pendant la synchronisation donne une erreur claire', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) } });
+  const h = launcherHarness(server);
+  await h.sync();
+  publishPack(server, { jars: { 'demo-2.0.jar': jarOf('demo2', 64) } });
+  const http = server.http;
+  Object.assign(http, {
+    openRange: async () => {
+      throw new ResourceChangedError('mods.zip');
+    },
+  });
+
+  await assert.rejects(directSync(server, h.game, new ModpackSync({ http })), /Le pack change en ce moment sur le serveur/);
+  h.cleanup();
+});
+
+test('une synchro qui échoue avant d’écrire les réglages du shader ne bloque pas leur mise à jour à la suivante', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) }, shaderTxt: 'shadowDistance=4\n' });
+  const h = launcherHarness(server);
+  await h.sync();
+  const instance = new GameInstance(h.game);
+  const txt = path.join(instance.shaderPacksDir, 'KARAMON - Shader.txt');
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) }, shaderTxt: 'shadowDistance=8\n' });
+
+  const cutBeforeFetch = (line: string): void => {
+    if (line.includes('à mettre à jour')) throw new Error('connexion coupée');
+  };
+  const interrupted = new ShaderPolicy(instance);
+  await assert.rejects(directSync(server, h.game, new ModpackSync({ http: server.http }), cutBeforeFetch, interrupted), /connexion coupée/);
+  interrupted.save();
+  assert.equal(fs.readFileSync(txt, 'utf8'), 'shadowDistance=4\n');
+
+  const next = new ShaderPolicy(instance);
+  await directSync(server, h.game, new ModpackSync({ http: server.http }), () => undefined, next);
+  next.save();
+  assert.equal(fs.readFileSync(txt, 'utf8'), 'shadowDistance=8\n');
+  h.cleanup();
+});
+
+class AdmZipView {
+  private readonly files: Record<string, Buffer> = {};
+
+  constructor(data: Buffer) {
+    const zip = new AdmZip(data);
+    for (const entry of zip.getEntries()) this.files[entry.entryName] = entry.getData();
+  }
+
+  entry(name: string): Buffer {
+    return this.files[name];
+  }
+
+  with(name: string, body: string): Buffer {
+    return zipOf({ ...this.files, [name]: body });
+  }
+}
+

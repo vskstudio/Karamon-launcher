@@ -2,25 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import { ZipReader } from '../../shared/ZipReader.ts';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
-import { resolveInside } from '../../shared/ZipExtract.ts';
-import { normalizeOverridePath } from '../modpack/OverridesInstaller.ts';
+import { normalizeEntryPath, resolveInside } from '../../shared/ZipExtract.ts';
 import { repairSummary } from './RepairSummary.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
-/** Config files are small text; anything bigger is not what a crash zero-fills. */
-export const MAX_SCANNED_BYTES = 5 * 1024 * 1024;
+const MAX_SCANNED_BYTES = 5 * 1024 * 1024;
 const ROOT_FILES = ['defaultoptions.journal.json'];
 const CHUNK = 64 * 1024;
 
 export interface ConfigRepairResult {
-  /** Paths relative to the game dir, forward slashes. */
   repaired: string[];
-  /** Subset of `repaired` rewritten from the pack's overrides. */
   restored: string[];
   backupDir: string | null;
 }
 
-/** A crash during a write can leave a file of the right length filled with NUL bytes. */
-export function isAllNul(data: Buffer): boolean {
+function isAllNul(data: Buffer): boolean {
   if (data.length === 0) return false;
   for (let i = 0; i < data.length; i++) {
     if (data[i] !== 0) return false;
@@ -28,13 +24,12 @@ export function isAllNul(data: Buffer): boolean {
   return true;
 }
 
-export function backupDirName(now: Date): string {
+function backupDirName(now: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
   return `config-corrompues-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** Scanned: config/**, root defaultoptions.journal.json, resourcepacks/*.rpo. */
-export function isScannedPath(rel: string): boolean {
+function isScannedPath(rel: string): boolean {
   const p = rel.replace(/\\/g, '/');
   if (p.startsWith('config/')) return true;
   if (ROOT_FILES.includes(p)) return true;
@@ -45,29 +40,21 @@ export function repairMessage(count: number): string {
   return repairSummary(0, count);
 }
 
-export function findNulFiles(gameDir: string): string[] {
+function findNulFiles(instance: GameInstance): string[] {
   const found: string[] = [];
-  for (const rel of listCandidates(gameDir)) {
-    if (fileIsAllNul(path.join(gameDir, rel))) found.push(rel);
+  for (const rel of listCandidates(instance)) {
+    if (fileIsAllNul(path.join(instance.dir, rel))) found.push(rel);
   }
   return found.sort();
 }
 
-/**
- * Moves every zero-filled config to `config-corrompues-<date>/` and puts the
- * pack's version back when the overrides archive has one; otherwise the file
- * stays absent and the mod writes its default on the next start.
- */
-export function repairCorruptConfigs(
-  gameDir: string,
-  overridesZip: string | null,
-  now: Date = new Date(),
-): ConfigRepairResult {
-  const broken = findNulFiles(gameDir);
+export function repairCorruptConfigs(instance: GameInstance, now: Date = new Date()): ConfigRepairResult {
+  const gameDir = instance.dir;
+  const broken = findNulFiles(instance);
   if (broken.length === 0) return { repaired: [], restored: [], backupDir: null };
 
   const backupDir = path.join(gameDir, backupDirName(now));
-  const packFiles = readPackFiles(overridesZip, broken);
+  const packFiles = readPackFiles(instance.keptOverridesArchive(), broken);
   const repaired: string[] = [];
   const restored: string[] = [];
   for (const rel of broken) {
@@ -80,31 +67,39 @@ export function repairCorruptConfigs(
     repaired.push(rel);
     const packData = packFiles.get(rel);
     if (!packData) continue;
-    try {
-      writeFileAtomic(source, packData);
-      restored.push(rel);
-    } catch {
-      /* left absent: the mod regenerates its default */
-    }
+    if (restoreFromPack(source, packData)) restored.push(rel);
   }
   return { repaired, restored, backupDir };
 }
 
-function listCandidates(gameDir: string): string[] {
-  const out: string[] = [];
-  walk(path.join(gameDir, 'config'), 'config', out);
-  for (const name of ROOT_FILES) {
-    if (isRegularFile(path.join(gameDir, name))) out.push(name);
-  }
+function restoreFromPack(file: string, packData: Buffer): boolean {
   try {
-    for (const name of fs.readdirSync(path.join(gameDir, 'resourcepacks'))) {
-      const rel = `resourcepacks/${name}`;
-      if (isScannedPath(rel) && isRegularFile(path.join(gameDir, rel))) out.push(rel);
-    }
+    writeFileAtomic(file, packData);
+    return true;
   } catch {
-    /* no resourcepacks dir */
+    return false;
+  }
+}
+
+function listCandidates(instance: GameInstance): string[] {
+  const out: string[] = [];
+  walk(instance.configDir, 'config', out);
+  for (const name of ROOT_FILES) {
+    if (isRegularFile(path.join(instance.dir, name))) out.push(name);
+  }
+  for (const name of namesIn(instance.resourcePacksDir)) {
+    const rel = `resourcepacks/${name}`;
+    if (isScannedPath(rel) && isRegularFile(path.join(instance.dir, rel))) out.push(rel);
   }
   return out;
+}
+
+function namesIn(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
 }
 
 function walk(dir: string, rel: string, out: string[]): void {
@@ -129,7 +124,6 @@ function isRegularFile(filePath: string): boolean {
   }
 }
 
-/** Reads in chunks and stops at the first non-NUL byte. */
 function fileIsAllNul(filePath: string): boolean {
   let fd: number;
   try {
@@ -164,16 +158,16 @@ function readPackFiles(overridesZip: string | null, wanted: string[]): Map<strin
     ZipReader.with(overridesZip, (zip) => {
       for (const entry of zip.entries) {
         if (entry.isDirectory) continue;
-        const rel = normalizeOverridePath(entry.entryName);
+        const rel = normalizeEntryPath(entry.entryName);
         if (!want.has(rel)) continue;
         const data = zip.read(entry);
         if (!isAllNul(data)) files.set(rel, data);
       }
     });
+    return files;
   } catch {
-    /* unreadable archive: nothing to restore from */
+    return new Map();
   }
-  return files;
 }
 
 function moveAside(source: string, target: string): void {

@@ -5,16 +5,9 @@ import { ZipReader } from './ZipReader.ts';
 export interface ZipExtractOptions {
   stripCommonTopLevelFolder?: boolean;
   exclude?: string[];
-  /** Writes each file through a flushed temp file + rename (pack files). */
   durable?: boolean;
 }
 
-/**
- * Extracts a zip one entry at a time, streamed to disk: memory stays flat
- * whatever the size of the archive or of its entries (assets.zip and mods.zip
- * are hundreds of Mo, one jar is 130 Mo), and the event loop keeps running.
- * Every entry is written to a temp file, checked (size + CRC) and renamed.
- */
 export async function extractZipToDir(
   zipPath: string,
   destDir: string,
@@ -62,4 +55,8 @@ export function commonTopLevelPrefix(entries: { entryName: string }[]): string {
     else if (prefix !== top) return '';
   }
   return prefix ?? '';
+}
+
+export function normalizeEntryPath(entryName: string): string {
+  return entryName.replace(/\\/g, '/').replace(/^\.?\/+/, '');
 }

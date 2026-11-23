@@ -1,47 +1,17 @@
 import fs from 'fs';
 import path from 'path';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export class OptionsWriter {
-  private readonly mcDir: string;
+  private readonly instance: GameInstance;
 
-  constructor(mcDir: string) {
-    this.mcDir = mcDir;
-  }
-
-  ensureResourcePack(packFileName: string): void {
-    const file = path.join(this.mcDir, 'options.txt');
-    const key = 'resourcePacks:';
-    const entry = `file/${packFileName}`;
-
-    if (!fs.existsSync(file)) {
-      fs.mkdirSync(this.mcDir, { recursive: true });
-      fs.writeFileSync(file, `${key}["vanilla","fabric","${entry}"]\n`, 'utf8');
-      return;
-    }
-
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
-    const idx = lines.findIndex((l) => l.startsWith(key));
-
-    if (idx === -1) {
-      lines.push(`${key}["vanilla","fabric","${entry}"]`);
-    } else {
-      try {
-        const arr = JSON.parse(lines[idx].slice(key.length)) as string[];
-        if (!arr.includes(entry)) {
-          arr.push(entry);
-          lines[idx] = key + JSON.stringify(arr);
-        }
-      } catch {
-        /* leave malformed line untouched */
-      }
-    }
-
-    fs.writeFileSync(file, lines.join('\n'), 'utf8');
+  constructor(instance: GameInstance) {
+    this.instance = instance;
   }
 
   forceResourcePacks(packs: string[]): void {
-    this.writeResourcePacks(path.join(this.mcDir, 'options.txt'), packs, true);
-    const defaults = path.join(this.mcDir, 'config', 'defaultoptions', 'options.txt');
+    this.writeResourcePacks(this.instance.optionsFile, packs, true);
+    const defaults = path.join(this.instance.configDir, 'defaultoptions', 'options.txt');
     if (fs.existsSync(defaults)) this.writeResourcePacks(defaults, packs, false);
   }
 
@@ -74,7 +44,7 @@ export class OptionsWriter {
   }
 
   ensureShader(shaderFileName: string, enableShaders = true): void {
-    const iris = path.join(this.mcDir, 'config', 'iris.properties');
+    const iris = this.instance.irisProperties;
     this.upsertLine(iris, `shaderPack=${shaderFileName}`, /^shaderPack=.*$/m, {
       createIfMissing: true,
     });
@@ -82,7 +52,7 @@ export class OptionsWriter {
       createIfMissing: true,
     });
 
-    const optifineFile = path.join(this.mcDir, 'optionsshaders.txt');
+    const optifineFile = path.join(this.instance.dir, 'optionsshaders.txt');
     if (fs.existsSync(optifineFile)) {
       this.upsertLine(optifineFile, `shaderPack=${shaderFileName}`, /^shaderPack=.*$/m, {
         createIfMissing: false,

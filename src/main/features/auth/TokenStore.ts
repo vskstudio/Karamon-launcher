@@ -1,7 +1,6 @@
-import fs from 'fs';
-import path from 'path';
 import { app, safeStorage } from 'electron/main';
-import type { MinecraftProfile } from '../../../ipc/contract';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 interface StoredSession {
   refreshTokenEnc: string;
@@ -9,13 +8,12 @@ interface StoredSession {
   savedAt: number;
 }
 
-export interface LoadedSession {
-  refreshToken: string;
-  profile: MinecraftProfile;
-}
-
 export class TokenStore {
-  constructor(private readonly file: string) {}
+  private readonly file: JsonFile<StoredSession>;
+
+  constructor(file: string) {
+    this.file = new JsonFile(file, TokenStore.decode, { whenUnreadable: 'replace' });
+  }
 
   static preferLinuxSecretService(): void {
     if (process.platform !== 'linux') return;
@@ -23,38 +21,51 @@ export class TokenStore {
     app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
   }
 
-  save(refreshToken: string, profile: MinecraftProfile): void {
-    if (!TokenStore.encryptionAvailable()) {
+  async save(refreshToken: string, profile: MinecraftProfile): Promise<void> {
+    if (!(await TokenStore.encryptionAvailable())) {
       throw new Error('Stockage chiffré indisponible sur ce système');
     }
-    const encrypted = safeStorage.encryptString(refreshToken).toString('base64');
+    const encrypted = (await safeStorage.encryptStringAsync(refreshToken)).toString('base64');
     const data: StoredSession = { refreshTokenEnc: encrypted, profile, savedAt: Date.now() };
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(data, null, 2), 'utf8');
+    this.file.write(data);
   }
 
-  load(): LoadedSession | null {
-    if (!fs.existsSync(this.file)) return null;
-    if (!TokenStore.encryptionAvailable()) return null;
+  storedProfile(): MinecraftProfile | null {
+    const stored = this.read();
+    return stored ? { id: stored.profile.id, name: stored.profile.name, kind: 'microsoft' } : null;
+  }
+
+  async refreshToken(): Promise<string | null> {
+    const stored = this.read();
+    if (!stored || !(await TokenStore.encryptionAvailable())) return null;
     try {
-      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
-      if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
-      const refreshToken = safeStorage.decryptString(Buffer.from(raw.refreshTokenEnc, 'base64'));
-      return { refreshToken, profile: { id: raw.profile.id, name: raw.profile.name, kind: 'microsoft' } };
+      const { result } = await safeStorage.decryptStringAsync(Buffer.from(stored.refreshTokenEnc, 'base64'));
+      return result;
     } catch {
       return null;
     }
   }
 
-  private static encryptionAvailable(): boolean {
-    if (safeStorage.isEncryptionAvailable()) return true;
+  clear(): void {
+    this.file.remove();
+  }
+
+  private read(): StoredSession | null {
+    const state = this.file.read();
+    return state.kind === 'read' ? state.value : null;
+  }
+
+  private static decode(raw: unknown): StoredSession {
+    const stored = jsonObject(raw) as Partial<StoredSession>;
+    if (!stored.refreshTokenEnc || !stored.profile?.id || !stored.profile?.name) throw new Error('session incomplète');
+    return stored as StoredSession;
+  }
+
+  private static async encryptionAvailable(): Promise<boolean> {
+    if (await safeStorage.isAsyncEncryptionAvailable()) return true;
     if (process.platform !== 'linux' || !app.isReady()) return false;
     if (safeStorage.getSelectedStorageBackend() !== 'basic_text') return false;
     safeStorage.setUsePlainTextEncryption(true);
-    return safeStorage.isEncryptionAvailable();
-  }
-
-  clear(): void {
-    if (fs.existsSync(this.file)) fs.unlinkSync(this.file);
+    return await safeStorage.isAsyncEncryptionAvailable();
   }
 }

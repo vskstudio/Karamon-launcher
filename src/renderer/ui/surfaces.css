@@ -1,0 +1,38 @@
+.surface {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  box-shadow: var(--shadow-card);
+}
+
+.surface--inset {
+  border-color: var(--line);
+  border-radius: var(--radius);
+  background: var(--sunk);
+  box-shadow: none;
+}
+
+.surface--accent {
+  border-color: var(--accent-line);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(224, 85, 108, 0.14), transparent 60%),
+    linear-gradient(180deg, var(--surface-2), var(--surface));
+  box-shadow: 0 1px 0 var(--highlight) inset, 0 24px 60px -30px var(--accent-glow);
+}
+
+.surface--lumis {
+  border-color: var(--lumis-line);
+  background:
+    radial-gradient(60% 120% at 0% 50%, rgba(154, 124, 224, 0.32), transparent 70%),
+    radial-gradient(40% 80% at 100% 0%, rgba(255, 211, 107, 0.07), transparent 70%),
+    linear-gradient(180deg, rgba(154, 124, 224, 0.16), rgba(123, 79, 214, 0.05)),
+    var(--surface);
+  box-shadow: 0 1px 0 var(--highlight) inset, 0 30px 90px -40px var(--lumis-glow);
+}
+
+.surface--glass {
+  border-color: rgba(255, 255, 255, 0.07);
+  background: rgba(15, 13, 18, 0.72);
+  backdrop-filter: blur(14px) saturate(1.2);
+}

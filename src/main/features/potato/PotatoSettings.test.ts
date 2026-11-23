@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  IRIS_RULES,
   OPTIONS_RULES,
   SODIUM_RULES,
   applyRules,
-  atLeast,
-  atMost,
-  cheapest,
   emptyBackup,
   jsonDoc,
   keyValueDoc,
@@ -17,27 +15,13 @@ import {
   restoreRules,
 } from './PotatoSettings.ts';
 
-test('atMost lowers, never raises, and writes the target for an absent key above it', () => {
-  const lower = atMost('6', 12);
-  assert.equal(lower('12'), '6');
-  assert.equal(lower('6'), null);
-  assert.equal(lower('4'), null);
-  assert.equal(lower(undefined), '6');
-  assert.equal(lower('abc'), '6');
-  assert.equal(atMost('0', 0)(undefined), null);
-  assert.equal(atMost('0.75', 1)('1.0'), '0.75');
-  assert.equal(atMost('0.75', 1)('0.5'), null);
-});
-
-test('atLeast and cheapest keep a setting that is already lower', () => {
-  assert.equal(atLeast('2', 0)('0'), '2');
-  assert.equal(atLeast('2', 0)('2'), null);
-  const clouds = cheapest(['"false"', '"fast"', '"true"'], '"false"', '"true"');
-  assert.equal(clouds('"true"'), '"false"');
-  assert.equal(clouds('"fast"'), '"false"');
-  assert.equal(clouds('"false"'), null);
-  assert.equal(clouds(undefined), '"false"');
-  assert.equal(clouds('"weird"'), '"false"');
+test('options.txt: an unreadable value is lowered to the cheap value, an already cheap one is left alone', () => {
+  const doc = keyValueDoc('renderDistance:abc\nrenderClouds:"weird"\nparticles:2\ngraphicsMode:0\n', ':');
+  const written = applyRules(doc, OPTIONS_RULES, emptyBackup());
+  assert.equal(doc.get('renderDistance'), '6');
+  assert.equal(doc.get('renderClouds'), '"false"');
+  assert.ok(!written.includes('particles'));
+  assert.ok(!written.includes('graphicsMode'));
 });
 
 test('options.txt: only lowers, keeps unknown lines and CRLF, then restores the player values', () => {
@@ -75,12 +59,10 @@ test('options.txt: only lowers, keeps unknown lines and CRLF, then restores the 
   assert.equal(backup.before.renderDistance, '16');
   assert.equal(backup.before.biomeBlendRadius, null);
 
-  // Second launch while on: nothing to write, backup still holds the first values.
   const again = keyValueDoc(text, ':');
   assert.deepEqual(applyRules(again, OPTIONS_RULES, backup), []);
   assert.equal(backup.before.renderDistance, '16');
 
-  // The player changes the clouds in game, then turns the mode off.
   const played = keyValueDoc(text.replace('renderClouds:"false"', 'renderClouds:"true"'), ':');
   const restored = restoreRules(played, backup);
   const back = played.serialize();
@@ -98,7 +80,7 @@ test('a second apply does not overwrite the backup taken when the mode was turne
   const backup = emptyBackup();
   const doc = keyValueDoc('renderDistance:12\n', ':');
   applyRules(doc, OPTIONS_RULES, backup);
-  doc.set('renderDistance', '10'); // raised in game while the mode is on
+  doc.set('renderDistance', '10');
   applyRules(doc, OPTIONS_RULES, backup);
   assert.equal(doc.get('renderDistance'), '6');
   assert.equal(backup.before.renderDistance, '12');
@@ -107,7 +89,7 @@ test('a second apply does not overwrite the backup taken when the mode was turne
 test('iris.properties keeps comments and the selected shader', () => {
   const doc = keyValueDoc('#Iris\nenableShaders=true\nshaderPack=COBBLEVERSE - Shaders\n', '=');
   const backup = emptyBackup();
-  applyRules(doc, [{ key: 'enableShaders', lower: cheapest(['false', 'true'], 'false', 'true') }], backup);
+  applyRules(doc, IRIS_RULES, backup);
   assert.equal(doc.serialize(), '#Iris\nenableShaders=false\nshaderPack=COBBLEVERSE - Shaders\n');
   restoreRules(doc, backup);
   assert.equal(doc.serialize(), '#Iris\nenableShaders=true\nshaderPack=COBBLEVERSE - Shaders\n');
@@ -131,7 +113,6 @@ test('sodium-options.json: dotted paths, fast leaves, restore', () => {
   assert.equal(lowered.quality.weather_quality, 'FAST');
   assert.equal(lowered.quality.enable_vignette, false);
   assert.equal(lowered.performance.use_entity_culling, true);
-  // Absent: Sodium's default is already the cheap one, nothing added.
   assert.equal(lowered.performance.use_block_face_culling, undefined);
   assert.equal(lowered.notifications.has_seen_donation_prompt, true);
 
@@ -146,12 +127,10 @@ test('lowEndReasons: RAM, Intel-only GPU, few threads', () => {
   assert.deepEqual(lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x8086 }] }), [
     'carte graphique intégrée',
   ]);
-  // Intel iGPU + NVIDIA card: the laptop has a real GPU.
   assert.deepEqual(
     lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x8086 }, { vendorId: 0x10de }] }),
     [],
   );
-  // Software renderer only (vendor unknown): not reported.
   assert.deepEqual(lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x1ae0 }] }), []);
   assert.deepEqual(lowEndReasons({ totalMemMb: 12000, cpuCount: 4, gpus: [] }), ['4 threads']);
 });

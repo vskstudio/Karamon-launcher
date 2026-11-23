@@ -1,6 +1,6 @@
 import path from 'path';
 import { RuleEvaluator } from './RuleEvaluator.ts';
-import type { RawArgument, MojangVersion } from './VersionResolver';
+import type { RawArgument, MojangVersion } from './VersionResolver.ts';
 
 export interface ArgumentVars {
   authPlayerName: string;

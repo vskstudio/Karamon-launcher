@@ -1,0 +1,91 @@
+:root {
+  --bg: #0b0a0d;
+  --bg-raised: #0e0c11;
+  --sunk: #08070a;
+  --surface: #121016;
+  --surface-2: #17151c;
+  --surface-3: #1e1b24;
+  --surface-4: #25212d;
+
+  --line: #1a1820;
+  --border: #24212b;
+  --border-strong: #2f2b38;
+  --border-hover: #3b3647;
+  --highlight: rgba(255, 255, 255, 0.045);
+
+  --text: #ece8f3;
+  --text-2: #d6d0e2;
+  --text-3: #b9b3c6;
+  --dim: #8e88a0;
+  --dim-2: #8a849c;
+
+  --accent: #e0556c;
+  --accent-hover: #ea6880;
+  --accent-light: #f28ca0;
+  --accent-pale: #ffb3c1;
+  --accent-deep: #9c1f3a;
+  --accent-soft: rgba(224, 85, 108, 0.12);
+  --accent-line: rgba(224, 85, 108, 0.35);
+  --accent-glow: rgba(224, 85, 108, 0.35);
+  --on-accent: #1a0710;
+
+  --lumis: #c3adff;
+  --lumis-strong: #9a7ce0;
+  --lumis-deep: #7b4fd6;
+  --lumis-soft: rgba(167, 139, 250, 0.12);
+  --lumis-line: rgba(179, 157, 255, 0.35);
+  --lumis-glow: rgba(123, 79, 214, 0.55);
+
+  --gold: #ffd36b;
+  --on-gold: #3a2300;
+  --success: #3ddc84;
+  --success-soft: rgba(61, 220, 132, 0.1);
+  --success-line: rgba(61, 220, 132, 0.3);
+  --warning: #f5b041;
+  --warning-soft: rgba(245, 176, 65, 0.12);
+  --warning-line: rgba(245, 176, 65, 0.32);
+  --danger: #f25c4d;
+  --danger-soft: rgba(242, 92, 77, 0.12);
+  --danger-line: rgba(242, 92, 77, 0.35);
+
+  --scrim: rgba(5, 4, 7, 0.72);
+  --shadow-card: 0 1px 0 var(--highlight) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 30px 80px -20px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--border-strong);
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 48px;
+  --control-xl: 56px;
+
+  --titlebar-h: 44px;
+  --sidebar-w: 232px;
+  --page-x: clamp(24px, 3vw, 48px);
+  --page-y: 32px;
+  --page-max: 1360px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fast: 160ms;
+  --medium: 240ms;
+
+  --focus: var(--accent-light);
+}

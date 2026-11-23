@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron/main';
 import crypto from 'crypto';
+import { HttpClient, isSuccess, jsonBody } from '../../shared/HttpClient.ts';
 
 const CLIENT_ID = '00000000402b5328';
 const REDIRECT_URI = 'https://login.live.com/oauth20_desktop.srf';
@@ -33,7 +34,15 @@ export interface MicrosoftToken {
   expiresAt: number;
 }
 
+const FORM_HEADERS = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' };
+
 export class MicrosoftAuth {
+  private readonly http: Pick<HttpClient, 'post'>;
+
+  constructor(http: Pick<HttpClient, 'post'>) {
+    this.http = http;
+  }
+
   async login(): Promise<MicrosoftToken> {
     const state = crypto.randomBytes(16).toString('hex');
     const code = await this.runBrowserFlow(this.buildAuthorizeUrl(state), state);
@@ -48,17 +57,13 @@ export class MicrosoftAuth {
       redirect_uri: REDIRECT_URI,
       scope: SCOPE,
     });
-    const res = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as TokenErrorResponse;
+    const res = await this.http.post(TOKEN_URL, params.toString(), { headers: FORM_HEADERS });
+    if (!isSuccess(res)) {
+      const body = jsonBody<TokenErrorResponse>(res, {});
       if (body.error && EXPIRED_GRANT_ERRORS.has(body.error)) throw new MicrosoftSessionExpired();
       throw new Error(`Microsoft a refusé le rafraîchissement (HTTP ${res.status})`);
     }
-    return this.parseTokenResponse((await res.json()) as TokenResponse);
+    return this.parseTokenResponse(jsonBody<TokenResponse>(res, {}));
   }
 
   private buildAuthorizeUrl(state: string): string {
@@ -82,15 +87,11 @@ export class MicrosoftAuth {
       redirect_uri: REDIRECT_URI,
       scope: SCOPE,
     });
-    const res = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    if (!res.ok) {
+    const res = await this.http.post(TOKEN_URL, params.toString(), { headers: FORM_HEADERS });
+    if (!isSuccess(res)) {
       throw new Error(`Microsoft a refusé le code (HTTP ${res.status})`);
     }
-    return this.parseTokenResponse((await res.json()) as TokenResponse);
+    return this.parseTokenResponse(jsonBody<TokenResponse>(res, {}));
   }
 
   private parseTokenResponse(data: TokenResponse): MicrosoftToken {

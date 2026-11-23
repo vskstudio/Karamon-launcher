@@ -1,0 +1,116 @@
+.ui-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: rgba(18, 16, 22, 0.72);
+  backdrop-filter: blur(10px);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ui-tag--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-pale);
+}
+
+.ui-tag--lumis {
+  background: var(--lumis-soft);
+  border-color: var(--lumis-line);
+  color: var(--lumis);
+}
+
+.ui-tag--gold {
+  background: rgba(255, 211, 107, 0.12);
+  border-color: rgba(255, 211, 107, 0.35);
+  color: var(--gold);
+}
+
+.ui-tag--success {
+  background: var(--success-soft);
+  border-color: var(--success-line);
+  color: var(--success);
+}
+
+.ui-tag--warning {
+  background: var(--warning-soft);
+  border-color: var(--warning-line);
+  color: var(--warning);
+}
+
+.ui-tag--danger {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ui-badge--accent {
+  background: var(--accent-light);
+  color: var(--on-accent);
+}
+
+.ui-badge--gold {
+  background: var(--gold);
+  color: var(--on-gold);
+}
+
+.ui-badge--lumis {
+  background: var(--lumis);
+  color: #1b1033;
+}
+
+.ui-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.ui-dot--success {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.ui-dot--warning {
+  background: var(--warning);
+}
+
+.ui-dot--danger {
+  background: var(--danger);
+}
+
+.ui-dot--accent {
+  background: var(--accent);
+}
+
+.ui-dot--pulse {
+  animation: ui-dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ui-dot-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}

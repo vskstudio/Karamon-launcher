@@ -1,24 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 
-/** Past this size the log moves to launcher.old.log and a new one starts. */
-export const MAX_LOG_BYTES = 1024 * 1024;
+export const MAX_LOG_BYTES_BEFORE_ROTATION = 1024 * 1024;
 
-/**
- * Launcher log on disk (logs/launcher.log in the launcher data folder), so a
- * player can send what happened even after the window is closed. One rotated
- * copy is kept: at most about 2 Mo. Writing never throws: a full disk or a
- * locked file must not break the launcher.
- */
 export class FileLog {
   readonly file: string;
   private readonly oldFile: string;
   private readonly maxBytes: number;
   private size = -1;
 
-  constructor(logsDir: string, maxBytes = MAX_LOG_BYTES) {
-    this.file = path.join(logsDir, 'launcher.log');
-    this.oldFile = path.join(logsDir, 'launcher.old.log');
+  constructor(file: string, maxBytes = MAX_LOG_BYTES_BEFORE_ROTATION) {
+    this.file = file;
+    this.oldFile = path.join(path.dirname(file), `${path.basename(file, '.log')}.old.log`);
     this.maxBytes = maxBytes;
   }
 
@@ -58,7 +51,6 @@ export class FileLog {
     return String(error);
   }
 
-  /** Keeps one entry per line; access tokens never reach the log. */
   private static oneLine(message: string): string {
     return message
       .replace(/\r?\n/g, ' ⏎ ')

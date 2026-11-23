@@ -6,6 +6,7 @@ import path from 'path';
 import { ReportManager } from './ReportManager.ts';
 import { MAX_FAILED_DELIVERIES, ReportQueue } from './ReportQueue.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
 
 function setup() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-manager-'));
@@ -16,6 +17,7 @@ function setup() {
   const consent: Array<{ reportId: string; trigger: ReportTrigger; summary: string[] }> = [];
   const logs: string[] = [];
   let duringSend: (report: LauncherReport) => void = () => {};
+  let autoSendRefusal: Error | null = null;
   const manager = new ReportManager({
     collector: {
       collect: async ({ trigger, summary }): Promise<LauncherReport> => ({
@@ -26,9 +28,12 @@ function setup() {
     },
     queue,
     transport: { send: async (report) => { duringSend(report); return transport; } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => automatic,
-    setAutoSend: (value) => { automatic = value; },
+    setAutoSend: (value) => {
+      if (autoSendRefusal) throw autoSendRefusal;
+      automatic = value;
+    },
     requestConsent: (request) => { consent.push(request); },
     log: (message) => { logs.push(message); },
   });
@@ -37,6 +42,7 @@ function setup() {
     automatic: () => automatic,
     setTransport: (value: typeof transport) => { transport = value; },
     setDuringSend: (hook: typeof duringSend) => { duringSend = hook; },
+    refuseAutoSend: (error: Error) => { autoSendRefusal = error; },
   };
 }
 
@@ -66,6 +72,23 @@ test('toujours envoyer active le réglage et garde hors-ligne le même code', as
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 
+test('toujours envoyer avec une config illisible envoie quand même le rapport et signale le réglage non enregistré', async () => {
+  const f = setup();
+  const sent: string[] = [];
+  f.setDuringSend((report) => sent.push(report.reportId));
+  f.refuseAutoSend(new Error('Tes réglages sont illisibles pour l\'instant (fichier verrouillé ?). Réessaie dans un instant.'));
+  await f.manager.detect('crash', ['Erreur GPU']);
+
+  const result = await f.manager.answerConsent(f.consent[0].reportId, true, true);
+
+  assert.equal(result.status, 'sent');
+  assert.deepEqual(sent, ['12345671-e89b-42d3-a456-426614174000']);
+  assert.equal(f.queue.list().length, 0);
+  assert.equal(f.automatic(), false);
+  assert.match(result.autoSendNotSaved ?? '', /Tes réglages sont illisibles/);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
 test('limite les doublons automatiques mais jamais le bouton manuel', async () => {
   const f = setup();
   await f.manager.detect('crash', ['premier'], undefined, 1_000);
@@ -85,7 +108,7 @@ test('un même rapport n’est jamais envoyé deux fois en parallèle', async ()
     collector: { collect: async () => { throw new Error('inutile'); } },
     queue,
     transport: { send: async () => { posts++; await gate; return 'sent'; } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => true,
     setAutoSend: () => {},
     requestConsent: () => {},
@@ -113,7 +136,7 @@ test('une erreur du transport reste silencieuse et garde le rapport', async () =
     }) },
     queue,
     transport: { send: async () => { throw new Error('boum'); } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => true,
     setAutoSend: () => {},
     requestConsent: () => {},

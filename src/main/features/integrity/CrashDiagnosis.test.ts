@@ -3,13 +3,15 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { GameInstance } from '../../shared/GameInstance.ts';
 import {
   detectCorruption,
-  EARLY_CRASH_WINDOW_MS,
   isEarlyCrash,
   readCrashEvidence,
   stoppedCleanly,
 } from './CrashDiagnosis.ts';
+
+const TWO_MINUTES = 2 * 60 * 1000;
 
 test('reconnaît un jar tronqué', () => {
   const text = 'java.util.zip.ZipException: zip END header not found\n\tat java.base/java.util.zip.ZipFile';
@@ -39,9 +41,9 @@ test('ignore un crash sans rapport avec des fichiers abîmés', () => {
 
 test('ne considère que les sorties en erreur dans les deux premières minutes', () => {
   assert.equal(isEarlyCrash(1, 0, 30_000), true);
-  assert.equal(isEarlyCrash(-1, 0, EARLY_CRASH_WINDOW_MS), true);
+  assert.equal(isEarlyCrash(-1, 0, TWO_MINUTES), true);
   assert.equal(isEarlyCrash(0, 0, 30_000), false);
-  assert.equal(isEarlyCrash(1, 0, EARLY_CRASH_WINDOW_MS + 1), false);
+  assert.equal(isEarlyCrash(1, 0, TWO_MINUTES + 1), false);
 });
 
 test('lit le dernier rapport de crash de la session et la fin de latest.log', () => {
@@ -56,11 +58,11 @@ test('lit le dernier rapport de crash de la session et la fin de latest.log', ()
   fs.writeFileSync(path.join(reports, 'crash-new.txt'), 'nouveau rapport');
   fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'fin du log');
 
-  const evidence = readCrashEvidence(dir, Date.now() - 1000);
+  const evidence = readCrashEvidence(new GameInstance(dir), Date.now() - 1000);
   assert.match(evidence, /nouveau rapport/);
   assert.match(evidence, /fin du log/);
   assert.doesNotMatch(evidence, /ancien/);
-  assert.equal(readCrashEvidence(path.join(dir, 'absent'), Date.now()), '');
+  assert.equal(readCrashEvidence(new GameInstance(path.join(dir, 'absent')), Date.now()), '');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -72,19 +74,19 @@ test('une fermeture lancée par le jeu, sans rapport de crash, est propre', () =
   const since = Date.now() - 1000;
 
   fs.writeFileSync(log, '[21:34:57] [Render thread/INFO]: Stopping!\n[21:34:59] [Render thread/INFO]: Discarded config watch service\n');
-  assert.equal(stoppedCleanly(dir, since), true);
+  assert.equal(stoppedCleanly(new GameInstance(dir), since), true);
 
   const past = new Date(Date.now() - 3_600_000);
   fs.utimesSync(log, past, past);
-  assert.equal(stoppedCleanly(dir, since), false, 'latest.log d’une session précédente');
+  assert.equal(stoppedCleanly(new GameInstance(dir), since), false, 'latest.log d’une session précédente');
 
   fs.writeFileSync(log, '[Render thread/INFO]: Stopping!\n');
   fs.writeFileSync(path.join(dir, 'crash-reports', 'crash-new.txt'), 'rapport');
-  assert.equal(stoppedCleanly(dir, since), false, 'rapport de crash écrit pendant la session');
+  assert.equal(stoppedCleanly(new GameInstance(dir), since), false, 'rapport de crash écrit pendant la session');
 
   fs.rmSync(path.join(dir, 'crash-reports'), { recursive: true });
   fs.writeFileSync(log, '[Render thread/INFO]: Stopping worker threads\n');
-  assert.equal(stoppedCleanly(dir, since), false, 'pas de Stopping!');
-  assert.equal(stoppedCleanly(path.join(dir, 'absent'), since), false);
+  assert.equal(stoppedCleanly(new GameInstance(dir), since), false, 'pas de Stopping!');
+  assert.equal(stoppedCleanly(new GameInstance(path.join(dir, 'absent')), since), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });

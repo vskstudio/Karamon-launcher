@@ -1,0 +1,26 @@
+.ui-toasts {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.ui-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 440px;
+  padding: var(--space-3) var(--space-4);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  text-align: left;
+  font-weight: 600;
+  pointer-events: auto;
+  animation: ui-pop var(--medium) var(--ease);
+}

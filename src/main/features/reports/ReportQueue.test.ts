@@ -34,8 +34,8 @@ test('persiste des rapports gzip et leurs états entre deux instances', () => {
     ['b', 'approved'],
   ]);
   assert.deepEqual(restored.list('approved').map((item) => item.report.reportId), ['b']);
-  assert.ok(fs.readdirSync(path.join(root, 'reports')).every((name) => name.endsWith('.json.gz')));
-  assert.ok(!fs.readdirSync(path.join(root, 'reports')).some((name) => name.includes('karamon-tmp')));
+  assert.ok(fs.readdirSync(root).every((name) => name.endsWith('.json.gz')));
+  assert.ok(!fs.readdirSync(root).some((name) => name.includes('karamon-tmp')));
 
   restored.approve('a');
   assert.equal(new ReportQueue(root).list()[0].state, 'approved');
@@ -50,13 +50,13 @@ test('un rapport en file sans compteur d’échecs part de zéro', () => {
   fs.mkdirSync(dir, { recursive: true });
   const legacy = { state: 'approved', createdAt: 5, report: report('ancien') };
   fs.writeFileSync(path.join(dir, '5-ancien.json.gz'), zlib.gzipSync(Buffer.from(JSON.stringify(legacy), 'utf8')));
-  const queue = new ReportQueue(root);
+  const queue = new ReportQueue(dir);
   for (let failed = 1; failed < MAX_FAILED_DELIVERIES; failed++) {
     assert.equal(queue.recordFailedDelivery('ancien'), 'counted');
-    assert.equal(new ReportQueue(root).list()[0].failedDeliveries, failed);
+    assert.equal(new ReportQueue(dir).list()[0].failedDeliveries, failed);
   }
   assert.equal(queue.recordFailedDelivery('ancien'), 'dropped');
-  assert.deepEqual(new ReportQueue(root).list(), []);
+  assert.deepEqual(new ReportQueue(dir).list(), []);
   assert.equal(queue.recordFailedDelivery('ancien'), 'missing');
   fs.rmSync(root, { recursive: true, force: true });
 });

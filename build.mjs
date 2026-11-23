@@ -32,11 +32,15 @@ const targets = [
   {
     name: 'renderer',
     options: {
-      entryPoints: ['src/renderer/index.ts'],
+      entryPoints: ['src/renderer/main.tsx'],
       outfile: `${outDir}/renderer.js`,
       platform: 'browser',
       format: 'iife',
       target: 'es2022',
+      jsx: 'automatic',
+      jsxImportSource: 'preact',
+      loader: { '.png': 'dataurl', '.webp': 'file' },
+      assetNames: 'assets/[name]-[hash]',
     },
   },
 ];
@@ -52,7 +56,6 @@ async function copyStatic() {
   await mkdir(outDir, { recursive: true });
   await Promise.all([
     copyFile('src/index.html', path.join(outDir, 'index.html')),
-    copyFile('src/styles.css', path.join(outDir, 'styles.css')),
   ]);
   const packJson = path.resolve('content', 'pack.json');
   try {

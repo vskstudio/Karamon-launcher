@@ -10,5 +10,5 @@ test('dev mode is forced by --dev or KARAMON_DEV=1', () => {
 });
 
 test('the JVM flag matches what the Karamon mod reads', () => {
-  assert.equal(DevMode.JVM_FLAG, '-Dkaramon.dev=true');
+  assert.equal(DevMode.KARAMON_MOD_SERVER_BROWSER_JVM_FLAG, '-Dkaramon.dev=true');
 });

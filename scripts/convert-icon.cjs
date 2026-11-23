@@ -9,7 +9,7 @@ if (!fs.existsSync(src)) {
   process.exit(1);
 }
 
-const pngToIco = require('png-to-ico');
+const { default: pngToIco } = require('png-to-ico');
 pngToIco(src)
   .then(buf => { fs.writeFileSync(dest, buf); console.log('icon.ico généré.'); })
   .catch(e  => { console.error(e); process.exit(1); });

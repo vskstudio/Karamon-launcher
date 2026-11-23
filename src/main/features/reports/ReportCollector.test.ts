@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { panelFileLimit, ReportCollector } from './ReportCollector.ts';
-import { isGenericName } from './ReportRedactor.ts';
+import { ReportCollector } from './ReportCollector.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
 
 const KIB = 1024;
 
@@ -16,7 +16,7 @@ function fixture() {
   fs.mkdirSync(path.join(gameDir, 'logs'), { recursive: true });
   fs.mkdirSync(path.join(gameDir, 'crash-reports'), { recursive: true });
   const collector = new ReportCollector({
-    dataDir,
+    launcherLog: path.join(dataDir, 'logs', 'launcher.log'),
     launcherVersion: '2.1.0',
     bundledPackVersion: '0.9.4',
     getPackVersion: async () => '0.9.5',
@@ -50,7 +50,7 @@ test('collecte les métadonnées et anonymise les fins de logs aux limites prév
   fs.utimesSync(path.join(f.gameDir, 'crash-reports', 'notes-joueur.txt'), new Date(3), new Date(3));
 
   const summary = ['Erreur sur /home/alice à 10.0.0.1', '  ', ...Array.from({ length: 30 }, (_, i) => `tag ${i} ${'x'.repeat(300)}`)];
-  const report = await f.collector.collect({ trigger: 'crash', summary, gameDir: f.gameDir, ramMb: 8192 });
+  const report = await f.collector.collect({ trigger: 'crash', summary, instance: new GameInstance(f.gameDir), ramMb: 8192 });
 
   assert.equal(report.reportId, '123e4567-e89b-42d3-a456-426614174000');
   assert.deepEqual(
@@ -75,7 +75,7 @@ test('écarte la ligne coupée au début de la fin lue pour ne pas laisser fuir 
   const f = fixture();
   const chat = '[15:50:01] [Render thread/INFO]: [CHAT] <JoueurTest> mon mot de passe est hunter2\n';
   write(path.join(f.gameDir, 'logs', 'latest.log'), `${'a'.repeat(100)}\n${chat}${'b'.repeat(512 * KIB - 60)}\nfin du log`);
-  const report = await f.collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  const report = await f.collector.collect({ trigger: 'crash', summary: [], instance: new GameInstance(f.gameDir), ramMb: 4096 });
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
   assert.ok(!latest.content.includes('hunter2'), latest.content.slice(0, 80));
@@ -88,7 +88,7 @@ test('écarte la ligne coupée au début de la fin lue pour ne pas laisser fuir 
 test('garde le fichier avec une marque de troncature quand la fin lue tient sur une seule ligne coupée', async () => {
   const f = fixture();
   write(path.join(f.gameDir, 'logs', 'latest.log'), `[CHAT] <JoueurTest> mon code est hunter2 ${'z'.repeat(600 * KIB)}`);
-  const report = await f.collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  const report = await f.collector.collect({ trigger: 'crash', summary: [], instance: new GameInstance(f.gameDir), ramMb: 4096 });
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
   assert.equal(latest.content, '[début tronqué]\n');
@@ -100,14 +100,14 @@ test('garde chaque fichier sous la limite du panel quand le masquage allonge le 
   const line = `${'bob '.repeat(25)}\n`;
   write(path.join(f.gameDir, 'logs', 'latest.log'), line.repeat(Math.floor((512 * KIB) / line.length)));
   const collector = new ReportCollector({
-    dataDir: f.dataDir,
+    launcherLog: path.join(f.dataDir, 'logs', 'launcher.log'),
     launcherVersion: '2.1.0',
     bundledPackVersion: '0.9.4',
     homeDir: '/home/alice',
     localNames: ['bob'],
     uuid: () => '123e4567-e89b-42d3-a456-426614174003',
   });
-  const report = await collector.collect({ trigger: 'crash', summary: [], gameDir: f.gameDir, ramMb: 4096 });
+  const report = await collector.collect({ trigger: 'crash', summary: [], instance: new GameInstance(f.gameDir), ramMb: 4096 });
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
   assert.ok(Buffer.byteLength(latest.content) <= 512 * KIB);
@@ -116,48 +116,43 @@ test('garde chaque fichier sous la limite du panel quand le masquage allonge le 
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 
-test('applique exactement les noms et les limites de fichier du panel', () => {
-  assert.equal(panelFileLimit('launcher.log'), 256 * KIB);
-  assert.equal(panelFileLimit('latest.log'), 512 * KIB);
-  assert.equal(panelFileLimit('crash-2026-10-15_12.00.00-client.txt'), 1024 * KIB);
-  assert.equal(panelFileLimit('hs_err_pid123.log'), 1024 * KIB);
-  for (const refused of ['Crash-2026.TXT', 'crash-a b.txt', 'crash-..txt', '../latest.log', 'options.txt', `crash-${'x'.repeat(120)}.txt`]) {
-    assert.equal(panelFileLimit(refused), undefined, refused);
-  }
+test('joint le rapport de crash le plus récent dont le panel accepte le nom', async () => {
+  const f = fixture();
+  const crashes = path.join(f.gameDir, 'crash-reports');
+  const named = ['crash-accepte.txt', `crash-${'x'.repeat(120)}.txt`, 'crash-a b.txt', 'crash-..txt'];
+  named.forEach((name, age) => {
+    write(path.join(crashes, name), 'Description: test');
+    fs.utimesSync(path.join(crashes, name), new Date(age + 1), new Date(age + 1));
+  });
+  const report = await f.collector.collect({ trigger: 'crash', summary: [], instance: new GameInstance(f.gameDir), ramMb: 4096 });
+  assert.deepEqual(report.files.map((file) => file.name), ['crash-accepte.txt']);
+  fs.rmSync(f.root, { recursive: true, force: true });
 });
 
-test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur', async (t) => {
+test('masque par défaut le vrai nom de la machine et le vrai nom d\'utilisateur', async () => {
   const hostname = os.hostname().replace(/\.local$/i, '');
   const username = os.userInfo().username;
-  const checked = [hostname, username].filter((name) => name.length > 0 && !isGenericName(name));
-  if (checked.length === 0) {
-    t.skip('les deux noms de ce poste sont génériques, rien à vérifier');
-    return;
-  }
   const f = fixture();
-  write(path.join(f.gameDir, 'logs', 'latest.log'), `Hostname: ${hostname}\nuser ${username}\n`);
+  write(path.join(f.gameDir, 'logs', 'latest.log'), `Hostname: ${hostname}\nuser: ${username}\n`);
   const collector = new ReportCollector({
-    dataDir: f.dataDir,
+    launcherLog: path.join(f.dataDir, 'logs', 'launcher.log'),
     launcherVersion: '2.1.0',
     bundledPackVersion: '0.9.4',
     homeDir: '/home/alice',
     uuid: () => '123e4567-e89b-42d3-a456-426614174002',
   });
-  const report = await collector.collect({ trigger: 'manual', summary: [`machine ${hostname}, user ${username}`], gameDir: f.gameDir, ramMb: 4096 });
+  const report = await collector.collect({ trigger: 'manual', summary: [`machine: ${hostname}, user: ${username}`], instance: new GameInstance(f.gameDir), ramMb: 4096 });
   const latest = report.files.find((file) => file.name === 'latest.log');
   assert.ok(latest);
-  for (const name of checked) {
-    const stillThere = new RegExp(`(?<![A-Za-z0-9_])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`, 'i');
-    assert.ok(!stillThere.test(latest.content), 'un nom de la machine reste dans latest.log');
-    assert.ok(!report.summary.join('\n').toLowerCase().includes(name.toLowerCase()), 'un nom de la machine reste dans le résumé');
-  }
+  assert.equal(latest.content, 'Hostname: <local>\nuser: <local>\n');
+  assert.deepEqual(report.summary, ['machine: <local>, user: <local>']);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 
 test('utilise les replis et omet proprement les métadonnées facultatives', async () => {
   const f = fixture();
   const collector = new ReportCollector({
-    dataDir: f.dataDir,
+    launcherLog: path.join(f.dataDir, 'logs', 'launcher.log'),
     launcherVersion: '2.1.0',
     bundledPackVersion: '0.9.4',
     getPackVersion: async () => { throw new Error('offline'); },
@@ -168,7 +163,7 @@ test('utilise les replis et omet proprement les métadonnées facultatives', asy
     arch: 'arm64',
     uuid: () => '123e4567-e89b-42d3-a456-426614174001',
   });
-  const report = await collector.collect({ trigger: 'manual', summary: ['Envoi manuel'], gameDir: f.gameDir, ramMb: 6144 });
+  const report = await collector.collect({ trigger: 'manual', summary: ['Envoi manuel'], instance: new GameInstance(f.gameDir), ramMb: 6144 });
   assert.equal(report.packVersion, '0.9.4');
   assert.equal(report.javaVersion, 'inconnu');
   assert.ok(!('gpu' in report));
@@ -182,7 +177,7 @@ test('réduit un JSON pathologique sous 5 Mio', async () => {
   const controls = Buffer.alloc(1024 * KIB, 1);
   write(path.join(f.gameDir, 'crash-reports', 'crash-huge.txt'), controls);
   write(path.join(f.gameDir, 'hs_err_pid9.log'), controls);
-  const report = await f.collector.collect({ trigger: 'crash_early', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096 });
+  const report = await f.collector.collect({ trigger: 'crash_early', summary: ['Crash'], instance: new GameInstance(f.gameDir), ramMb: 4096 });
   assert.ok(Buffer.byteLength(JSON.stringify(report)) <= 5 * 1024 * KIB);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
@@ -197,11 +192,24 @@ test('ne joint pas le crash-report ni le hs_err d’une session précédente', a
   fs.utimesSync(path.join(f.gameDir, 'hs_err_pid1.log'), past, past);
   const since = Date.now() - 60_000;
 
-  const stale = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096, since });
+  const stale = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], instance: new GameInstance(f.gameDir), ramMb: 4096, since });
   assert.deepEqual(stale.files.map((file) => file.name), ['latest.log']);
 
   write(path.join(f.gameDir, 'hs_err_pid2.log'), 'nouveau');
-  const fresh = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], gameDir: f.gameDir, ramMb: 4096, since });
+  const fresh = await f.collector.collect({ trigger: 'crash', summary: ['Crash'], instance: new GameInstance(f.gameDir), ramMb: 4096, since });
   assert.deepEqual(fresh.files.map((file) => file.name), ['latest.log', 'hs_err_pid2.log']);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('un rapport d’échec de synchronisation ne joint pas le latest.log de la partie précédente', async () => {
+  const f = fixture();
+  const latest = path.join(f.gameDir, 'logs', 'latest.log');
+  write(latest, '[Render thread/INFO]: partie de la veille');
+  const yesterday = new Date(Date.now() - 86_400_000);
+  fs.utimesSync(latest, yesterday, yesterday);
+  write(path.join(f.dataDir, 'logs', 'launcher.log'), 'Synchronisation du pack: HTTP 503');
+
+  const report = await f.collector.collect({ trigger: 'sync_failed', summary: ['Synchronisation du pack'], instance: new GameInstance(f.gameDir), ramMb: 4096, since: Date.now() - 30_000 });
+  assert.deepEqual(report.files.map((file) => file.name), ['launcher.log']);
   fs.rmSync(f.root, { recursive: true, force: true });
 });

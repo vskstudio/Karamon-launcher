@@ -48,7 +48,7 @@ files:
   - "dist/renderer.js"
   - "dist/renderer.css"
   - "dist/index.html"
-  - "dist/styles.css"
+  - "dist/assets/**/*"
   - "dist/pack.json"
   - "dist/client-options.json"
   - "assets/icon.ico"

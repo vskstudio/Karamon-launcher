@@ -1,9 +1,10 @@
 import crypto from 'crypto';
-import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { SessionEvidence, readFileTail, trimToTail } from '../crashes/SessionEvidence.ts';
 import { redactReportText } from './ReportRedactor.ts';
 import type { LauncherReport, ReportFile, ReportTrigger } from './ReportTypes.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const KIB = 1024;
 const MIB = 1024 * KIB;
@@ -12,7 +13,7 @@ const SUMMARY_MAX_TAGS = 20;
 const SUMMARY_TAG_LENGTH = 200;
 const PANEL_FILE_NAME_MAX = 128;
 
-export function panelFileLimit(name: string): number | undefined {
+function panelFileLimit(name: string): number | undefined {
   if (name.length > PANEL_FILE_NAME_MAX || name.includes('..') || !/^[A-Za-z0-9._-]+$/.test(name)) return undefined;
   if (name === 'launcher.log') return 256 * KIB;
   if (name === 'latest.log') return 512 * KIB;
@@ -21,7 +22,7 @@ export function panelFileLimit(name: string): number | undefined {
 }
 
 export interface ReportCollectorOptions {
-  dataDir: string;
+  launcherLog: string;
   launcherVersion: string;
   bundledPackVersion: string;
   getPackVersion?: () => Promise<string | undefined>;
@@ -38,9 +39,8 @@ export interface ReportCollectorOptions {
 export interface CollectReportInput {
   trigger: ReportTrigger;
   summary: string[];
-  gameDir: string;
+  instance: GameInstance;
   ramMb: number;
-  /** Début de la session : un crash-report ou hs_err plus ancien vient d'une autre session. */
   since?: number;
 }
 
@@ -58,7 +58,7 @@ export class ReportCollector {
       this.optional(this.options.getGpu, undefined),
     ]);
     const redact = this.redactor();
-    const files = this.collectFiles(input.gameDir, redact, input.since ?? 0);
+    const files = this.collectFiles(input.instance, redact, input.since ?? 0);
     const playerName = this.options.getPlayerName?.();
     const report: LauncherReport = {
       reportId: (this.options.uuid ?? crypto.randomUUID)(),
@@ -80,13 +80,14 @@ export class ReportCollector {
     return fitReport(report);
   }
 
-  private collectFiles(gameDir: string, redact: (text: string) => string, since: number): ReportFile[] {
-    const accepted = (pattern: RegExp) => (name: string) => pattern.test(name) && panelFileLimit(name) !== undefined;
+  private collectFiles(instance: GameInstance, redact: (text: string) => string, since: number): ReportFile[] {
+    const evidence = new SessionEvidence(instance, since);
+    const acceptedByPanel = (file: string): boolean => panelFileLimit(path.basename(file)) !== undefined;
     const candidates = [
-      path.join(this.options.dataDir, 'logs', 'launcher.log'),
-      path.join(gameDir, 'logs', 'latest.log'),
-      newestFile(path.join(gameDir, 'crash-reports'), accepted(/^crash-.*\.txt$/), since),
-      newestFile(gameDir, accepted(/^hs_err_pid\d+\.log$/), since),
+      this.options.launcherLog,
+      evidence.latestLog(),
+      evidence.crashReports().find(acceptedByPanel),
+      evidence.hsErrLogs().find(acceptedByPanel),
     ];
     const files: ReportFile[] = [];
     for (const file of candidates) {
@@ -94,9 +95,9 @@ export class ReportCollector {
       const name = path.basename(file);
       const limit = panelFileLimit(name);
       if (limit === undefined) continue;
-      const content = readUtf8Tail(file, limit);
+      const content = readFileTail(file, limit);
       if (!content) continue;
-      files.push({ name, content: fitRedactedTail(redact(content), limit) });
+      files.push({ name, content: trimToTail(redact(content), limit) });
     }
     return files;
   }
@@ -125,53 +126,6 @@ function localMachineNames(): string[] {
     return names;
   }
   return names;
-}
-
-function newestFile(dir: string, accepts: (name: string) => boolean, since: number): string | null {
-  let newest: { file: string; mtime: number } | null = null;
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (!accepts(name)) continue;
-      const file = path.join(dir, name);
-      const stat = fs.statSync(file);
-      if (!stat.isFile() || stat.mtimeMs < since) continue;
-      if (!newest || stat.mtimeMs > newest.mtime) newest = { file, mtime: stat.mtimeMs };
-    }
-  } catch {
-    return null;
-  }
-  return newest?.file ?? null;
-}
-
-const TRUNCATED_MARKER = '[début tronqué]\n';
-const TRUNCATED_MARKER_BYTES = Buffer.byteLength(TRUNCATED_MARKER);
-
-export function readUtf8Tail(file: string, limitBytes: number): string {
-  try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      const length = size <= limitBytes ? size : Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES);
-      const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, size - length);
-      if (length === size) return buffer.toString('utf8');
-      const firstLineEnd = buffer.indexOf(0x0a);
-      const completeLines = firstLineEnd < 0 ? '' : buffer.subarray(firstLineEnd + 1).toString('utf8');
-      return TRUNCATED_MARKER + completeLines;
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return '';
-  }
-}
-
-export function fitRedactedTail(text: string, limitBytes: number): string {
-  if (Buffer.byteLength(text) <= limitBytes) return text;
-  const body = Buffer.from(text.startsWith(TRUNCATED_MARKER) ? text.slice(TRUNCATED_MARKER.length) : text);
-  const window = body.subarray(body.length - Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES));
-  const firstLineEnd = window.indexOf(0x0a);
-  return TRUNCATED_MARKER + (firstLineEnd < 0 ? '' : window.subarray(firstLineEnd + 1).toString('utf8'));
 }
 
 function fitReport(report: LauncherReport): LauncherReport {

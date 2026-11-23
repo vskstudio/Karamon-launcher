@@ -14,7 +14,6 @@ export interface ReportMessage {
   tone: 'ok' | 'info';
 }
 
-/** What the player sees after a report; null when nothing should be shown (failures stay silent). */
 export function reportResultMessage(result: ReportSendResult): ReportMessage | null {
   if (!result.code) return null;
   if (result.status === 'sent') return { text: `Rapport envoyé à l'équipe Karamon. Code : ${result.code}`, tone: 'ok' };

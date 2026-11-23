@@ -1,10 +1,11 @@
 import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
-import type { IpcEventContract } from '../ipc/contract';
-import { ASPECT_RATIO, initialWindowSize, minimumWindowSize } from './shared/WindowSize';
+import type { EventRoute } from '../ipc/Route.ts';
+import type { EventSink } from './ipc/IpcRouter.ts';
+import { ASPECT_RATIO, initialWindowSize, interfaceScale, minimumWindowSize } from './shared/WindowSize.ts';
 
-export class WindowManager {
+export class WindowManager implements EventSink {
   private window: BrowserWindow | null = null;
 
   constructor(private readonly distDir: string, private readonly assetsDir: string) {}
@@ -13,6 +14,7 @@ export class WindowManager {
     const workArea = screen.getPrimaryDisplay().workAreaSize;
     const size = initialWindowSize(workArea);
     const min = minimumWindowSize(workArea);
+    const zoom = interfaceScale(workArea);
     this.window = new BrowserWindow({
       width: size.width,
       height: size.height,
@@ -33,9 +35,8 @@ export class WindowManager {
 
     this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
-    // Chromium remembers a zoom level per origin, so reset any zoom a previous version left behind.
     const window = this.window;
-    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(1));
+    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(zoom));
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {
@@ -77,9 +78,23 @@ export class WindowManager {
     this.window?.close();
   }
 
-  send<K extends keyof IpcEventContract>(channel: K, payload: IpcEventContract[K]): void {
+  hide(): void {
+    if (this.exists()) this.window!.hide();
+  }
+
+  reveal(): void {
+    if (!this.exists()) {
+      this.create();
+      return;
+    }
+    if (this.window!.isMinimized()) this.window!.restore();
+    this.window!.show();
+    this.window!.focus();
+  }
+
+  emit<Payload>(route: EventRoute<Payload>, payload: NoInfer<Payload>): void {
     if (this.exists()) {
-      this.window!.webContents.send(channel, payload);
+      this.window!.webContents.send(route.channel, payload);
     }
   }
 }

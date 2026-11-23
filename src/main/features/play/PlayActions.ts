@@ -1,0 +1,184 @@
+import { ConfigNotReadYetError, type AppConfig, type Config } from '../config/Config.ts';
+import { SessionEvidence } from '../crashes/SessionEvidence.ts';
+import type { DiscordRpc } from '../discord/DiscordRpc.ts';
+import { repairSummary } from '../integrity/RepairSummary.ts';
+import { GameRunningError } from '../minecraft/InstanceSession.ts';
+import type { MinecraftLauncher } from '../minecraft/MinecraftLauncher.ts';
+import type { ProgressEmitter, StatusEmitter } from '../modpack/ModpackSync.ts';
+import type { PackManifest, RemotePack } from '../modpack/PackManifest.ts';
+import type { ReportManager } from '../reports/ReportManager.ts';
+import { failureSummary, failureTrigger } from '../reports/ReportTriggers.ts';
+import type { PlayStats } from '../stats/PlayStats.ts';
+import type { AutoUpdater } from '../updater/AutoUpdater.ts';
+import type { GameKeepAlive } from '../../GameKeepAlive.ts';
+
+export interface GameState {
+  running: boolean;
+}
+
+export interface RepairDone {
+  summary: string;
+  damaged: number;
+  configs: number;
+}
+
+export type RepairResult = ({ ok: true } & RepairDone) | { ok: false; error: string };
+
+export interface RepairOffer {
+  reasons: string[];
+  result: RepairResult;
+}
+
+export interface PlayEvents {
+  consoleLine(line: string): void;
+  gameState(state: GameState): void;
+  repairOffer(offer: RepairOffer): void;
+}
+
+export interface PlayActionsOptions {
+  config: Pick<Config, 'getRead'>;
+  minecraft: MinecraftLauncher;
+  packManifest: PackManifest;
+  stats: PlayStats;
+  discord: DiscordRpc;
+  updater: AutoUpdater;
+  reports: Pick<ReportManager, 'reportInBackground'>;
+  events: PlayEvents;
+  keepAlive: Pick<GameKeepAlive, 'gameStarted' | 'lastGameExited'>;
+  status: StatusEmitter;
+  progress: ProgressEmitter;
+  log: (message: string) => void;
+}
+
+export class PlayActions {
+  private readonly options: PlayActionsOptions;
+
+  constructor(options: PlayActionsOptions) {
+    this.options = options;
+  }
+
+  async play(): Promise<void> {
+    const { minecraft, packManifest, stats, discord, events, status, progress, reports } = this.options;
+    const startedAt = Date.now();
+    const cfg = this.readConfig();
+    const wasRunning = minecraft.isRunning();
+    const instance = minecraft.session(cfg).instance;
+    const publishedPack = packManifest.latest();
+    try {
+      progress(0);
+      await minecraft.launch(cfg, {
+        onStatus: status,
+        onProgress: progress,
+        onLog: (line) => events.consoleLine(line),
+        onExit: (code, corruption, trigger) => {
+          this.options.log(`Minecraft fermé (code ${code})${corruption.length ? `, corruption: ${corruption.join(', ')}` : ''}`);
+          if (!minecraft.isRunning()) {
+            this.setGameRunning(false);
+            stats.endSession();
+            discord.setMenu();
+            events.gameState({ running: false });
+            this.options.keepAlive.lastGameExited({ crashed: trigger !== null || corruption.length > 0 });
+          }
+          events.consoleLine(code === 0 ? 'Minecraft fermé.' : `Minecraft fermé (code ${code}).`);
+          if (corruption.length > 0) void this.repairAfterCrash(corruption);
+          if (trigger) {
+            reports.reportInBackground(
+              trigger,
+              [`Code de sortie ${code}`, ...corruption, ...new SessionEvidence(instance, startedAt).crashSummary()],
+              startedAt,
+            );
+          }
+        },
+      });
+      if (!wasRunning) {
+        stats.startSession();
+        void this.recordInstalledPack(instance.dir, publishedPack);
+      }
+      discord.setPlaying();
+      this.setGameRunning(true);
+      events.gameState({ running: true });
+      status('Minecraft lancé !');
+      this.options.keepAlive.gameStarted(cfg.closeLauncherOnGameStart);
+    } catch (e) {
+      status('Erreur: ' + (e as Error).message);
+      progress(0);
+      if (!minecraft.isRunning()) events.gameState({ running: false });
+      reports.reportInBackground(failureTrigger(e), failureSummary(e), startedAt);
+      throw e;
+    }
+  }
+
+  async syncMods(): Promise<void> {
+    const { minecraft, packManifest, status, progress, reports } = this.options;
+    const startedAt = Date.now();
+    const cfg = this.readConfig();
+    const publishedPack = packManifest.latest();
+    try {
+      progress(0);
+      await minecraft.syncOnly(cfg, status, progress);
+      void this.recordInstalledPack(minecraft.session(cfg).instance.dir, publishedPack);
+      progress(1);
+    } catch (e) {
+      const message = (e as Error).message;
+      status('Erreur de synchronisation: ' + message);
+      progress(0);
+      if (!(e instanceof GameRunningError)) {
+        reports.reportInBackground('sync_failed', ['Synchronisation du pack', message], startedAt);
+      }
+      throw e;
+    }
+  }
+
+  async repair(): Promise<RepairDone> {
+    const { minecraft, packManifest, status, progress } = this.options;
+    const cfg = this.readConfig();
+    try {
+      progress(0);
+      status("Réparation de l'installation : vérification complète...");
+      const publishedPack = packManifest.latest();
+      const report = await minecraft.repair(cfg, status, progress);
+      void this.recordInstalledPack(minecraft.session(cfg).instance.dir, publishedPack);
+      const damaged = report.damaged.length;
+      const configs = report.configs.repaired.length;
+      const summary = repairSummary(damaged, configs);
+      progress(1);
+      status(summary);
+      return { summary, damaged, configs };
+    } catch (e) {
+      status('Erreur de réparation: ' + (e as Error).message);
+      progress(0);
+      throw e;
+    }
+  }
+
+  private readConfig(): AppConfig {
+    try {
+      return this.options.config.getRead();
+    } catch (e) {
+      if (e instanceof ConfigNotReadYetError) this.options.status(e.message);
+      throw e;
+    }
+  }
+
+  private async repairAfterCrash(reasons: string[]): Promise<void> {
+    const { events } = this.options;
+    events.consoleLine(
+      `Le jeu a planté au démarrage sur des fichiers abîmés (${reasons.join(', ')}). Réparation automatique...`,
+    );
+    const result: RepairResult = await this.repair().then(
+      (done) => ({ ok: true as const, ...done }),
+      (e: unknown) => ({ ok: false as const, error: (e as Error).message }),
+    );
+    events.repairOffer({ reasons, result });
+  }
+
+  private setGameRunning(running: boolean): void {
+    this.options.updater.setPaused(running);
+    this.options.discord.setPingPaused(running);
+  }
+
+  private async recordInstalledPack(gameDir: string, publishedPack: Promise<RemotePack | null>): Promise<void> {
+    const pack = await publishedPack;
+    if (pack) this.options.packManifest.markInstalled(gameDir, pack.version);
+  }
+}

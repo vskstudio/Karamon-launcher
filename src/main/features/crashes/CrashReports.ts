@@ -1,6 +1,20 @@
 import fs from 'fs';
 import path from 'path';
-import type { CrashReport, CrashReportsListResult } from '../../../ipc/contract';
+import { playerFileIn } from '../../shared/PlayerFileName.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
+
+export interface CrashReport {
+  name: string;
+  mtime: number;
+  size: number;
+  summary: string;
+  excerpt: string;
+}
+
+export interface CrashReportsListResult {
+  dir: string;
+  reports: CrashReport[];
+}
 
 const CAUSE_PATTERNS: Array<{ regex: RegExp; tag: string }> = [
   { regex: /java\.lang\.OutOfMemoryError/i, tag: 'Mémoire insuffisante (OOM)' },
@@ -13,14 +27,27 @@ const CAUSE_PATTERNS: Array<{ regex: RegExp; tag: string }> = [
   { regex: /Pixel format not accelerated/i, tag: 'Driver GPU' },
 ];
 
+export function isCrashReportName(name: string): boolean {
+  return name.endsWith('.txt');
+}
+
+export function summarizeCrash(content: string): string {
+  for (const { regex, tag } of CAUSE_PATTERNS) {
+    if (regex.test(content)) return tag;
+  }
+  const desc = content.match(/Description:\s*(.+)/);
+  if (desc) return desc[1].trim().slice(0, 80);
+  return 'Crash inconnu';
+}
+
 export class CrashReports {
-  list(gameDir: string): CrashReportsListResult {
-    const dir = path.join(gameDir, 'crash-reports');
+  list(instance: GameInstance): CrashReportsListResult {
+    const dir = instance.crashReportsDir;
     if (!fs.existsSync(dir)) return { dir, reports: [] };
 
     const reports: CrashReport[] = [];
     for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith('.txt')) continue;
+      if (!isCrashReportName(name)) continue;
       const full = path.join(dir, name);
       try {
         const stat = fs.statSync(full);
@@ -30,41 +57,28 @@ export class CrashReports {
           name,
           mtime: stat.mtimeMs,
           size: stat.size,
-          summary: CrashReports.summarize(content),
+          summary: summarizeCrash(content),
           excerpt: CrashReports.excerpt(content),
         });
       } catch {
-        // skip
+        continue;
       }
     }
     reports.sort((a, b) => b.mtime - a.mtime);
     return { dir, reports };
   }
 
-  read(gameDir: string, name: string): string {
-    return fs.readFileSync(this.reportPath(gameDir, name), 'utf8');
+  read(instance: GameInstance, name: string): string {
+    return fs.readFileSync(this.reportPath(instance, name), 'utf8');
   }
 
-  delete(gameDir: string, name: string): CrashReportsListResult {
-    const full = this.reportPath(gameDir, name);
-    if (fs.existsSync(full)) fs.unlinkSync(full);
-    return this.list(gameDir);
+  delete(instance: GameInstance, name: string): CrashReportsListResult {
+    fs.rmSync(this.reportPath(instance, name), { force: true });
+    return this.list(instance);
   }
 
-  reportPath(gameDir: string, name: string): string {
-    if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-      throw new Error('Nom invalide');
-    }
-    return path.join(gameDir, 'crash-reports', name);
-  }
-
-  static summarize(content: string): string {
-    for (const { regex, tag } of CAUSE_PATTERNS) {
-      if (regex.test(content)) return tag;
-    }
-    const desc = content.match(/Description:\s*(.+)/);
-    if (desc) return desc[1].trim().slice(0, 80);
-    return 'Crash inconnu';
+  reportPath(instance: GameInstance, name: string): string {
+    return playerFileIn(instance.crashReportsDir, name);
   }
 
   private static excerpt(content: string): string {

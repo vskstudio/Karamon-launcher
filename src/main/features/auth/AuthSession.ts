@@ -1,33 +1,42 @@
-import type { AuthSessionResult, MinecraftProfile } from '../../../ipc/contract';
-import { offlineNameProblem } from '../../../shared/OfflineName';
-import { MicrosoftAuth, MicrosoftSessionExpired, type MicrosoftToken } from './MicrosoftAuth';
-import { XboxAuth } from './XboxAuth';
-import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth';
-import { TokenStore } from './TokenStore';
-import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore';
-import { OFFLINE_ACCESS_TOKEN } from './OfflineAccount';
+import { OFFLINE_NAME_TAKEN, offlineNameProblem } from '../../../shared/OfflineName.ts';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
+import { MicrosoftAuth, MicrosoftSessionExpired, type MicrosoftToken } from './MicrosoftAuth.ts';
+import { XboxAuth } from './XboxAuth.ts';
+import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth.ts';
+import { TokenStore } from './TokenStore.ts';
+import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore.ts';
+import { OFFLINE_ACCESS_TOKEN, mojangNameStatus, offlineNameStatus, type NameStatus } from './OfflineAccount.ts';
+import type { HttpClient } from '../../shared/HttpClient.ts';
 
 const REFRESH_LEEWAY_MS = 60_000;
+
+export interface AuthSessionResult {
+  active: MinecraftProfile | null;
+  accounts: MinecraftProfile[];
+}
 
 export interface ActiveSession {
   profile: MinecraftProfile;
   accessToken: string;
-  /** Minecraft's --userType: `msa` for a Microsoft account, `legacy` for an offline one. */
   userType: 'msa' | 'legacy';
   expiresAt: number;
 }
 
 export class AuthSession {
-  /** The Microsoft session once its tokens are fresh. Offline accounts have no session to keep. */
   private current: ActiveSession | null = null;
 
   constructor(
     private readonly store: TokenStore,
     private readonly accounts: AccountStore,
-    private readonly microsoft: MicrosoftAuth = new MicrosoftAuth(),
-    private readonly xbox: XboxAuth = new XboxAuth(),
-    private readonly minecraft: MinecraftAuth = new MinecraftAuth(),
+    private readonly http: HttpClient,
+    private readonly microsoft: MicrosoftAuth = new MicrosoftAuth(http),
+    private readonly xbox: XboxAuth = new XboxAuth(http),
+    private readonly minecraft: MinecraftAuth = new MinecraftAuth(http),
   ) {}
+
+  checkName(name: string): Promise<NameStatus> {
+    return offlineNameStatus(name, this.http);
+  }
 
   state(): AuthSessionResult {
     const microsoft = this.microsoftProfile();
@@ -45,10 +54,10 @@ export class AuthSession {
     return session.profile;
   }
 
-  /** Remembers a player without a Minecraft licence. No network: the server asks for the Karamon password. */
-  loginOffline(name: string): MinecraftProfile {
+  async loginOffline(name: string): Promise<MinecraftProfile> {
     const problem = offlineNameProblem(name);
     if (problem) throw new Error(problem);
+    if ((await mojangNameStatus(name, this.http)) === 'taken') throw new Error(OFFLINE_NAME_TAKEN);
     const entry = this.accounts.addOffline(name);
     return { id: entry.id, name: entry.name, kind: 'offline' };
   }
@@ -60,7 +69,6 @@ export class AuthSession {
     return this.state();
   }
 
-  /** The session the game is launched with. Only a Microsoft account talks to Microsoft. */
   async getActive(): Promise<ActiveSession> {
     const active = this.state().active;
     if (!active) throw new Error('Aucun compte connecté, connexion requise');
@@ -73,7 +81,6 @@ export class AuthSession {
     return await this.refresh();
   }
 
-  /** Signs the active account out: forgets the Microsoft tokens, or the offline name. */
   logout(): AuthSessionResult {
     const active = this.state().active;
     if (!active) return this.state();
@@ -87,20 +94,21 @@ export class AuthSession {
 
   private microsoftProfile(): MinecraftProfile | null {
     if (this.current) return this.current.profile;
-    return this.store.load()?.profile ?? null;
+    return this.store.storedProfile();
   }
 
   private async refresh(): Promise<ActiveSession> {
-    const stored = this.store.load();
-    if (!stored) throw new Error('Aucune session stockée, connexion requise');
+    const profile = this.store.storedProfile();
+    const refreshToken = await this.store.refreshToken();
+    if (!profile || !refreshToken) throw new Error('Aucune session stockée, connexion requise');
     let ms: MicrosoftToken;
     try {
-      ms = await this.microsoft.refresh(stored.refreshToken);
+      ms = await this.microsoft.refresh(refreshToken);
     } catch (e) {
       if (e instanceof MicrosoftSessionExpired) this.forgetMicrosoftSession();
       throw e;
     }
-    this.store.save(ms.refreshToken, stored.profile);
+    await this.store.save(ms.refreshToken, profile);
     return await this.completeChain(ms);
   }
 
@@ -114,7 +122,7 @@ export class AuthSession {
     const xbox = await this.xbox.authenticate(ms.accessToken);
     const mc: MinecraftToken = await this.minecraft.login(xbox.userHash, xbox.token);
     const profile = await this.minecraft.fetchProfile(mc.accessToken);
-    this.store.save(ms.refreshToken, profile);
+    await this.store.save(ms.refreshToken, profile);
     this.current = { profile, accessToken: mc.accessToken, userType: 'msa', expiresAt: mc.expiresAt };
     return this.current;
   }
