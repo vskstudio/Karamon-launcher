@@ -1,7 +1,9 @@
+import { KARAMON } from '../../shared/Karamon';
+
 export const links = {
-  site: 'https://karamon.fr',
-  discord: 'https://discord.gg/karavr',
-  shop: 'https://karamon.fr/boutique',
-  terms: 'https://karamon.fr/cgv',
-  wiki: 'https://karamon.fr/wiki',
+  site: KARAMON.websiteUrl,
+  discord: KARAMON.discordUrl,
+  shop: KARAMON.shopUrl,
+  terms: KARAMON.termsUrl,
+  wiki: KARAMON.wikiUrl,
 } as const;

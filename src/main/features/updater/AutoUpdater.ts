@@ -1,7 +1,21 @@
 import { app } from 'electron/main';
 import { shell } from 'electron/common';
 import { autoUpdater, type UpdateInfo as ElectronUpdateInfo } from 'electron-updater';
-import type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../../../ipc/contract';
+
+export type UpdateInstall = 'restart' | 'download';
+
+export interface UpdateInfo {
+  version: string;
+  install: UpdateInstall;
+}
+
+export type UpdateCheckResult =
+  | { status: 'no-update'; currentVersion: string }
+  | { status: 'downloading'; version: string }
+  | { status: 'downloaded'; version: string }
+  | { status: 'available'; version: string }
+  | { status: 'unsupported' };
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export interface AutoUpdaterOptions {
   onReady: (info: UpdateInfo) => void;
@@ -10,7 +24,7 @@ export interface AutoUpdaterOptions {
 
 export class AutoUpdater {
   private static readonly CHECK_INTERVAL_MS = 30 * 60 * 1000;
-  private static readonly LATEST_RELEASE_URL = 'https://github.com/vskstudio/Karamon-launcher/releases/latest';
+  private static readonly LATEST_RELEASE_URL = `https://github.com/${KARAMON.githubRepo}/releases/latest`;
 
   private readonly onReady: (info: UpdateInfo) => void;
   private readonly log: (level: 'info' | 'warn', message: string) => void;
@@ -28,7 +42,6 @@ export class AutoUpdater {
     return this.install === 'restart';
   }
 
-  /** No background check or download while Minecraft runs: the game gets the bandwidth. */
   setPaused(paused: boolean): void {
     this.paused = paused;
   }
@@ -46,7 +59,6 @@ export class AutoUpdater {
       this.onReady({ version: info.version, install: this.install });
     });
 
-    // Offline players hit this every 30 min: log each distinct error once, not every time.
     autoUpdater.on('error', (e: Error) => this.logError(e));
 
     this.checkQuietly();
@@ -73,7 +85,7 @@ export class AutoUpdater {
     if (!app.isPackaged) return { status: 'unsupported' };
     if (this.readyVersion) return this.readyResult(this.readyVersion);
 
-    return new Promise<UpdateCheckResult>((resolve) => {
+    return new Promise<UpdateCheckResult>((resolve, reject) => {
       const cleanup = (): void => {
         autoUpdater.removeListener('update-available', onAvailable);
         autoUpdater.removeListener('update-not-available', onNotAvail);
@@ -100,7 +112,7 @@ export class AutoUpdater {
       };
       const onError = (e: Error): void => {
         cleanup();
-        resolve({ status: 'error', error: e.message });
+        reject(e);
       };
 
       autoUpdater.once('update-available', onAvailable);

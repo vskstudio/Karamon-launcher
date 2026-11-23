@@ -8,17 +8,12 @@ const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 const ZIP64_LOCATOR_SIZE = 20;
 const ZIP64_MARKER = 0xffffffff;
 
-export interface ZipEnd {
-  /** Absolute offset of the central directory, or -1 for a zip64 archive. */
+interface ZipEnd {
   centralOffset: number;
   centralSize: number;
 }
 
-/**
- * Finds the end-of-central-directory record in the last bytes of an archive.
- * A jar whose tail was zero-filled by a crash ("zip END header not found") has none.
- */
-export function findZipEnd(tail: Buffer, fileSize: number): ZipEnd | null {
+function findZipEnd(tail: Buffer, fileSize: number): ZipEnd | null {
   if (tail.length < EOCD_SIZE || fileSize < tail.length) return null;
   const tailStart = fileSize - tail.length;
   const lowest = Math.max(0, tail.length - EOCD_SIZE - MAX_COMMENT);
@@ -41,7 +36,6 @@ export function findZipEnd(tail: Buffer, fileSize: number): ZipEnd | null {
   return null;
 }
 
-/** Cheap structural check: reads at most ~64 KB from the end plus 4 bytes. */
 export function hasValidZipEnd(filePath: string): boolean {
   let fd: number;
   try {

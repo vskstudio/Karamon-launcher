@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-// Starts the packaged launcher and checks, over the DevTools protocol, that the
-// window loaded index.html with every image decoded. Catches a packaging change
-// that leaves out a file the app needs at runtime.
-// Usage: node scripts/smoke-test.mjs <path-to-executable>
 import { spawn } from 'child_process';
 
 const exe = process.argv[2];
@@ -11,7 +7,8 @@ if (!exe) {
   process.exit(2);
 }
 const PORT = 9333;
-const DEADLINE = Date.now() + (process.env.SMOKE_SYNC === '1' ? 15 * 60_000 : 60_000);
+const SYNC_REAL_PACK_TWICE = process.env.SMOKE_SYNC === '1';
+const DEADLINE = Date.now() + (SYNC_REAL_PACK_TWICE ? 15 * 60_000 : 60_000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const child = spawn(exe, ['--no-sandbox', `--remote-debugging-port=${PORT}`], {
@@ -27,16 +24,19 @@ function fail(msg) {
   process.exit(1);
 }
 
+async function devToolsTargets() {
+  try {
+    return await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+  } catch {
+    return [];
+  }
+}
+
 async function findPage() {
   while (Date.now() < DEADLINE) {
     if (exited !== null) fail(`le launcher s'est arrêté (code ${exited})`);
-    try {
-      const list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
-      const page = list.find((t) => t.type === 'page' && t.url.endsWith('/index.html'));
-      if (page) return page;
-    } catch {
-      /* not up yet */
-    }
+    const page = (await devToolsTargets()).find((t) => t.type === 'page' && t.url.endsWith('/index.html'));
+    if (page) return page;
     await sleep(500);
   }
   fail('aucune fenêtre index.html après 60 s');
@@ -78,9 +78,7 @@ if (state.images.length === 0) fail('aucune image locale dans la page');
 if (broken.length) fail('images non chargées: ' + broken.map((i) => i.src).join(', '));
 if (!state.hasPlay) fail('page vide');
 
-// SMOKE_SYNC=1: real pack sync against karamon.fr from the packaged app, twice.
-// The first run installs the pack; the second must download nothing.
-if (process.env.SMOKE_SYNC === '1') {
+if (SYNC_REAL_PACK_TWICE) {
   const SYNC = `(async () => {
     const lines = [];
     window.launcher.onStatus((m) => lines.push(m));

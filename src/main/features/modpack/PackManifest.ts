@@ -1,12 +1,20 @@
 import fs from 'fs';
-import type { PackInfo } from '../../../ipc/contract.ts';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
-import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { Deadlines, HttpClient } from '../../shared/HttpClient.ts';
 
 const MANIFEST_FETCH_TIMEOUT_MS = 8000;
 const MANIFEST_FRESH_MS = 5 * 60 * 1000;
 const REMEMBERED_VERSIONS = 10;
 const DATE_FIELDS = ['publishedAt', 'releasedAt', 'date', 'updatedAt'] as const;
+
+export interface PackInfo {
+  version: string | null;
+  minecraft: string;
+  loader: string;
+  loaderVersion: string;
+  baseName: string | null;
+  upToDate: boolean | null;
+}
 
 export interface RemotePack {
   version: string;
@@ -103,9 +111,9 @@ export class PackManifest {
     this.now = options.now ?? Date.now;
   }
 
-  latest(): Promise<RemotePack | null> {
+  latest({ totalTimeoutMs = MANIFEST_FETCH_TIMEOUT_MS }: Pick<Deadlines, 'totalTimeoutMs'> = {}): Promise<RemotePack | null> {
     if (this.fresh && this.now() - this.fresh.at < MANIFEST_FRESH_MS) return Promise.resolve(this.fresh.pack);
-    this.inFlight ??= this.fetchLatest().finally(() => {
+    this.inFlight ??= this.fetchLatest(totalTimeoutMs).finally(() => {
       this.inFlight = null;
     });
     return this.inFlight;
@@ -140,10 +148,10 @@ export class PackManifest {
     };
   }
 
-  private async fetchLatest(): Promise<RemotePack | null> {
+  private async fetchLatest(totalTimeoutMs: number): Promise<RemotePack | null> {
     let pack: RemotePack | null = null;
     try {
-      const response = await this.options.http.get(this.options.manifestUrl, { timeoutMs: MANIFEST_FETCH_TIMEOUT_MS });
+      const response = await this.options.http.get(this.options.manifestUrl, { totalTimeoutMs });
       if (response.status >= 200 && response.status < 300) {
         pack = parsePackManifest(JSON.parse(response.body.toString('utf8')));
       }

@@ -6,6 +6,7 @@ import path from 'path';
 import zlib from 'zlib';
 import { ShaderPolicy } from './ShaderChoice.ts';
 import { OptionsWriter } from './OptionsWriter.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
 
 function game(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-shader-'));
@@ -23,10 +24,9 @@ function setIris(dir: string, pack: string, enabled: boolean): void {
   fs.writeFileSync(path.join(dir, 'config', 'iris.properties'), `enableShaders=${enabled}\nshaderPack=${pack}\n`);
 }
 
-/** One launch: the policy is rebuilt from disk each time, like a new sync. */
 function launch(dir: string, revision: number): boolean {
-  const policy = new ShaderPolicy(dir);
-  const applied = policy.applyChoice(new OptionsWriter(dir), 'KARAMON - Shader', true, revision);
+  const policy = new ShaderPolicy(new GameInstance(dir));
+  const applied = policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, revision);
   policy.save();
   return applied;
 }
@@ -93,34 +93,50 @@ test('aucun shader sélectionné (iris.properties effacé) : on remet celui du p
 test('réglages .txt : modifiés par le joueur = gardés, intacts = mis à jour, bump = remplacés', async () => {
   const dir = game();
   const txt = path.join(dir, 'shaderpacks', 'KARAMON - Shader.txt');
-
-  // 1re synchro : fichier absent, on l'écrit.
-  let policy = new ShaderPolicy(dir);
+  let policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v1')), false);
   fs.writeFileSync(txt, 'v1');
-  policy.applyChoice(new OptionsWriter(dir), 'KARAMON - Shader', true, 1);
+  policy.settingsInstalled(txt, crc('v1'));
+  policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, 1);
   policy.save();
-
-  // Le pack publie v2, le joueur n'a pas touché au fichier : mis à jour.
-  policy = new ShaderPolicy(dir);
+  policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v2')), false);
   fs.writeFileSync(txt, 'v2');
+  policy.settingsInstalled(txt, crc('v2'));
   policy.save();
-
-  // Le joueur règle ses shaders, le pack publie v3 : le réglage du joueur est gardé.
   fs.writeFileSync(txt, 'mes réglages');
-  policy = new ShaderPolicy(dir);
+  policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v3')), true);
   policy.save();
   assert.equal(fs.readFileSync(txt, 'utf8'), 'mes réglages');
-
-  // Le pack relève shaderRevision : le fichier du pack remplace celui du joueur.
-  policy = new ShaderPolicy(dir);
+  policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(2);
   assert.equal(await policy.keepSettings(txt, crc('v3')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('réglages .txt : une synchro interrompue avant l’écriture ne fait pas passer l’ancienne version pour celle du joueur', async () => {
+  const dir = game();
+  const txt = path.join(dir, 'shaderpacks', 'KARAMON - Shader.txt');
+  let policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  await policy.keepSettings(txt, crc('v1'));
+  fs.writeFileSync(txt, 'v1');
+  policy.settingsInstalled(txt, crc('v1'));
+  policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, 1);
+  policy.save();
+
+  policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  assert.equal(await policy.keepSettings(txt, crc('v2')), false);
+  policy.save();
+
+  policy = new ShaderPolicy(new GameInstance(dir));
+  policy.setRevision(1);
+  assert.equal(await policy.keepSettings(txt, crc('v2')), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -128,7 +144,7 @@ test('réglages .txt : 1re synchro avec cette version, le fichier existant du jo
   const dir = game();
   const txt = path.join(dir, 'shaderpacks', 'KARAMON - Shader.txt');
   fs.writeFileSync(txt, 'mes réglages');
-  const policy = new ShaderPolicy(dir);
+  const policy = new ShaderPolicy(new GameInstance(dir));
   assert.equal(await policy.keepSettings(txt, crc('pack')), true);
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -1,58 +1,66 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assetFreshnessKey, githubReleaseAssetName, packAssetUrl, parseGitHubDownloadUrl } from './GitHubPack.ts';
+import { githubAssetFreshness, packAssetUrl } from './GitHubPack.ts';
+import type { HttpClient } from './HttpClient.ts';
 
-test('githubReleaseAssetName matches GitHub release filename sanitizing', () => {
-  assert.equal(githubReleaseAssetName('COBBLEVERSE RP [CF].zip'), 'COBBLEVERSE.RP.CF.zip');
-  assert.equal(githubReleaseAssetName('Karamon UI.zip'), 'Karamon.UI.zip');
-  assert.equal(
-    githubReleaseAssetName('Cobblemon 3D Poké Rods 1.0.zip'),
-    'Cobblemon.3D.Poke.Rods.1.0.zip',
-  );
-  assert.equal(
-    githubReleaseAssetName('-1.21.2 Fresh Moves v3.1 (With Animated Eyes).zip'),
-    '-1.21.2.Fresh.Moves.v3.1.With.Animated.Eyes.zip',
-  );
-  assert.equal(githubReleaseAssetName('bushy-leaves-1-6-5.zip'), 'bushy-leaves-1-6-5.zip');
-});
+const RELEASE_BASE = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
 
-test('packAssetUrl flattens and sanitizes GitHub release assets', () => {
-  const base = 'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/';
-  assert.equal(
-    packAssetUrl(base, 'COBBLEVERSE RP [CF].zip', 'resourcepacks/'),
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/COBBLEVERSE.RP.CF.zip',
-  );
-  assert.equal(
-    packAssetUrl(base, 'Karamon UI.zip', 'resourcepacks/'),
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/Karamon.UI.zip',
-  );
+function releaseApi(assets: { name: string; size?: number; digest?: string }[]): Pick<HttpClient, 'getJson'> {
+  return {
+    async getJson<T>(url: string): Promise<T> {
+      assert.equal(url, 'https://api.github.com/repos/vskstudio/Karamon-launcher/releases/tags/pack-latest');
+      return { tag_name: 'pack-latest', assets: assets.map((a, i) => ({ id: i + 1, ...a })) } as T;
+    },
+  };
+}
+
+test('packAssetUrl names GitHub release assets the way GitHub sanitizes uploads', () => {
+  const cases: [string, string][] = [
+    ['COBBLEVERSE RP [CF].zip', 'COBBLEVERSE.RP.CF.zip'],
+    ['Karamon UI.zip', 'Karamon.UI.zip'],
+    ['Cobblemon 3D Poké Rods 1.0.zip', 'Cobblemon.3D.Poke.Rods.1.0.zip'],
+    ['-1.21.2 Fresh Moves v3.1 (With Animated Eyes).zip', '-1.21.2.Fresh.Moves.v3.1.With.Animated.Eyes.zip'],
+    ['bushy-leaves-1-6-5.zip', 'bushy-leaves-1-6-5.zip'],
+  ];
+  for (const [name, asset] of cases) {
+    assert.equal(packAssetUrl(RELEASE_BASE, name, 'resourcepacks/'), RELEASE_BASE + asset);
+  }
 });
 
 test('packAssetUrl keeps folder prefixes on a normal CDN', () => {
-  const base = 'https://cdn.karamon.fr/downloads/';
   assert.equal(
-    packAssetUrl(base, 'Karamon UI.zip', 'resourcepacks/'),
+    packAssetUrl('https://cdn.karamon.fr/downloads/', 'Karamon UI.zip', 'resourcepacks/'),
     'https://cdn.karamon.fr/downloads/resourcepacks/Karamon%20UI.zip',
   );
 });
 
-test('assetFreshnessKey ignores a new GitHub asset id when the digest matches', () => {
+test('a republished asset with the same digest keeps its freshness key', async () => {
   const digest = 'sha256:c8547dae34c49a797c6d980fba87fc5500c55ed4f27ff963c256371e746ba033';
-  assert.equal(assetFreshnessKey({ size: 383909955, digest }), digest);
-  assert.equal(assetFreshnessKey({ size: 1, digest: digest.toUpperCase() }), digest);
-  assert.equal(assetFreshnessKey({ size: 383909956, digest }), digest);
-  assert.equal(assetFreshnessKey({ size: 100 }), 'size:100');
-  assert.equal(assetFreshnessKey({ size: 0, digest: 'nope' }), null);
+  const first = await githubAssetFreshness(releaseApi([{ name: 'mods.zip', size: 383909955, digest }]), RELEASE_BASE + 'mods.zip');
+  const again = await githubAssetFreshness(
+    releaseApi([{ name: 'mods.zip', size: 383909956, digest: digest.toUpperCase() }]),
+    RELEASE_BASE + 'mods.zip',
+  );
+  assert.deepEqual(first, { kind: 'found', key: digest });
+  assert.deepEqual(again, first);
 });
 
-test('parseGitHubDownloadUrl reads encoded asset names', () => {
-  const ref = parseGitHubDownloadUrl(
-    'https://github.com/vskstudio/Karamon-launcher/releases/download/pack-latest/Karamon.UI.zip',
+test('without a digest the asset size is its freshness key', async () => {
+  assert.deepEqual(
+    await githubAssetFreshness(releaseApi([{ name: 'Karamon.UI.zip', size: 100 }]), RELEASE_BASE + 'Karamon.UI.zip'),
+    { kind: 'found', key: 'size:100' },
   );
-  assert.deepEqual(ref, {
-    owner: 'vskstudio',
-    repo: 'Karamon-launcher',
-    tag: 'pack-latest',
-    filename: 'Karamon.UI.zip',
-  });
+});
+
+test('an unusable or missing asset, a failing API and a non-GitHub URL are told apart', async () => {
+  const failing: Pick<HttpClient, 'getJson'> = {
+    async getJson<T>(): Promise<T> {
+      throw new Error('HTTP 403');
+    },
+  };
+  const unusable = await githubAssetFreshness(releaseApi([{ name: 'mods.zip', size: 0, digest: 'nope' }]), RELEASE_BASE + 'mods.zip');
+  assert.equal(unusable.kind, 'unknown');
+  assert.equal((await githubAssetFreshness(releaseApi([]), RELEASE_BASE + 'mods.zip')).kind, 'unknown');
+  assert.match(JSON.stringify(await githubAssetFreshness(failing, RELEASE_BASE + 'mods.zip')), /HTTP 403/);
+  assert.deepEqual(await githubAssetFreshness(failing, 'https://karamon.fr/downloads/mods.zip'), { kind: 'not-github' });
 });

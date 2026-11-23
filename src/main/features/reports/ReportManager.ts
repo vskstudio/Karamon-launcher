@@ -1,22 +1,18 @@
 import type { CollectReportInput } from './ReportCollector.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 import { MAX_FAILED_DELIVERIES, type ReportQueue } from './ReportQueue.ts';
 import type { ReportTransportResult } from './ReportTransport.ts';
-import type { LauncherReport, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
-
-export interface ReportConsentRequest {
-  reportId: string;
-  trigger: ReportTrigger;
-  summary: string[];
-}
+import type { LauncherReport, ReportConsentRequest, ReportSendResult, ReportTrigger } from './ReportTypes.ts';
 
 export interface ReportManagerOptions {
   collector: { collect(input: CollectReportInput): Promise<LauncherReport> };
   queue: Pick<ReportQueue, 'enqueue' | 'list' | 'approve' | 'remove' | 'recordFailedDelivery' | 'mayAutoSend' | 'markAutoSent'>;
   transport: { send(report: LauncherReport): Promise<ReportTransportResult> };
-  context: () => { gameDir: string; ramMb: number };
+  context: () => { instance: GameInstance; ramMb: number };
   autoSend: () => boolean;
   setAutoSend: (value: boolean) => void;
   requestConsent: (request: ReportConsentRequest) => void;
+  announce?: (message: string) => void;
   log?: (message: string) => void;
 }
 
@@ -37,16 +33,15 @@ export class ReportManager {
     }
   }
 
-  /** `since` : début de la session concernée, pour ne pas joindre les crashs des sessions précédentes. */
   async detect(
     trigger: Exclude<ReportTrigger, 'manual'>,
     summary: string[],
-    since?: number,
+    sessionStartedAt?: number,
     now = Date.now(),
   ): Promise<ReportSendResult> {
     if (!this.options.queue.mayAutoSend(trigger, now)) return { status: 'skipped' };
     try {
-      const report = await this.collect(trigger, summary, since);
+      const report = await this.collect(trigger, summary, sessionStartedAt);
       this.options.queue.markAutoSent(trigger, now);
       if (this.options.autoSend()) {
         this.options.queue.enqueue(report, 'approved', now);
@@ -59,6 +54,14 @@ export class ReportManager {
       this.log(`Collecte du rapport impossible: ${(error as Error).message}`);
       return { status: 'failed' };
     }
+  }
+
+  reportInBackground(trigger: Exclude<ReportTrigger, 'manual'>, summary: string[], since: number): void {
+    this.detect(trigger, summary, since)
+      .then((sent) => {
+        if (sent.status === 'sent') this.options.announce?.(`Rapport envoyé à l'équipe Karamon (code ${sent.code}).`);
+      })
+      .catch((error: unknown) => this.log((error as Error).message));
   }
 
   async sendManual(): Promise<ReportSendResult> {
@@ -79,9 +82,17 @@ export class ReportManager {
       this.options.queue.remove(reportId);
       return result('skipped', item.report);
     }
-    if (always) this.options.setAutoSend(true);
     this.options.queue.approve(reportId);
-    return await this.deliver(item.report);
+    const sent = await this.deliver(item.report);
+    if (!always) return sent;
+    try {
+      this.options.setAutoSend(true);
+      return sent;
+    } catch (error) {
+      const reason = (error as Error).message;
+      this.log(`Envoi automatique des rapports non enregistré: ${reason}`);
+      return { ...sent, autoSendNotSaved: reason };
+    }
   }
 
   private async collect(trigger: ReportTrigger, summary: string[], since?: number): Promise<LauncherReport> {

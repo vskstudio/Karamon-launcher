@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { MinecraftProfile } from '../../../ipc/contract.ts';
+import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpResponse } from '../../shared/HttpClient.ts';
-import { parseOffers, Shop } from './Shop.ts';
+import { Shop } from './Shop.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
 
 const offer = (over: Record<string, unknown>) => ({
@@ -19,8 +19,13 @@ const offer = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-test('parseOffers maps the karamon.fr catalogue, sorts it by rank, keeps the billing portal and the Pass perks and tax mode', () => {
-  const catalog = parseOffers({
+function catalogServed(body: unknown) {
+  const http = { getJson: async () => body, get: async () => ({ status: 500, body: Buffer.alloc(0) }), postJson: async () => ({ status: 500, body: Buffer.alloc(0) }) };
+  return new Shop({ http, activeProfile: () => null, openCheckout: async () => 'cancelled', openExternal: async () => undefined }).catalog();
+}
+
+test('the catalogue maps the karamon.fr offers, sorts it by rank, keeps the billing portal and the Pass perks and tax mode', async () => {
+  const catalog = await catalogServed({
     offers: [
       offer({
         id: 'pass',
@@ -83,32 +88,32 @@ test('parseOffers maps the karamon.fr catalogue, sorts it by rank, keeps the bil
   });
 });
 
-test('an offer without a kind is a pack', () => {
+test('an offer without a kind is a pack', async () => {
   const { kind: _kind, ...withoutKind } = offer({});
-  assert.equal(parseOffers({ offers: [withoutKind] }).offers[0].kind, 'pack');
+  assert.equal((await catalogServed({ offers: [withoutKind] })).offers[0].kind, 'pack');
 });
 
-test('offers without a price, a name or a valid currency are dropped', () => {
-  const { offers } = parseOffers({
+test('offers without a price, a name or a valid currency are dropped', async () => {
+  const { offers } = await catalogServed({
     offers: [offer({ unit_amount: 0 }), offer({ name: '' }), offer({ currency: 'euro' }), offer({ id: 'ok' })],
   });
   assert.deepEqual(offers.map((o) => o.id), ['ok']);
 });
 
-test('an image hosted outside karamon.fr is not shown', () => {
-  assert.equal(parseOffers({ offers: [offer({ image: 'https://evil.example/x.png' })] }).offers[0].image, '');
+test('an image hosted outside karamon.fr is not shown', async () => {
+  assert.equal((await catalogServed({ offers: [offer({ image: 'https://evil.example/x.png' })] })).offers[0].image, '');
 });
 
-test('a portal outside karamon.fr and Stripe billing is not offered', () => {
+test('a portal outside karamon.fr and Stripe billing is not offered', async () => {
   for (const portal_url of ['https://evil.example/portal', 'http://billing.stripe.com/p/login/abc', 'https://billing.stripe.com.evil.example/', 42]) {
-    assert.equal(parseOffers({ offers: [offer({})], portal_url }).portalUrl, null, String(portal_url));
+    assert.equal((await catalogServed({ offers: [offer({})], portal_url })).portalUrl, null, String(portal_url));
   }
-  assert.equal(parseOffers({ offers: [], portal_url: 'https://karamon.fr/compte' }).portalUrl, 'https://karamon.fr/compte');
+  assert.equal((await catalogServed({ offers: [], portal_url: 'https://karamon.fr/compte' })).portalUrl, 'https://karamon.fr/compte');
 });
 
-test('an error payload yields an empty catalogue', () => {
-  assert.deepEqual(parseOffers({ error: 'shop_disabled' }), { offers: [], portalUrl: null });
-  assert.deepEqual(parseOffers(null), { offers: [], portalUrl: null });
+test('an error payload yields an empty catalogue', async () => {
+  assert.deepEqual(await catalogServed({ error: 'shop_disabled' }), { offers: [], portalUrl: null });
+  assert.deepEqual(await catalogServed(null), { offers: [], portalUrl: null });
 });
 
 const STRIPE_PAGE = 'https://checkout.stripe.com/c/pay/cs_live_abc';
@@ -167,7 +172,7 @@ test('checkout pays for the account the shop resolves, with the terms accepted',
 
 test('checkout refuses a signed-out launcher without calling the shop', async () => {
   const { shop, lookups, posted } = shopAgainst({ profile: null });
-  assert.deepEqual(await shop.checkout('karamon_koins_100'), { status: 'error', error: 'Connecte-toi pour acheter.' });
+  await assert.rejects(shop.checkout('karamon_koins_100'), { message: 'Connecte-toi pour acheter.' });
   assert.deepEqual(lookups, []);
   assert.deepEqual(posted, []);
 });
@@ -175,7 +180,7 @@ test('checkout refuses a signed-out launcher without calling the shop', async ()
 test('an empty or oversized offer id is refused before any request', async () => {
   for (const offerId of ['', '   ', 'x'.repeat(129)]) {
     const { shop, lookups, posted } = shopAgainst({});
-    assert.equal((await shop.checkout(offerId)).status, 'error');
+    await assert.rejects(shop.checkout(offerId), /Cette offre n'existe plus/);
     assert.deepEqual(lookups, []);
     assert.deepEqual(posted, []);
   }
@@ -195,9 +200,7 @@ test('API refusals are explained in French', async () => {
   ];
   for (const [server, message] of cases) {
     const { shop, opened } = shopAgainst(server);
-    const result = await shop.checkout('karamon_koins_100');
-    assert.equal(result.status, 'error');
-    assert.match((result as { error: string }).error, message);
+    await assert.rejects(shop.checkout('karamon_koins_100'), message);
     assert.deepEqual(opened, []);
   }
 });
@@ -205,7 +208,7 @@ test('API refusals are explained in French', async () => {
 test('a checkout URL that is not a Stripe Checkout page is never opened', async () => {
   for (const url of ['https://evil.example/pay', 'http://checkout.stripe.com/c/pay/x', 'https://checkout.stripe.com.evil.example/']) {
     const { shop, opened } = shopAgainst({ checkout: respond(200, { url }) });
-    assert.equal((await shop.checkout('karamon_koins_100')).status, 'error', url);
+    await assert.rejects(shop.checkout('karamon_koins_100'), /Le paiement n'a pas pu démarrer/, url);
     assert.deepEqual(opened, [], url);
   }
 });
@@ -215,7 +218,7 @@ test('a second purchase cannot start while the payment window is open', async ()
   const { shop, posted } = shopAgainst({ paymentWindow: () => new Promise((resolve) => (finishFirst = resolve)) });
   const first = shop.checkout('karamon_koins_100');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal((await shop.checkout('karamon_koins_300')).status, 'error');
+  await assert.rejects(shop.checkout('karamon_koins_300'), /Un paiement est déjà ouvert/);
   assert.equal(posted.length, 1);
   finishFirst('paid');
   assert.deepEqual(await first, { status: 'paid' });

@@ -1,4 +1,3 @@
-/** One line for the player after « Réparer l'installation » or an automatic repair. */
 export function repairSummary(damagedPackFiles: number, repairedConfigs: number): string {
   if (damagedPackFiles === 0 && repairedConfigs === 0) {
     return "Aucun fichier abîmé trouvé : l'installation est saine.";

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Fails the build when an app.asar grows past the limit: a packaging glob that
-// pulls build output or node_modules back into the app shows up here first.
 import fs from 'fs';
 import path from 'path';
 

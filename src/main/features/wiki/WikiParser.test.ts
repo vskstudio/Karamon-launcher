@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { WikiBlock } from '../../../ipc/contract.ts';
+import type { WikiBlock } from './WikiTypes.ts';
 import { parseWikiIndex, parseWikiPage } from './WikiParser.ts';
 import { WIKI_ARTICLE_HTML, WIKI_HOME_HTML } from './WikiPages.fixture.ts';
 

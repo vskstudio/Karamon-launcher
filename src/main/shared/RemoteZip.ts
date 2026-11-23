@@ -1,5 +1,5 @@
 import { Transform, type TransformCallback } from 'stream';
-import type { HttpClient } from './HttpClient.ts';
+import { RangeUnsupportedError, isStrongEtag, withNetworkRetries, type HttpClient } from './HttpClient.ts';
 import {
   LOCAL_HEADER_SIZE,
   ZIP_TAIL_SIZE,
@@ -11,21 +11,8 @@ import {
   type ZipEntry,
 } from './ZipReader.ts';
 
-const ENTRY_ATTEMPTS = 3;
-
-/**
- * A zip on an HTTP server that honours Range requests, read entry by entry
- * without downloading the archive: one request for its end records (and its
- * central directory when it fits there), at most one more for the directory,
- * then one request per entry actually extracted.
- *
- * Every request carries If-Range with the ETag seen first: if the file is
- * republished in the middle, the server answers 200 instead of 206 and the
- * read fails with RangeUnsupportedError instead of mixing two versions.
- */
 export class RemoteZip {
   readonly entries: ZipEntry[];
-  /** Bytes the archive takes on the server. */
   readonly size: number;
   readonly etag: string;
   private readonly http: HttpClient;
@@ -38,8 +25,6 @@ export class RemoteZip {
     this.entries = entries;
     this.size = size;
     this.etag = etag;
-    // An entry's bytes run from its local header to the next local header (or the
-    // central directory): one request covers header, data and any data descriptor.
     const byOffset = [...entries].sort((a, b) => a.localHeaderOffset - b.localHeaderOffset);
     byOffset.forEach((entry, i) => {
       const next = i + 1 < byOffset.length ? byOffset[i + 1].localHeaderOffset : cdOffset;
@@ -50,7 +35,7 @@ export class RemoteZip {
   static async open(http: HttpClient, url: string): Promise<RemoteZip> {
     const tail = await http.getRange(url, { start: -ZIP_TAIL_SIZE });
     const etag = tail.etag;
-    if (!etag) throw new Error(`Pas d'ETag pour ${url}: lecture partielle impossible`);
+    if (!etag || !isStrongEtag(etag)) throw new RangeUnsupportedError(`Pas d'ETag forte pour ${url}: lecture partielle impossible`);
     const tailStart = tail.total - tail.body.length;
     const loc = await RemoteZip.locate(http, url, tail.body, tailStart, etag);
 
@@ -81,15 +66,10 @@ export class RemoteZip {
     return locateCentralDirectory(tail, tailStart, url, () => zip64!);
   }
 
-  /** Compressed bytes the server sends to extract these entries (headers included). */
   bytesFor(entries: ZipEntry[]): number {
     return entries.reduce((sum, e) => sum + this.spanEnd.get(e)! - e.localHeaderOffset + 1, 0);
   }
 
-  /**
-   * Downloads one entry and writes it to `target` (temp file, size + CRC
-   * checked, renamed). Network errors are retried; a republished archive is not.
-   */
   async extractTo(
     entry: ZipEntry,
     target: string,
@@ -98,33 +78,26 @@ export class RemoteZip {
     assertSupportedMethod(entry);
     const end = this.spanEnd.get(entry);
     if (end === undefined) throw new Error(`Entrée inconnue: ${entry.entryName}`);
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= ENTRY_ATTEMPTS; attempt++) {
-      let counted = 0;
-      try {
+    let counted = 0;
+    await withNetworkRetries(
+      async () => {
         const res = await this.http.openRange(this.url, { start: entry.localHeaderOffset, end, ifRange: this.etag });
         res.stream.on('data', (chunk: Buffer) => {
           counted += chunk.length;
           onBytes?.(chunk.length);
         });
         await writeEntryStream(res.stream.pipe(new LocalEntryData(entry)), entry, target, { durable });
-        return;
-      } catch (e) {
-        lastError = e;
+      },
+      () => {
         if (counted) onBytes?.(-counted);
-        if ((e as Error).name === 'RangeUnsupportedError') throw e;
-      }
-    }
-    throw lastError;
+        counted = 0;
+      },
+    );
   }
 }
 
 class NeedZip64Record extends Error {}
 
-/**
- * Turns the bytes of a local entry span (local header, data, maybe a data
- * descriptor) into just the compressed data of the entry.
- */
 class LocalEntryData extends Transform {
   private readonly entry: ZipEntry;
   private header: Buffer | null = Buffer.alloc(0);

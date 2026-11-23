@@ -95,8 +95,6 @@ function viewOfCheck(result: UpdateCheckResult): UpdateView {
       return { text: `Version ${result.version} disponible, installe le .dmg de la dernière release.`, tone: 'default', installLabel: 'Télécharger' };
     case 'unsupported':
       return { text: 'Indisponible en mode développement.', tone: 'default', installLabel: null };
-    case 'error':
-      return { text: `Erreur : ${result.error}`, tone: 'danger', installLabel: null };
   }
 }
 

@@ -1,6 +1,6 @@
-import type { HttpClient } from './HttpClient';
+import type { HttpClient } from './HttpClient.ts';
 
-export interface GitHubDownloadRef {
+interface GitHubDownloadRef {
   owner: string;
   repo: string;
   tag: string;
@@ -28,7 +28,7 @@ const TAGGED_DOWNLOAD =
 const GITHUB_RELEASE_DOWNLOAD_BASE =
   /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/(?:latest\/download|download\/[^/]+)\/?$/i;
 
-export function githubReleaseAssetName(name: string): string {
+function githubReleaseAssetName(name: string): string {
   return name
     .normalize('NFKD')
     .replace(/\p{M}+/gu, '')
@@ -45,7 +45,7 @@ export function packAssetUrl(baseUrl: string, name: string, folderPrefix = ''): 
   return base + prefix + encoded;
 }
 
-export function parseGitHubDownloadUrl(url: string): GitHubDownloadRef | null {
+function parseGitHubDownloadUrl(url: string): GitHubDownloadRef | null {
   const latest = url.match(LATEST_DOWNLOAD);
   if (latest) {
     return {
@@ -67,8 +67,7 @@ export function parseGitHubDownloadUrl(url: string): GitHubDownloadRef | null {
   return null;
 }
 
-/** Content identity. Republishing pack-latest mints a new asset id; the digest does not. */
-export function assetFreshnessKey(asset: { size?: number; digest?: string }): string | null {
+function assetFreshnessKey(asset: { size?: number; digest?: string }): string | null {
   const digest = typeof asset.digest === 'string' ? asset.digest.trim().toLowerCase() : '';
   if (/^sha256:[0-9a-f]{64}$/.test(digest)) return digest;
   if (typeof asset.size === 'number' && Number.isFinite(asset.size) && asset.size > 0) {
@@ -77,19 +76,26 @@ export function assetFreshnessKey(asset: { size?: number; digest?: string }): st
   return null;
 }
 
-export async function githubAssetFreshness(http: HttpClient, fileUrl: string): Promise<string | null> {
+export type GitHubFreshness =
+  | { kind: 'not-github' }
+  | { kind: 'found'; key: string }
+  | { kind: 'unknown'; reason: string };
+
+export async function githubAssetFreshness(http: Pick<HttpClient, 'getJson'>, fileUrl: string): Promise<GitHubFreshness> {
   const ref = parseGitHubDownloadUrl(fileUrl);
-  if (!ref) return null;
+  if (!ref) return { kind: 'not-github' };
   const apiUrl =
     ref.tag === 'latest'
       ? `https://api.github.com/repos/${ref.owner}/${ref.repo}/releases/latest`
       : `https://api.github.com/repos/${ref.owner}/${ref.repo}/releases/tags/${encodeURIComponent(ref.tag)}`;
+  let release: GitHubRelease;
   try {
-    const release = await http.getJson<GitHubRelease>(apiUrl);
-    const asset = (release.assets ?? []).find((item) => item.name === ref.filename);
-    if (!asset) return null;
-    return assetFreshnessKey(asset);
-  } catch {
-    return null;
+    release = await http.getJson<GitHubRelease>(apiUrl);
+  } catch (e) {
+    return { kind: 'unknown', reason: `API GitHub: ${(e as Error).message}` };
   }
+  const asset = (release.assets ?? []).find((item) => item.name === ref.filename);
+  if (!asset) return { kind: 'unknown', reason: `${ref.filename} absent de la release ${ref.tag}` };
+  const key = assetFreshnessKey(asset);
+  return key ? { kind: 'found', key } : { kind: 'unknown', reason: `${ref.filename} sans taille ni empreinte` };
 }

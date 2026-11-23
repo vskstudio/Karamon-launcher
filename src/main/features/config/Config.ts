@@ -1,6 +1,29 @@
-import fs from 'fs';
-import path from 'path';
-import type { AppConfig, AppConfigUpdate } from '../../../ipc/contract';
+import { JsonFile, UnreadableFileError, jsonObject, type UnreadableCause } from '../../shared/DurableFile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
+
+export interface ServerInfo {
+  host: string;
+  port: number;
+}
+
+export interface AppConfig {
+  mcGameDir: string;
+  memoryMb: number;
+  secondInstanceMemoryMb: number;
+  javaPath: string;
+  jvmArgs: string;
+  closeLauncherOnGameStart: boolean;
+  devMode: boolean;
+  potatoMode: boolean;
+  potatoHintDismissed: boolean;
+  disableSodium: boolean;
+  autoSendReports: boolean;
+  server: ServerInfo;
+}
+
+export type AppConfigUpdate = Partial<Omit<AppConfig, 'server'>> & {
+  server?: Partial<ServerInfo>;
+};
 
 const MAX_TEXT_LENGTH = 4096;
 const MIN_MEMORY_MB = 512;
@@ -9,7 +32,7 @@ const MAX_PORT = 65535;
 
 const DEFAULTS: AppConfig = Object.freeze({
   mcGameDir: '',
-  memoryMb: 12288,
+  memoryMb: KARAMON.defaultMemoryMb,
   secondInstanceMemoryMb: 6144,
   javaPath: '',
   jvmArgs: '',
@@ -19,46 +42,93 @@ const DEFAULTS: AppConfig = Object.freeze({
   potatoHintDismissed: false,
   disableSodium: false,
   autoSendReports: false,
-  server: { host: 'play.karamon.fr', port: 25565 },
+  server: { ...KARAMON.server },
 }) as AppConfig;
 
-export class Config {
-  private readonly filePath: string;
-  private data: AppConfig | null = null;
+export class ConfigNotReadYetError extends Error {
+  constructor() {
+    super('Tes réglages sont illisibles pour l\'instant (fichier verrouillé ?). Réessaie dans un instant.');
+    this.name = 'ConfigNotReadYetError';
+  }
+}
 
-  constructor(filePath: string) {
-    this.filePath = filePath;
+export type ConfigLog = (message: string) => void;
+
+export class Config {
+  private readonly file: JsonFile<AppConfig>;
+  private readonly log: ConfigLog;
+  private data: AppConfig | null = null;
+  private loadedFromDisk = false;
+  private inaccessible = false;
+
+  constructor(filePath: string, log: ConfigLog) {
+    this.file = new JsonFile(filePath, (raw) => Config.normalize(Config.merge(DEFAULTS, jsonObject(raw) as AppConfigUpdate)), {
+      whenUnreadable: 'set-aside',
+    });
+    this.log = log;
   }
 
   load(): this {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as AppConfigUpdate;
-        this.data = Config.normalize(Config.merge(DEFAULTS, raw));
-        return this;
-      }
-    } catch (error) {
-      console.warn(`Config ${this.filePath} illisible, valeurs par défaut utilisées:`, error);
-    }
-    this.data = Config.clone(DEFAULTS);
+    const state = this.file.read();
+    this.loadedFromDisk = state.kind !== 'unreadable';
+    this.inaccessible = state.kind === 'unreadable' && state.cause === 'io';
+    if (state.kind === 'unreadable') this.log(Config.unreadableMessage(this.file.path, state.cause, state.reason));
+    this.data = state.kind === 'read' ? state.value : Config.clone(DEFAULTS);
     return this;
-  }
-
-  save(): void {
-    if (!this.data) return;
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf8');
   }
 
   get(): AppConfig {
     if (!this.data) this.load();
+    if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
     return Config.clone(this.data!);
+  }
+
+  getRead(): AppConfig {
+    const current = this.get();
+    if (this.inaccessible) throw new ConfigNotReadYetError();
+    return current;
   }
 
   set(updates: AppConfigUpdate): void {
     if (!this.data) this.load();
-    this.data = Config.normalize(Config.merge(this.data!, updates));
-    this.save();
+    if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
+    if (this.inaccessible) throw new ConfigNotReadYetError();
+    const next = Config.apply(this.data!, updates);
+    this.save(next);
+    this.data = next;
+  }
+
+  private rereadIfNotLoadedYet(): void {
+    const state = this.file.read();
+    this.inaccessible = state.kind === 'unreadable' && state.cause === 'io';
+    if (state.kind === 'unreadable') return;
+    if (state.kind === 'read') this.data = state.value;
+    this.loadedFromDisk = true;
+  }
+
+  private save(next: AppConfig): void {
+    try {
+      const { keptUnreadableAs } = this.file.write(next);
+      this.loadedFromDisk = true;
+      if (keptUnreadableAs) this.log(`Config illisible gardée sous ${keptUnreadableAs}`);
+    } catch (e) {
+      if (!(e instanceof UnreadableFileError)) throw e;
+      this.inaccessible = true;
+      this.loadedFromDisk = false;
+      this.log(`Config non enregistrée : ${e.message}`);
+      throw new ConfigNotReadYetError();
+    }
+  }
+
+  private static unreadableMessage(file: string, cause: UnreadableCause, reason: string): string {
+    if (cause === 'io') {
+      return `Config ${file} inaccessible (${reason}), réglages par défaut utilisés pour l'instant, le fichier sera relu dès que possible et tout enregistrement est refusé d'ici là`;
+    }
+    return `Config ${file} illisible (${reason}), réglages par défaut utilisés jusqu'au prochain enregistrement, qui gardera l'ancien fichier à côté`;
+  }
+
+  private static apply(base: AppConfig, updates: AppConfigUpdate): AppConfig {
+    return Config.normalize(Config.merge(base, updates));
   }
 
   private static merge(base: AppConfig, raw: AppConfigUpdate): AppConfig {

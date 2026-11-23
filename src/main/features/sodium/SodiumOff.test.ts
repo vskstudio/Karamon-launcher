@@ -4,8 +4,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { SodiumOff, sodiumSummary } from './SodiumOff.ts';
-import { PotatoMode } from '../potato/PotatoMode.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
+import { reconcilePlayerToggles, type ToggleSettings } from '../minecraft/PlayerToggles.ts';
 
 function jar(id: string): Buffer {
   const zip = new AdmZip();
@@ -23,72 +23,79 @@ const PACK: Record<string, string> = {
   'karamon-1.0.0.jar': 'karamon',
   'particlerain-1.0.jar': 'particlerain',
 };
+const PACK_JARS = new Set(Object.keys(PACK));
 
-const SODIUM_JARS = [
-  'sodium-fabric-0.8.12+mc1.21.1.jar',
-  'sodium-extra-fabric-0.9.3+mc1.21.1.jar',
-  'reeses-sodium-options-fabric-2.2.3+mc1.21.1.jar',
-  'iris-fabric-1.8.14-beta.1+mc1.21.1.jar',
-  'voxy-0.2.15-beta+mc1.21.1.jar',
-];
-
-function gameDir(): string {
+function gameDir(): GameInstance {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-sodium-'));
   fs.mkdirSync(path.join(dir, 'mods'));
   for (const [name, id] of Object.entries(PACK)) fs.writeFileSync(path.join(dir, 'mods', name), jar(id));
-  fs.writeFileSync(path.join(dir, '.karamon-sync-cache.json'), JSON.stringify({ jarNames: Object.keys(PACK) }));
-  return dir;
+  return new GameInstance(dir);
 }
 
-function enabledJars(dir: string): string[] {
-  return fs.readdirSync(path.join(dir, 'mods')).filter((f) => f.endsWith('.jar')).sort();
+function enabledJars(instance: GameInstance): string[] {
+  return fs.readdirSync(instance.modsDir).filter((f) => f.endsWith('.jar')).sort();
 }
 
-test('parks Sodium and the mods that need it, then puts them back', () => {
-  const dir = gameDir();
-  const off = SodiumOff.apply(dir);
-  assert.deepEqual(off.errors, []);
-  assert.deepEqual([...off.mods].sort(), [...SODIUM_JARS].sort());
-  assert.deepEqual(enabledJars(dir), ['karamon-1.0.0.jar', 'particlerain-1.0.jar', 'voxy-server-side-0.14.0-fabric.jar']);
-  assert.deepEqual([...SodiumOff.parkedJars(dir)].sort(), [...SODIUM_JARS].sort());
-  assert.match(sodiumSummary(true, off), /^Sodium désactivé : .*Sodium Extra/);
+function toggle(instance: GameInstance, settings: ToggleSettings, trigger: 'potato' | 'sodium' = 'sodium'): string[] {
+  const lines: string[] = [];
+  reconcilePlayerToggles(instance, settings, PACK_JARS, trigger, (l) => lines.push(l));
+  return lines;
+}
 
-  assert.deepEqual(SodiumOff.apply(dir).mods, []);
+test('switches Sodium and the mods that need it off, then puts them back', () => {
+  const instance = gameDir();
+  const off = toggle(instance, { potatoMode: false, disableSodium: true });
+  assert.deepEqual(enabledJars(instance), ['karamon-1.0.0.jar', 'particlerain-1.0.jar', 'voxy-server-side-0.14.0-fabric.jar']);
+  assert.match(off.join('\n'), /^Sodium désactivé : .*Sodium Extra/m);
 
-  const on = SodiumOff.restore(dir);
-  assert.deepEqual(on.errors, []);
-  assert.deepEqual(enabledJars(dir), Object.keys(PACK).sort());
-  assert.deepEqual(SodiumOff.parkedJars(dir), []);
-  assert.ok(!fs.existsSync(path.join(dir, '.karamon-sodium-state.json')));
-  fs.rmSync(dir, { recursive: true, force: true });
+  const on = toggle(instance, { potatoMode: false, disableSodium: false });
+  assert.match(on.join('\n'), /^Sodium réactivé : .*Iris/m);
+  assert.deepEqual(enabledJars(instance), [...PACK_JARS].sort());
+  fs.rmSync(instance.dir, { recursive: true, force: true });
 });
 
 test('a jar with the right name but another mod id stays on', () => {
-  const dir = gameDir();
-  fs.writeFileSync(path.join(dir, 'mods', 'iris-fabric-1.8.14-beta.1+mc1.21.1.jar'), jar('something-else'));
-  SodiumOff.apply(dir);
-  assert.ok(enabledJars(dir).includes('iris-fabric-1.8.14-beta.1+mc1.21.1.jar'));
-  fs.rmSync(dir, { recursive: true, force: true });
+  const instance = gameDir();
+  fs.writeFileSync(path.join(instance.modsDir, 'iris-fabric-1.8.14-beta.1+mc1.21.1.jar'), jar('something-else'));
+  toggle(instance, { potatoMode: false, disableSodium: true });
+  assert.ok(enabledJars(instance).includes('iris-fabric-1.8.14-beta.1+mc1.21.1.jar'));
+  fs.rmSync(instance.dir, { recursive: true, force: true });
 });
 
-test('Voxy stays off when the mode PC modeste is turned off while Sodium is off', () => {
-  const dir = gameDir();
-  PotatoMode.apply(dir);
-  SodiumOff.apply(dir);
-  PotatoMode.restore(dir);
-  SodiumOff.apply(dir);
-  assert.ok(!enabledJars(dir).includes('voxy-0.2.15-beta+mc1.21.1.jar'));
-  assert.ok(enabledJars(dir).includes('particlerain-1.0.jar'));
-  fs.rmSync(dir, { recursive: true, force: true });
+test('Voxy stays off as long as one of the two settings wants it off', () => {
+  const instance = gameDir();
+  const voxy = 'voxy-0.2.15-beta+mc1.21.1.jar';
+  toggle(instance, { potatoMode: true, disableSodium: true });
+  toggle(instance, { potatoMode: false, disableSodium: true }, 'potato');
+  assert.ok(!enabledJars(instance).includes(voxy));
+  assert.ok(enabledJars(instance).includes('particlerain-1.0.jar'));
+
+  toggle(instance, { potatoMode: true, disableSodium: true }, 'potato');
+  toggle(instance, { potatoMode: true, disableSodium: false });
+  assert.ok(!enabledJars(instance).includes(voxy));
+  assert.ok(enabledJars(instance).includes('sodium-fabric-0.8.12+mc1.21.1.jar'));
+
+  toggle(instance, { potatoMode: false, disableSodium: false }, 'potato');
+  assert.deepEqual(enabledJars(instance), [...PACK_JARS].sort());
+  fs.rmSync(instance.dir, { recursive: true, force: true });
 });
 
-test('Voxy stays off when Sodium comes back while the mode PC modeste is on', () => {
-  const dir = gameDir();
-  SodiumOff.apply(dir);
-  PotatoMode.apply(dir);
-  SodiumOff.restore(dir);
-  PotatoMode.apply(dir);
-  assert.ok(!enabledJars(dir).includes('voxy-0.2.15-beta+mc1.21.1.jar'));
-  assert.ok(enabledJars(dir).includes('sodium-fabric-0.8.12+mc1.21.1.jar'));
-  fs.rmSync(dir, { recursive: true, force: true });
+test('Sodium switched off by an older launcher comes back when the setting is turned off', () => {
+  const instance = gameDir();
+  const parkedByOldLauncher = [
+    'sodium-fabric-0.8.12+mc1.21.1.jar',
+    'sodium-extra-fabric-0.9.3+mc1.21.1.jar',
+    'reeses-sodium-options-fabric-2.2.3+mc1.21.1.jar',
+    'iris-fabric-1.8.14-beta.1+mc1.21.1.jar',
+    'voxy-0.2.15-beta+mc1.21.1.jar',
+  ];
+  for (const name of parkedByOldLauncher) fs.renameSync(path.join(instance.modsDir, name), path.join(instance.modsDir, name + '.disabled'));
+  fs.writeFileSync(instance.legacySodiumState, JSON.stringify({ version: 1, mods: parkedByOldLauncher }, null, 2));
+
+  toggle(instance, { potatoMode: false, disableSodium: false });
+
+  assert.deepEqual(enabledJars(instance), [...PACK_JARS].sort());
+  assert.deepEqual(fs.readdirSync(instance.modsDir).filter((f) => f.endsWith('.disabled')), []);
+  assert.equal(fs.existsSync(instance.legacySodiumState), false);
+  fs.rmSync(instance.dir, { recursive: true, force: true });
 });

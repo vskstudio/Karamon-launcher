@@ -20,7 +20,7 @@ export function onTaskCompleted(listener: (kind: TaskKind, ok: boolean) => void)
   return () => completedListeners.delete(listener);
 }
 
-async function runTask(kind: TaskKind, work: () => Promise<boolean>): Promise<boolean> {
+async function runTask(kind: TaskKind, failureLabel: string, work: () => Promise<boolean>): Promise<boolean> {
   if (activeTask.value) {
     toast('Une autre action est déjà en cours.', 'info');
     return false;
@@ -32,7 +32,7 @@ async function runTask(kind: TaskKind, work: () => Promise<boolean>): Promise<bo
     ok = await work();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log(`Erreur : ${message}`, 'error');
+    log(`${failureLabel} : ${message}`, 'error');
     toast(message, 'error');
   } finally {
     activeTask.value = null;
@@ -57,22 +57,23 @@ function waitForGameStart(): Promise<void> {
   });
 }
 
+async function reopenAccountsIfSignedOut(): Promise<void> {
+  applySession(await api.authGetSession());
+  if (!activeAccount.value) openAccounts();
+}
+
 export function play(): Promise<boolean> {
   if (!activeAccount.value) {
     openAccounts();
     return Promise.resolve(false);
   }
-  return runTask('play', async () => {
+  return runTask('play', 'Erreur', async () => {
     log('Lancement en cours…', 'info');
-    const result = await api.play();
-    if (!result.ok) {
-      log(`Erreur : ${result.error}`, 'error');
-      toast(result.error, 'error');
-      if (result.loginRequired) {
-        applySession(await api.authGetSession());
-        openAccounts();
-      }
-      return false;
+    try {
+      await api.play();
+    } catch (error) {
+      await reopenAccountsIfSignedOut();
+      throw error;
     }
     await waitForGameStart();
     return true;
@@ -80,14 +81,9 @@ export function play(): Promise<boolean> {
 }
 
 export function syncPack(): Promise<boolean> {
-  return runTask('sync', async () => {
+  return runTask('sync', 'Erreur de synchronisation', async () => {
     log('Synchronisation du pack en cours…', 'info');
-    const result = await api.syncMods();
-    if (!result.ok) {
-      log(`Erreur de synchronisation : ${result.error}`, 'error');
-      toast(result.error, 'error');
-      return false;
-    }
+    await api.syncMods();
     log('Pack synchronisé.', 'success');
     toast('Pack à jour.');
     return true;
@@ -95,14 +91,9 @@ export function syncPack(): Promise<boolean> {
 }
 
 export function repairInstall(): Promise<boolean> {
-  return runTask('repair', async () => {
+  return runTask('repair', 'Erreur de réparation', async () => {
     log('Réparation de l’installation en cours…', 'info');
     const result = await api.repair();
-    if (!result.ok) {
-      log(`Erreur de réparation : ${result.error}`, 'error');
-      toast(result.error, 'error');
-      return false;
-    }
     log(result.summary, 'success');
     toast(result.summary);
     return true;
@@ -110,14 +101,9 @@ export function repairInstall(): Promise<boolean> {
 }
 
 export function loginMicrosoft(): Promise<boolean> {
-  return runTask('login', async () => {
-    const result = await api.authLogin();
-    if (!result.ok) {
-      log(`Erreur de connexion : ${result.error}`, 'error');
-      toast(result.error, 'error');
-      return false;
-    }
-    applySession(await api.authGetSession(), `Connecté en tant que ${result.profile.name}.`);
+  return runTask('login', 'Erreur de connexion', async () => {
+    const profile = await api.authLogin();
+    applySession(await api.authGetSession(), `Connecté en tant que ${profile.name}.`);
     return true;
   });
 }

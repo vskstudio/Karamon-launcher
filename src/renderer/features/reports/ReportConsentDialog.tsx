@@ -12,14 +12,22 @@ async function answer(request: ReportConsentRequest, send: boolean, always: bool
   takeConsentRequest(request.reportId);
   try {
     const result = await api.answerReportConsent({ reportId: request.reportId, send, always: send && always });
-    if (send && always && config.value) config.value = { ...config.value, autoSendReports: true };
+    if (send && always && !result.autoSendNotSaved && config.value) config.value = { ...config.value, autoSendReports: true };
     const message = reportResultMessage(result);
-    if (!send || !message) return;
-    const tone = message.tone === 'ok' ? 'success' : 'info';
-    toast(message.text, tone);
-    log(message.text, tone);
-  } catch {
-    return;
+    if (send && message) {
+      const tone = message.tone === 'ok' ? 'success' : 'info';
+      toast(message.text, tone);
+      log(message.text, tone);
+    }
+    if (result.autoSendNotSaved) {
+      const text = `Envoi automatique non enregistré : ${result.autoSendNotSaved}`;
+      toast(text, 'error');
+      log(text, 'error');
+    }
+  } catch (error) {
+    const text = `Réponse au rapport impossible : ${error instanceof Error ? error.message : String(error)}`;
+    toast(text, 'error');
+    log(text, 'error');
   }
 }
 

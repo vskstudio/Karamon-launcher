@@ -18,8 +18,8 @@ export class ReportQueue {
   private readonly dir: string;
   private readonly metaFile: string;
 
-  constructor(dataDir: string) {
-    this.dir = path.join(dataDir, 'reports');
+  constructor(reportsDir: string) {
+    this.dir = reportsDir;
     this.metaFile = path.join(this.dir, 'state.json');
   }
 

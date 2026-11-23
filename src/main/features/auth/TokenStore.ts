@@ -1,7 +1,6 @@
-import fs from 'fs';
-import path from 'path';
 import { app, safeStorage } from 'electron/main';
-import type { MinecraftProfile } from '../../../ipc/contract';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 interface StoredSession {
   refreshTokenEnc: string;
@@ -10,7 +9,11 @@ interface StoredSession {
 }
 
 export class TokenStore {
-  constructor(private readonly file: string) {}
+  private readonly file: JsonFile<StoredSession>;
+
+  constructor(file: string) {
+    this.file = new JsonFile(file, TokenStore.decode, { whenUnreadable: 'replace' });
+  }
 
   static preferLinuxSecretService(): void {
     if (process.platform !== 'linux') return;
@@ -24,8 +27,7 @@ export class TokenStore {
     }
     const encrypted = (await safeStorage.encryptStringAsync(refreshToken)).toString('base64');
     const data: StoredSession = { refreshTokenEnc: encrypted, profile, savedAt: Date.now() };
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(data, null, 2), 'utf8');
+    this.file.write(data);
   }
 
   storedProfile(): MinecraftProfile | null {
@@ -45,18 +47,18 @@ export class TokenStore {
   }
 
   clear(): void {
-    if (fs.existsSync(this.file)) fs.unlinkSync(this.file);
+    this.file.remove();
   }
 
   private read(): StoredSession | null {
-    if (!fs.existsSync(this.file)) return null;
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as StoredSession;
-      if (!raw?.refreshTokenEnc || !raw?.profile?.id || !raw?.profile?.name) return null;
-      return raw;
-    } catch {
-      return null;
-    }
+    const state = this.file.read();
+    return state.kind === 'read' ? state.value : null;
+  }
+
+  private static decode(raw: unknown): StoredSession {
+    const stored = jsonObject(raw) as Partial<StoredSession>;
+    if (!stored.refreshTokenEnc || !stored.profile?.id || !stored.profile?.name) throw new Error('session incomplète');
+    return stored as StoredSession;
   }
 
   private static async encryptionAvailable(): Promise<boolean> {

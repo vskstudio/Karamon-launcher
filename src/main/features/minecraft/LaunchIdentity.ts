@@ -1,16 +1,11 @@
-import type { ActiveSession } from '../auth/AuthSession';
-import type { ArgumentVars } from './ArgumentResolver';
+import type { ActiveSession } from '../auth/AuthSession.ts';
+import type { ArgumentVars } from './ArgumentResolver.ts';
 
 export type LaunchIdentity = Pick<
   ArgumentVars,
   'authPlayerName' | 'authUuid' | 'authAccessToken' | 'authXuid' | 'clientId' | 'userType'
 >;
 
-/**
- * Who the game plays as: --username, --uuid (dashed), --accessToken and --userType. A Microsoft account passes its
- * Minecraft token and `msa`; an offline account passes its offline UUID, a placeholder token and `legacy`, so the game
- * never calls Mojang with it (no profile keys, no session join: the Karamon server skips that check for it).
- */
 export function launchIdentity(session: Pick<ActiveSession, 'profile' | 'accessToken' | 'userType'>): LaunchIdentity {
   return {
     authPlayerName: session.profile.name,

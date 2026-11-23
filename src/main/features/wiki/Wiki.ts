@@ -1,9 +1,11 @@
-import type { WikiGroup, WikiPage } from '../../../ipc/contract.ts';
+import { WIKI_SLUG } from '../../../shared/WikiSlug.ts';
+import type { WikiGroup, WikiPage } from './WikiTypes.ts';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import { JsonFileCache } from '../../shared/JsonFileCache.ts';
-import { parseWikiIndex, parseWikiPage, WIKI_ORIGIN, WIKI_SLUG } from './WikiParser.ts';
+import { parseWikiIndex, parseWikiPage } from './WikiParser.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
-const WIKI_FETCH_TIMEOUT_MS = 8000;
+const WIKI_FETCH_TOTAL_TIMEOUT_MS = 8000;
 const INDEX_CACHE_NAME = 'index';
 const HTTP_NOT_FOUND = 404;
 const PAGE_GONE = Symbol('page-gone');
@@ -21,7 +23,7 @@ export class Wiki {
 
   async index(): Promise<WikiGroup[]> {
     if (this.freshIndex) return this.freshIndex;
-    const html = await this.fetchHtml(`${WIKI_ORIGIN}/wiki`);
+    const html = await this.fetchHtml(KARAMON.wikiUrl);
     const groups = typeof html === 'string' ? parseWikiIndex(html) : [];
     if (groups.length === 0) return this.disk.read<WikiGroup[]>(INDEX_CACHE_NAME) ?? [];
     this.freshIndex = groups;
@@ -33,7 +35,7 @@ export class Wiki {
     if (!WIKI_SLUG.test(slug)) return null;
     const known = this.freshPages.get(slug);
     if (known) return known;
-    const html = await this.fetchHtml(`${WIKI_ORIGIN}/wiki/${slug}`);
+    const html = await this.fetchHtml(`${KARAMON.wikiUrl}/${slug}`);
     if (html === PAGE_GONE) return null;
     const page = html ? parseWikiPage(slug, html) : null;
     const cacheName = `page-${slug}`;
@@ -45,7 +47,7 @@ export class Wiki {
 
   private async fetchHtml(url: string): Promise<string | typeof PAGE_GONE | null> {
     try {
-      const response = await this.http.get(url, { timeoutMs: WIKI_FETCH_TIMEOUT_MS });
+      const response = await this.http.get(url, { totalTimeoutMs: WIKI_FETCH_TOTAL_TIMEOUT_MS });
       if (response.status === HTTP_NOT_FOUND) return PAGE_GONE;
       if (response.status < 200 || response.status >= 300) return null;
       return response.body.toString('utf8');

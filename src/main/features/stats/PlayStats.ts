@@ -1,6 +1,11 @@
-import fs from 'fs';
-import path from 'path';
-import type { PlayStats as PlayStatsData } from '../../../ipc/contract';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
+
+export interface PlayStatsData {
+  totalPlayMs: number;
+  sessions: number;
+  lastPlayedAt: number | null;
+  firstPlayedAt: number | null;
+}
 
 const EMPTY: PlayStatsData = {
   totalPlayMs: 0,
@@ -10,30 +15,28 @@ const EMPTY: PlayStatsData = {
 };
 
 export class PlayStats {
-  private readonly file: string;
+  private readonly file: JsonFile<PlayStatsData>;
   private sessionStart: number | null = null;
 
-  constructor(dataDir: string) {
-    this.file = path.join(dataDir, 'stats.json');
+  constructor(statsFile: string) {
+    this.file = new JsonFile(statsFile, PlayStats.decode, {
+      whenUnreadable: 'set-aside',
+      indented: false,
+    });
   }
 
   read(): PlayStatsData {
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<PlayStatsData>;
-      return {
-        totalPlayMs: typeof raw.totalPlayMs === 'number' ? raw.totalPlayMs : 0,
-        sessions: typeof raw.sessions === 'number' ? raw.sessions : 0,
-        lastPlayedAt: typeof raw.lastPlayedAt === 'number' ? raw.lastPlayedAt : null,
-        firstPlayedAt: typeof raw.firstPlayedAt === 'number' ? raw.firstPlayedAt : null,
-      };
-    } catch {
-      return { ...EMPTY };
-    }
+    const state = this.file.read();
+    return state.kind === 'read' ? state.value : { ...EMPTY };
   }
 
   startSession(): void {
+    const stats = this.readForUpdate();
+    if (!stats) {
+      this.sessionStart = null;
+      return;
+    }
     this.sessionStart = Date.now();
-    const stats = this.read();
     if (!stats.firstPlayedAt) stats.firstPlayedAt = this.sessionStart;
     stats.lastPlayedAt = this.sessionStart;
     stats.sessions = stats.sessions + 1;
@@ -42,7 +45,11 @@ export class PlayStats {
 
   endSession(): PlayStatsData {
     if (!this.sessionStart) return this.read();
-    const stats = this.read();
+    const stats = this.readForUpdate();
+    if (!stats) {
+      this.sessionStart = null;
+      return this.read();
+    }
     stats.totalPlayMs += Date.now() - this.sessionStart;
     this.sessionStart = null;
     this.write(stats);
@@ -54,12 +61,27 @@ export class PlayStats {
     return { ...EMPTY };
   }
 
+  private readForUpdate(): PlayStatsData | null {
+    const state = this.file.read();
+    if (state.kind === 'unreadable' && state.cause === 'io') return null;
+    return state.kind === 'read' ? state.value : { ...EMPTY };
+  }
+
   private write(data: PlayStatsData): void {
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this.file, JSON.stringify(data), 'utf8');
+      this.file.write(data);
     } catch {
-      /* best-effort */
+      return;
     }
+  }
+
+  private static decode(raw: unknown): PlayStatsData {
+    const data = jsonObject(raw);
+    return {
+      totalPlayMs: typeof data.totalPlayMs === 'number' ? data.totalPlayMs : 0,
+      sessions: typeof data.sessions === 'number' ? data.sessions : 0,
+      lastPlayedAt: typeof data.lastPlayedAt === 'number' ? data.lastPlayedAt : null,
+      firstPlayedAt: typeof data.firstPlayedAt === 'number' ? data.firstPlayedAt : null,
+    };
   }
 }

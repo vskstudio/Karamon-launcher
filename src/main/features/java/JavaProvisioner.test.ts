@@ -6,7 +6,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { JavaProvisioner } from './JavaProvisioner.ts';
-import type { JavaDetector } from './JavaDetector.ts';
+import type { JavaInstall } from './JavaRuntime.ts';
 import type { DownloadOptions, HttpClient } from '../../shared/HttpClient.ts';
 import { Paths } from '../../shared/Paths.ts';
 
@@ -81,7 +81,7 @@ function provision(
   dir: string,
   layout: JreLayout,
   adoptiumSendsChecksum: boolean,
-  installed: { path: string; version: string; vendor: string }[] = [],
+  installed: JavaInstall[] = [],
 ): Provisioning {
   const archive = buildJreArchive(dir, layout);
   const checksum = adoptiumSendsChecksum
@@ -103,7 +103,7 @@ function provision(
       fs.copyFileSync(archive, dest);
     },
   } as unknown as HttpClient;
-  const detector = { detect: async () => installed } as unknown as JavaDetector;
+  const detector = { detect: async () => installed, invalidate: () => {} };
   const paths = new Paths(path.join(dir, 'launcher'));
   const javaPath = asPlatform(layout, () =>
     new JavaProvisioner(paths, http, detector).ensure(undefined, () => {}, () => {}),
@@ -151,7 +151,7 @@ test(
   { skip: process.platform === 'win32' },
   () =>
     inTempDir(async (dir) => {
-      const run = provision(dir, LINUX_X64, true, [{ path: '/usr/lib/jvm/java-26/bin/java', version: '26', vendor: 'Oracle' }]);
+      const run = provision(dir, LINUX_X64, true, [{ path: '/usr/lib/jvm/java-26/bin/java', version: '26', major: 26, vendor: 'Oracle' }]);
 
       const javaPath = await run.javaPath;
 

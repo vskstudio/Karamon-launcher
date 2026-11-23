@@ -1,7 +1,7 @@
-import fs from 'fs';
 import path from 'path';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
-const DEFAULT_MEMORY_MB = 12288;
 const PROFILE_FILE_VERSION = 3;
 const BASE_JVM_FLAGS = '-Xms512m -XX:+UseG1GC -XX:MaxGCPauseMillis=50';
 
@@ -32,11 +32,13 @@ interface ProfileFile {
 
 export class LauncherProfile {
   private readonly dir: string;
-  private readonly file: string;
+  private readonly file: JsonFile<ProfileFile>;
 
   constructor(mcLauncherDir: string) {
     this.dir = mcLauncherDir;
-    this.file = path.join(mcLauncherDir, 'launcher_profiles.json');
+    this.file = new JsonFile(path.join(mcLauncherDir, 'launcher_profiles.json'), LauncherProfile.decode, {
+      whenUnreadable: 'refuse',
+    });
   }
 
   ensure({ name, versionId, gameDir, memoryMb, jvmArgs }: ProfileSpec): void {
@@ -46,7 +48,7 @@ export class LauncherProfile {
     const now = new Date().toISOString();
 
     const existingKey = Object.keys(data.profiles).find(
-      (k) => k === name || data.profiles[k].name === name,
+      (k) => k === name || data.profiles[k]?.name === name,
     );
 
     const profile: ProfileEntry = existingKey
@@ -61,24 +63,22 @@ export class LauncherProfile {
 
     data.profiles[existingKey ?? name] = profile;
 
-    fs.mkdirSync(this.dir, { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(data, null, 2), 'utf8');
+    this.file.write(data);
   }
 
   private read(): ProfileFile {
-    const fallback: ProfileFile = { profiles: {}, settings: {}, version: PROFILE_FILE_VERSION };
-    if (!fs.existsSync(this.file)) return fallback;
-    try {
-      const data = JSON.parse(fs.readFileSync(this.file, 'utf8')) as ProfileFile;
-      if (!data.profiles) data.profiles = {};
-      return data;
-    } catch {
-      return fallback;
-    }
+    return this.file.readForUpdate() ?? { profiles: {}, settings: {}, version: PROFILE_FILE_VERSION };
+  }
+
+  private static decode(raw: unknown): ProfileFile {
+    const data = jsonObject(raw);
+    if (data.profiles === undefined) return { ...data, profiles: {} };
+    jsonObject(data.profiles);
+    return data as unknown as ProfileFile;
   }
 
   private static buildJavaArgs(memoryMb: number, extra: string): string {
-    const heap = `-Xmx${memoryMb || DEFAULT_MEMORY_MB}m`;
+    const heap = `-Xmx${memoryMb || KARAMON.defaultMemoryMb}m`;
     const base = `${heap} ${BASE_JVM_FLAGS}`;
     return extra ? `${base} ${extra}` : base;
   }

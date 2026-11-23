@@ -1,6 +1,6 @@
 import { BrowserWindow, session } from 'electron/main';
 import { randomUUID } from 'crypto';
-import { classifyCheckoutUrl } from './CheckoutNavigation';
+import { classifyCheckoutUrl } from './CheckoutNavigation.ts';
 
 export type CheckoutOutcome = 'paid' | 'cancelled' | 'failed';
 

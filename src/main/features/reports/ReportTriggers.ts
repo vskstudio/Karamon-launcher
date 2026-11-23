@@ -1,10 +1,9 @@
-import { EARLY_CRASH_WINDOW_MS } from '../integrity/CrashDiagnosis.ts';
+import { isEarlyCrash } from '../integrity/CrashDiagnosis.ts';
 import type { ReportTrigger } from './ReportTypes.ts';
 
 export type LaunchPhase = 'sync' | 'launch';
 export type AutomaticTrigger = Exclude<ReportTrigger, 'manual'>;
 
-/** Erreur du bouton Jouer qui dit quelle phase a échoué, sans dépendre du texte affiché. */
 export class LaunchPhaseError extends Error {
   readonly phase: LaunchPhase;
 
@@ -15,7 +14,6 @@ export class LaunchPhaseError extends Error {
   }
 }
 
-/** Trigger d'une sortie de Minecraft ; null pour une fermeture normale, même terminée par un crash natif. */
 export function exitTrigger(
   code: number | null,
   startedAt: number,
@@ -23,7 +21,7 @@ export function exitTrigger(
   stoppedCleanly = false,
 ): 'crash_early' | 'crash' | null {
   if (code === 0 || stoppedCleanly) return null;
-  return endedAt - startedAt <= EARLY_CRASH_WINDOW_MS ? 'crash_early' : 'crash';
+  return isEarlyCrash(code, startedAt, endedAt) ? 'crash_early' : 'crash';
 }
 
 export function failureTrigger(error: unknown): 'sync_failed' | 'launch_failed' {

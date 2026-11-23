@@ -1,8 +1,9 @@
 import { api } from '../../state/api';
 import { navigate } from '../../state/navigation';
+import { KARAMON } from '../../../shared/Karamon';
 
-const WIKI_HOST = 'karamon.fr';
-export const WIKI_SITE = 'https://karamon.fr/wiki/';
+const WIKI_HOST = KARAMON.websiteHost;
+export const WIKI_SITE = `${KARAMON.wikiUrl}/`;
 
 export interface WikiTarget {
   slug: string | null;

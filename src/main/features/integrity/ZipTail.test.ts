@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { findZipEnd, hasValidZipEnd, isArchiveName } from './ZipTail.ts';
+import { hasValidZipEnd, isArchiveName } from './ZipTail.ts';
 
 function jarBytes(): Buffer {
   const zip = new AdmZip();
@@ -41,17 +41,6 @@ test('rejette une archive tronquée, un fichier vide ou absent', () => {
   assert.equal(hasValidZipEnd(empty), false);
   assert.equal(hasValidZipEnd(path.join(dir, 'absent.zip')), false);
   fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('trouve la fin de répertoire central malgré un commentaire', () => {
-  const zip = new AdmZip();
-  zip.addFile('x.txt', Buffer.from('x'));
-  zip.addZipComment('commentaire du pack');
-  const bytes = zip.toBuffer();
-  const end = findZipEnd(bytes, bytes.length);
-  assert.ok(end);
-  assert.equal(bytes.readUInt32LE(end.centralOffset), 0x02014b50);
-  assert.equal(findZipEnd(Buffer.alloc(64), 64), null);
 });
 
 test('ne contrôle que les .jar et .zip', () => {

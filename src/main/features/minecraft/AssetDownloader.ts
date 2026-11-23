@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import type { HttpClient } from '../../shared/HttpClient';
-import type { MojangAssetIndex } from './VersionResolver';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { MojangAssetIndex } from './VersionResolver.ts';
+import { cachedJsonText, sha1Matches } from './CachedJson.ts';
 
 const RESOURCES_BASE = 'https://resources.download.minecraft.net';
 const CONCURRENCY = 16;
@@ -23,18 +24,17 @@ export class AssetDownloader {
     onProgress?: (fraction: number, label: string) => void,
   ): Promise<void> {
     const indexPath = path.join(assetsDir, 'indexes', `${index.id}.json`);
-    fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-
-    let indexText: string;
-    if (fs.existsSync(indexPath)) {
-      indexText = fs.readFileSync(indexPath, 'utf8');
-    } else {
-      indexText = await this.http.getText(index.url);
-      fs.writeFileSync(indexPath, indexText, 'utf8');
-    }
+    const indexText = await cachedJsonText(
+      indexPath,
+      (json, text) => !!json.objects && typeof json.objects === 'object' && sha1Matches(text, index.sha1),
+      async () => {
+        const text = await this.http.getText(index.url);
+        if (!sha1Matches(text, index.sha1)) throw new Error(`Index des assets ${index.id} : empreinte SHA-1 invalide`);
+        return text;
+      },
+    );
 
     const parsed = JSON.parse(indexText) as AssetIndex;
-    // Several names can share one object: two workers on the same hash race on its .tmp file.
     const hashes = [...new Set(Object.values(parsed.objects).map((info) => info.hash))];
     const objectsDir = path.join(assetsDir, 'objects');
 

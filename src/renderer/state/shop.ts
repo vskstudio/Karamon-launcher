@@ -42,11 +42,13 @@ export async function loadCatalog(force = false): Promise<void> {
   }
 }
 
-export async function checkout(offer: ShopOffer, playerName: string): Promise<ShopCheckoutResult> {
+export type CheckoutOutcome = ShopCheckoutResult | { status: 'error'; error: string };
+
+export async function checkout(offer: ShopOffer, playerName: string): Promise<CheckoutOutcome> {
   if (checkoutPending.value) return { status: 'error', error: 'Un paiement est déjà en cours.' };
   checkoutPending.value = true;
   log(`Boutique : paiement de « ${offer.name} » ouvert pour ${playerName}.`, 'info');
-  let result: ShopCheckoutResult;
+  let result: CheckoutOutcome;
   try {
     result = await api.shopCheckout(offer.id);
   } catch (error) {
@@ -58,7 +60,7 @@ export async function checkout(offer: ShopOffer, playerName: string): Promise<Sh
   return result;
 }
 
-function reportCheckout(offer: ShopOffer, playerName: string, result: ShopCheckoutResult): void {
+function reportCheckout(offer: ShopOffer, playerName: string, result: CheckoutOutcome): void {
   if (result.status === 'paid') {
     const message =
       offer.lumis > 0
