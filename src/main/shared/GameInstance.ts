@@ -38,6 +38,7 @@ export class GameInstance {
   readonly potatoState: string;
   readonly modTogglesState: string;
   readonly legacySodiumState: string;
+  readonly legacyClientOptions: string;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -60,6 +61,7 @@ export class GameInstance {
     this.potatoState = path.join(dir, '.karamon-potato-state.json');
     this.modTogglesState = path.join(dir, '.karamon-mod-toggles.json');
     this.legacySodiumState = path.join(dir, '.karamon-sodium-state.json');
+    this.legacyClientOptions = path.join(dir, '.karamon-client-options.json');
   }
 
   relative(file: string): string {

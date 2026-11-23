@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 import { PackServer, RELEASE_BASE, jarOf, launcherHarness, publishPack, sha1Of, zipOf } from './PackServer.fixture.ts';
+import { ModpackSync, type SyncRequest } from './ModpackSync.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
+import { writeInstalledPack, readInstalledPack } from './InstalledPack.ts';
 
 test('installe les mods et les assets depuis les deux archives, puis ne retélécharge rien', async () => {
   const server = new PackServer({ ranges: false });
@@ -156,6 +160,58 @@ test('un état de synchronisation tronqué ne bloque pas : le pack est revérifi
   await h.sync();
   assert.deepEqual(server.stats.downloads, []);
   h.cleanup();
+});
+
+function directSync(server: PackServer, game: string, sync: ModpackSync, onStatus: (line: string) => void = () => undefined) {
+  const request: SyncRequest = {
+    baseUrl: server.base,
+    instance: new GameInstance(game),
+    parkedJars: new Set(),
+    playerSettings: { setRevision: () => undefined, keepSettings: async () => true },
+    onStatus,
+    onProgress: () => undefined,
+  };
+  return sync.sync(request);
+}
+
+test('après la mise à jour du launcher, le pack déjà installé garde ses options client de l’ancien format', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const statePath = path.join(h.game, '.karamon-sync-cache.json');
+  const { clientOptions, ...oldFormat } = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  assert.ok(clientOptions);
+  fs.writeFileSync(statePath, JSON.stringify(oldFormat));
+  const installedOptions = { ...clientOptions, shaderPack: 'KARAMON - Shader installé', shaderRevision: 7 };
+  fs.writeFileSync(path.join(h.game, '.karamon-client-options.json'), JSON.stringify(installedOptions));
+  const bundled = { resourcePacks: ['vanilla'], shaderPack: 'COPIE EMBARQUÉE', enableShaders: false, shaderRevision: 0 };
+
+  server.resetStats();
+  const result = await directSync(server, h.game, new ModpackSync({ http: server.http, fallbackClientOptions: bundled }));
+
+  assert.deepEqual(server.stats.downloads, []);
+  assert.equal(result.clientOptions?.shaderPack, 'KARAMON - Shader installé');
+  assert.equal(result.clientOptions?.shaderRevision, 7);
+  h.cleanup();
+});
+
+test('l’ancien fichier d’options client disparaît une fois l’état réécrit, sans perdre les options', () => {
+  const game = makeTempDir('karamon-client-options-');
+  const instance = new GameInstance(game);
+  const legacy = { resourcePacks: ['vanilla', 'file/Karamon UI'], shaderPack: 'KARAMON - Shader', enableShaders: true, shaderRevision: 3 };
+  fs.writeFileSync(instance.syncState, JSON.stringify({ modsEtag: 'abc', jarNames: ['a.jar'] }));
+  fs.writeFileSync(instance.legacyClientOptions, JSON.stringify(legacy));
+
+  const read = readInstalledPack(instance);
+  assert.equal(read.kind, 'read');
+  if (read.kind !== 'read') return;
+  assert.equal(read.pack.clientOptions?.shaderRevision, 3);
+  writeInstalledPack(instance, read.pack, Date.now());
+
+  assert.equal(fs.existsSync(instance.legacyClientOptions), false);
+  const reread = readInstalledPack(instance);
+  assert.equal(reread.kind === 'read' && reread.pack.clientOptions?.shaderRevision, 3);
 });
 
 class AdmZipView {

@@ -73,7 +73,16 @@ export function readInstalledPack(instance: GameInstance): InstalledPackRead {
     return { kind: 'unreadable', reason: (e as Error).message };
   }
   if (!stored || typeof stored !== 'object') return { kind: 'unreadable', reason: 'pas un objet JSON' };
+  if (stored.clientOptions === undefined) stored.clientOptions = legacyClientOptions(instance);
   return { kind: 'read', pack: fromStored(stored) };
+}
+
+function legacyClientOptions(instance: GameInstance): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(instance.legacyClientOptions, 'utf8'));
+  } catch {
+    return undefined;
+  }
 }
 
 export function installedPackOrEmpty(read: InstalledPackRead): InstalledPack {
@@ -88,6 +97,7 @@ export function installedPackJars(instance: GameInstance): Set<string> | null {
 
 export function writeInstalledPack(instance: GameInstance, pack: InstalledPack, now: number): void {
   writeFileAtomic(instance.syncState, JSON.stringify(toStored(pack, now)));
+  fs.rmSync(instance.legacyClientOptions, { force: true });
 }
 
 function emptyInstalledPack(): InstalledPack {
