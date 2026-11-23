@@ -82,9 +82,17 @@ export class ReportManager {
       this.options.queue.remove(reportId);
       return result('skipped', item.report);
     }
-    if (always) this.options.setAutoSend(true);
     this.options.queue.approve(reportId);
-    return await this.deliver(item.report);
+    const sent = await this.deliver(item.report);
+    if (!always) return sent;
+    try {
+      this.options.setAutoSend(true);
+      return sent;
+    } catch (error) {
+      const reason = (error as Error).message;
+      this.log(`Envoi automatique des rapports non enregistré: ${reason}`);
+      return { ...sent, autoSendNotSaved: reason };
+    }
   }
 
   private async collect(trigger: ReportTrigger, summary: string[], since?: number): Promise<LauncherReport> {

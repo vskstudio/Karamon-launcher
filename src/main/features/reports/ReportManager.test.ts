@@ -17,6 +17,7 @@ function setup() {
   const consent: Array<{ reportId: string; trigger: ReportTrigger; summary: string[] }> = [];
   const logs: string[] = [];
   let duringSend: (report: LauncherReport) => void = () => {};
+  let autoSendRefusal: Error | null = null;
   const manager = new ReportManager({
     collector: {
       collect: async ({ trigger, summary }): Promise<LauncherReport> => ({
@@ -29,7 +30,10 @@ function setup() {
     transport: { send: async (report) => { duringSend(report); return transport; } },
     context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => automatic,
-    setAutoSend: (value) => { automatic = value; },
+    setAutoSend: (value) => {
+      if (autoSendRefusal) throw autoSendRefusal;
+      automatic = value;
+    },
     requestConsent: (request) => { consent.push(request); },
     log: (message) => { logs.push(message); },
   });
@@ -38,6 +42,7 @@ function setup() {
     automatic: () => automatic,
     setTransport: (value: typeof transport) => { transport = value; },
     setDuringSend: (hook: typeof duringSend) => { duringSend = hook; },
+    refuseAutoSend: (error: Error) => { autoSendRefusal = error; },
   };
 }
 
@@ -64,6 +69,23 @@ test('toujours envoyer active le réglage et garde hors-ligne le même code', as
   const second = await f.manager.detect('sync_failed', ['Réseau']);
   assert.equal(second.status, 'queued');
   assert.equal(f.consent.length, 1, 'plus de dialogue en mode automatique');
+  fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('toujours envoyer avec une config illisible envoie quand même le rapport et signale le réglage non enregistré', async () => {
+  const f = setup();
+  const sent: string[] = [];
+  f.setDuringSend((report) => sent.push(report.reportId));
+  f.refuseAutoSend(new Error('Tes réglages sont illisibles pour l\'instant (fichier verrouillé ?). Réessaie dans un instant.'));
+  await f.manager.detect('crash', ['Erreur GPU']);
+
+  const result = await f.manager.answerConsent(f.consent[0].reportId, true, true);
+
+  assert.equal(result.status, 'sent');
+  assert.deepEqual(sent, ['12345671-e89b-42d3-a456-426614174000']);
+  assert.equal(f.queue.list().length, 0);
+  assert.equal(f.automatic(), false);
+  assert.match(result.autoSendNotSaved ?? '', /Tes réglages sont illisibles/);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
 

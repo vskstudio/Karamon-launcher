@@ -34,6 +34,7 @@ export type ReportSendStatus = 'sent' | 'queued' | 'skipped' | 'failed';
 export interface ReportSendResult {
   status: ReportSendStatus;
   code?: string;
+  autoSendNotSaved?: string;
 }
 
 export interface ReportConsentRequest {
