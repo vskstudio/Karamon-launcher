@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import fs from 'fs';
 import path from 'path';
 import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore.ts';
+import { UnreadableFileError } from '../../shared/DurableFile.ts';
 import { makeTempDir } from '../../shared/TempDir.fixture.ts';
+import { cannotMakeFilesInaccessible, makeAccessible, makeInaccessible } from '../../shared/Inaccessible.fixture.ts';
 
 function tempStore(): { store: AccountStore; file: string } {
   const dir = makeTempDir('karamon-accounts-');
@@ -76,4 +78,18 @@ test('entries with an invalid name are dropped and the UUID is recomputed from t
     }),
   );
   assert.deepEqual(store.load().offline, [{ id: 'b50ad385-829d-3141-a216-7e7d7539ba7f', name: 'Notch' }]);
+});
+
+test('an accounts file that cannot be read is left untouched when adding an account', { skip: cannotMakeFilesInaccessible }, () => {
+  const { store, file } = tempStore();
+  const original = JSON.stringify({ active: null, offline: [{ name: 'Kara_42' }] });
+  fs.writeFileSync(file, original);
+
+  makeInaccessible(file);
+  assert.throws(() => store.addOffline('Steve'), UnreadableFileError);
+  makeAccessible(file);
+
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ['accounts.json']);
+  assert.deepEqual(store.load().offline.map((a) => a.name), ['Kara_42']);
 });

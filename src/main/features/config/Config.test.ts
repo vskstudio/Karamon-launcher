@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Config } from './Config.ts';
 import { makeTempDir } from '../../shared/TempDir.fixture.ts';
+import { cannotMakeFilesInaccessible, makeAccessible, makeInaccessible } from '../../shared/Inaccessible.fixture.ts';
 
 function tempConfig(raw?: object): Config {
   const dir = makeTempDir('karamon-config-');
@@ -52,4 +53,59 @@ test('the automatic report consent is saved and read back', () => {
   const config = tempConfig();
   config.set({ autoSendReports: true });
   assert.equal(config.get().autoSendReports, true);
+});
+
+test('a config that cannot be read at startup is reread before saving, never replaced by the defaults', { skip: cannotMakeFilesInaccessible }, () => {
+  const dir = makeTempDir('karamon-config-');
+  const file = path.join(dir, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ mcGameDir: 'D:\\Jeux\\Karamon', memoryMb: 8192 }), 'utf8');
+  const logged: string[] = [];
+
+  makeInaccessible(file);
+  const config = new Config(file, (message) => logged.push(message)).load();
+  makeAccessible(file);
+  config.set({ potatoMode: true });
+
+  const saved = new Config(file, () => {}).load().get();
+  assert.equal(saved.mcGameDir, 'D:\\Jeux\\Karamon');
+  assert.equal(saved.memoryMb, 8192);
+  assert.equal(saved.potatoMode, true);
+  assert.equal(config.get().mcGameDir, 'D:\\Jeux\\Karamon');
+  assert.ok(!logged.some((message) => message.includes('gardera l\'ancien fichier')));
+});
+
+test('a config that stays unreadable is not overwritten, and the change is saved once it can be read again', { skip: cannotMakeFilesInaccessible }, () => {
+  const dir = makeTempDir('karamon-config-');
+  const file = path.join(dir, 'config.json');
+  const original = JSON.stringify({ mcGameDir: 'D:\\Jeux\\Karamon' });
+  fs.writeFileSync(file, original, 'utf8');
+  const logged: string[] = [];
+
+  makeInaccessible(file);
+  const config = new Config(file, (message) => logged.push(message)).load();
+  config.set({ potatoMode: true });
+  assert.equal(config.get().potatoMode, true);
+  makeAccessible(file);
+
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+  assert.deepEqual(fs.readdirSync(dir), ['config.json']);
+  assert.ok(logged.some((message) => message.includes('pas encore enregistrée')));
+
+  const reread = config.get();
+  assert.equal(reread.mcGameDir, 'D:\\Jeux\\Karamon');
+  assert.equal(reread.potatoMode, true);
+  assert.equal(new Config(file, () => {}).load().get().potatoMode, true);
+});
+
+test('a config that could not be read at startup is used as soon as it can be read again', { skip: cannotMakeFilesInaccessible }, () => {
+  const dir = makeTempDir('karamon-config-');
+  const file = path.join(dir, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ mcGameDir: 'D:\\Jeux\\Karamon' }), 'utf8');
+
+  makeInaccessible(file);
+  const config = new Config(file, () => {}).load();
+  assert.equal(config.get().mcGameDir, '');
+  makeAccessible(file);
+
+  assert.equal(config.get().mcGameDir, 'D:\\Jeux\\Karamon');
 });

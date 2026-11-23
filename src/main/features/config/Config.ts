@@ -1,4 +1,4 @@
-import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
+import { JsonFile, UnreadableFileError, jsonObject, type UnreadableCause } from '../../shared/DurableFile.ts';
 import { KARAMON } from '../../../shared/Karamon.ts';
 
 export interface ServerInfo {
@@ -51,6 +51,8 @@ export class Config {
   private readonly file: JsonFile<AppConfig>;
   private readonly log: ConfigLog;
   private data: AppConfig | null = null;
+  private loadedFromDisk = false;
+  private unsavedUpdates: AppConfigUpdate[] = [];
 
   constructor(filePath: string, log: ConfigLog) {
     this.file = new JsonFile(filePath, (raw) => Config.normalize(Config.merge(DEFAULTS, jsonObject(raw) as AppConfigUpdate)), {
@@ -61,28 +63,56 @@ export class Config {
 
   load(): this {
     const state = this.file.read();
-    if (state.kind === 'unreadable') {
-      this.log(`Config ${this.file.path} illisible (${state.reason}), réglages par défaut utilisés jusqu'au prochain enregistrement, qui gardera l'ancien fichier à côté`);
-    }
+    this.loadedFromDisk = state.kind !== 'unreadable';
+    if (state.kind === 'unreadable') this.log(Config.unreadableMessage(this.file.path, state.cause, state.reason));
     this.data = state.kind === 'read' ? state.value : Config.clone(DEFAULTS);
     return this;
   }
 
-  private save(): void {
-    if (!this.data) return;
-    const { keptUnreadableAs } = this.file.write(this.data);
-    if (keptUnreadableAs) this.log(`Config illisible gardée sous ${keptUnreadableAs}`);
-  }
-
   get(): AppConfig {
     if (!this.data) this.load();
+    if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
     return Config.clone(this.data!);
   }
 
   set(updates: AppConfigUpdate): void {
     if (!this.data) this.load();
-    this.data = Config.normalize(Config.merge(this.data!, updates));
+    if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
+    this.data = Config.apply(this.data!, updates);
+    this.unsavedUpdates.push(updates);
     this.save();
+  }
+
+  private rereadIfNotLoadedYet(): void {
+    const state = this.file.read();
+    if (state.kind === 'unreadable') return;
+    if (state.kind === 'read') this.data = this.unsavedUpdates.reduce(Config.apply, state.value);
+    this.loadedFromDisk = true;
+    if (this.unsavedUpdates.length > 0) this.save();
+  }
+
+  private save(): void {
+    if (!this.data) return;
+    try {
+      const { keptUnreadableAs } = this.file.write(this.data);
+      this.loadedFromDisk = true;
+      this.unsavedUpdates = [];
+      if (keptUnreadableAs) this.log(`Config illisible gardée sous ${keptUnreadableAs}`);
+    } catch (e) {
+      if (!(e instanceof UnreadableFileError)) throw e;
+      this.log(`Config pas encore enregistrée, le réglage le sera dès que le fichier pourra être relu : ${e.message}`);
+    }
+  }
+
+  private static unreadableMessage(file: string, cause: UnreadableCause, reason: string): string {
+    if (cause === 'io') {
+      return `Config ${file} inaccessible (${reason}), réglages par défaut utilisés pour l'instant, le fichier sera relu dès que possible et jamais écrasé sans avoir été lu`;
+    }
+    return `Config ${file} illisible (${reason}), réglages par défaut utilisés jusqu'au prochain enregistrement, qui gardera l'ancien fichier à côté`;
+  }
+
+  private static apply(base: AppConfig, updates: AppConfigUpdate): AppConfig {
+    return Config.normalize(Config.merge(base, updates));
   }
 
   private static merge(base: AppConfig, raw: AppConfigUpdate): AppConfig {

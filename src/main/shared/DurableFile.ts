@@ -5,7 +5,9 @@ import { writeFileAtomic } from './AtomicWrite.ts';
 export type FileState<T> =
   | { readonly kind: 'missing' }
   | { readonly kind: 'read'; readonly value: T }
-  | { readonly kind: 'unreadable'; readonly reason: string };
+  | { readonly kind: 'unreadable'; readonly cause: UnreadableCause; readonly reason: string };
+
+export type UnreadableCause = 'io' | 'content';
 
 export type UnreadablePolicy = 'replace' | 'set-aside' | 'refuse';
 
@@ -32,6 +34,7 @@ export class DurableFile<T> {
   readonly path: string;
   private readonly codec: FileCodec<T>;
   private readonly whenUnreadable: UnreadablePolicy;
+  private unreadableSeenAtLastRead: string | null = null;
 
   constructor(filePath: string, codec: FileCodec<T>, whenUnreadable: UnreadablePolicy) {
     this.path = filePath;
@@ -40,17 +43,23 @@ export class DurableFile<T> {
   }
 
   read(): FileState<T> {
+    const state = this.readFromDisk();
+    this.unreadableSeenAtLastRead = state.kind === 'unreadable' ? state.reason : null;
+    return state;
+  }
+
+  private readFromDisk(): FileState<T> {
     let bytes: Buffer;
     try {
       bytes = fs.readFileSync(this.path);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' };
-      return { kind: 'unreadable', reason: reasonOf(e) };
+      return { kind: 'unreadable', cause: 'io', reason: reasonOf(e) };
     }
     try {
       return { kind: 'read', value: this.codec.decode(bytes) };
     } catch (e) {
-      return { kind: 'unreadable', reason: reasonOf(e) };
+      return { kind: 'unreadable', cause: 'content', reason: reasonOf(e) };
     }
   }
 
@@ -64,6 +73,7 @@ export class DurableFile<T> {
     const encoded = this.codec.encode(value);
     const keptUnreadableAs = this.makeWayForWrite();
     writeFileAtomic(this.path, encoded);
+    this.unreadableSeenAtLastRead = null;
     return { keptUnreadableAs };
   }
 
@@ -73,9 +83,12 @@ export class DurableFile<T> {
 
   private makeWayForWrite(): string | null {
     if (this.whenUnreadable === 'replace') return null;
-    const current = this.read();
-    if (current.kind !== 'unreadable') return null;
-    if (this.whenUnreadable === 'refuse') throw new UnreadableFileError(this.path, current.reason);
+    const current = this.readFromDisk();
+    if (current.kind === 'missing') return null;
+    if (current.kind === 'unreadable' && current.cause === 'io') throw new UnreadableFileError(this.path, current.reason);
+    const unreadableReason = current.kind === 'unreadable' ? current.reason : this.unreadableSeenAtLastRead;
+    if (unreadableReason === null) return null;
+    if (this.whenUnreadable === 'refuse') throw new UnreadableFileError(this.path, unreadableReason);
     const aside = `${this.path}.illisible-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     fs.renameSync(this.path, aside);
     return aside;

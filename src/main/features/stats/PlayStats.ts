@@ -31,8 +31,12 @@ export class PlayStats {
   }
 
   startSession(): void {
+    const stats = this.readForUpdate();
+    if (!stats) {
+      this.sessionStart = null;
+      return;
+    }
     this.sessionStart = Date.now();
-    const stats = this.read();
     if (!stats.firstPlayedAt) stats.firstPlayedAt = this.sessionStart;
     stats.lastPlayedAt = this.sessionStart;
     stats.sessions = stats.sessions + 1;
@@ -41,7 +45,11 @@ export class PlayStats {
 
   endSession(): PlayStatsData {
     if (!this.sessionStart) return this.read();
-    const stats = this.read();
+    const stats = this.readForUpdate();
+    if (!stats) {
+      this.sessionStart = null;
+      return this.read();
+    }
     stats.totalPlayMs += Date.now() - this.sessionStart;
     this.sessionStart = null;
     this.write(stats);
@@ -51,6 +59,12 @@ export class PlayStats {
   reset(): PlayStatsData {
     this.write({ ...EMPTY });
     return { ...EMPTY };
+  }
+
+  private readForUpdate(): PlayStatsData | null {
+    const state = this.file.read();
+    if (state.kind === 'unreadable' && state.cause === 'io') return null;
+    return state.kind === 'read' ? state.value : { ...EMPTY };
   }
 
   private write(data: PlayStatsData): void {
