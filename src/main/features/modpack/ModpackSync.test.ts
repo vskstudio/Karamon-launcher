@@ -214,6 +214,31 @@ test('l’ancien fichier d’options client disparaît une fois l’état rééc
   assert.equal(reread.kind === 'read' && reread.pack.clientOptions?.shaderRevision, 3);
 });
 
+test('les archives temporaires d’une synchronisation interrompue sont supprimées à la suivante', async () => {
+  const server = new PackServer({ ranges: false });
+  publishPack(server, { jars: { 'demo-mod-1.0.0.jar': jarOf('demo') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const instance = new GameInstance(h.game);
+  const leftovers = [
+    instance.tempFile('mods.zip') + '.tmp',
+    instance.tempFile('assets.zip'),
+    instance.tempFile('Karamon UI.zip', instance.resourcePacksDir),
+    instance.tempFile('KARAMON - Shader.zip', instance.shaderPacksDir) + '.tmp',
+  ];
+  for (const file of leftovers) fs.writeFileSync(file, Buffer.alloc(1024));
+  const kept = path.join(instance.resourcePacksDir, '.karamon-notes.txt');
+  fs.writeFileSync(kept, 'à garder');
+
+  const lines = await h.sync();
+
+  assert.deepEqual(leftovers.filter((file) => fs.existsSync(file)), []);
+  assert.ok(fs.existsSync(kept));
+  assert.ok(fs.existsSync(instance.syncState));
+  assert.ok(lines.some((line) => line.includes('4 fichier(s) temporaire(s)')));
+  h.cleanup();
+});
+
 class AdmZipView {
   private readonly files: Record<string, Buffer> = {};
 

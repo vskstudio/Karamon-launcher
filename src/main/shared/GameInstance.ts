@@ -17,6 +17,10 @@ export interface ModsListResult {
 
 let tempCounter = 0;
 
+const TEMP_PREFIX = '.karamon-';
+const TEMP_SUFFIX = '.tmp';
+const LEFTOVER_TEMP_FILE = /^\.karamon-\d+-\d+-\d+-.+\.tmp(\.tmp)?$/;
+
 export class GameInstance {
   readonly dir: string;
   readonly modsDir: string;
@@ -71,7 +75,23 @@ export class GameInstance {
   tempFile(label: string, inDir: string = this.dir): string {
     tempCounter = (tempCounter + 1) % 1_000_000;
     const unique = `${process.pid}-${Date.now()}-${tempCounter}`;
-    return resolveInside(inDir, `.karamon-${unique}-${path.basename(label)}.tmp`);
+    return resolveInside(inDir, `${TEMP_PREFIX}${unique}-${path.basename(label)}${TEMP_SUFFIX}`);
+  }
+
+  removeLeftoverTempFiles(): number {
+    let removed = 0;
+    for (const dir of [this.dir, this.resourcePacksDir, this.shaderPacksDir]) {
+      for (const name of filesIn(dir)) {
+        if (!isLeftoverTempFile(name)) continue;
+        try {
+          fs.rmSync(path.join(dir, name), { force: true });
+          removed++;
+        } catch {
+          continue;
+        }
+      }
+    }
+    return removed;
   }
 
   keptOverridesArchive(): string | null {
@@ -98,6 +118,18 @@ export class GameInstance {
         return { name: file.slice(0, -PARKED_JAR_SUFFIX.length), size, disabled: true };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
+function isLeftoverTempFile(name: string): boolean {
+  return LEFTOVER_TEMP_FILE.test(name);
+}
+
+function filesIn(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+  } catch {
+    return [];
   }
 }
 

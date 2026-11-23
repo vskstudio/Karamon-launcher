@@ -156,6 +156,8 @@ class SyncRun {
     for (const dir of [instance.modsDir, instance.resourcePacksDir, instance.shaderPacksDir]) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    const leftovers = instance.removeLeftoverTempFiles();
+    if (leftovers > 0) onStatus(`${leftovers} fichier(s) temporaire(s) d'une synchronisation interrompue supprimé(s).`);
     onStatus(this.req.verifyAll ? 'Vérification complète des fichiers du pack...' : 'Vérification du pack...');
     onProgress(0.02);
     try {
