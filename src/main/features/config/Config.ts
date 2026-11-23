@@ -60,7 +60,6 @@ export class Config {
   private data: AppConfig | null = null;
   private loadedFromDisk = false;
   private inaccessible = false;
-  private unsavedUpdates: AppConfigUpdate[] = [];
 
   constructor(filePath: string, log: ConfigLog) {
     this.file = new JsonFile(filePath, (raw) => Config.normalize(Config.merge(DEFAULTS, jsonObject(raw) as AppConfigUpdate)), {
@@ -93,36 +92,37 @@ export class Config {
   set(updates: AppConfigUpdate): void {
     if (!this.data) this.load();
     if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
-    this.data = Config.apply(this.data!, updates);
-    this.unsavedUpdates.push(updates);
-    this.save();
+    if (this.inaccessible) throw new ConfigNotReadYetError();
+    const next = Config.apply(this.data!, updates);
+    this.save(next);
+    this.data = next;
   }
 
   private rereadIfNotLoadedYet(): void {
     const state = this.file.read();
     this.inaccessible = state.kind === 'unreadable' && state.cause === 'io';
     if (state.kind === 'unreadable') return;
-    if (state.kind === 'read') this.data = this.unsavedUpdates.reduce(Config.apply, state.value);
+    if (state.kind === 'read') this.data = state.value;
     this.loadedFromDisk = true;
-    if (this.unsavedUpdates.length > 0) this.save();
   }
 
-  private save(): void {
-    if (!this.data) return;
+  private save(next: AppConfig): void {
     try {
-      const { keptUnreadableAs } = this.file.write(this.data);
+      const { keptUnreadableAs } = this.file.write(next);
       this.loadedFromDisk = true;
-      this.unsavedUpdates = [];
       if (keptUnreadableAs) this.log(`Config illisible gardée sous ${keptUnreadableAs}`);
     } catch (e) {
       if (!(e instanceof UnreadableFileError)) throw e;
-      this.log(`Config pas encore enregistrée, le réglage le sera dès que le fichier pourra être relu : ${e.message}`);
+      this.inaccessible = true;
+      this.loadedFromDisk = false;
+      this.log(`Config non enregistrée : ${e.message}`);
+      throw new ConfigNotReadYetError();
     }
   }
 
   private static unreadableMessage(file: string, cause: UnreadableCause, reason: string): string {
     if (cause === 'io') {
-      return `Config ${file} inaccessible (${reason}), réglages par défaut utilisés pour l'instant, le fichier sera relu dès que possible et jamais écrasé sans avoir été lu`;
+      return `Config ${file} inaccessible (${reason}), réglages par défaut utilisés pour l'instant, le fichier sera relu dès que possible et tout enregistrement est refusé d'ici là`;
     }
     return `Config ${file} illisible (${reason}), réglages par défaut utilisés jusqu'au prochain enregistrement, qui gardera l'ancien fichier à côté`;
   }

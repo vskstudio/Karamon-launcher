@@ -74,27 +74,23 @@ test('a config that cannot be read at startup is reread before saving, never rep
   assert.ok(!logged.some((message) => message.includes('gardera l\'ancien fichier')));
 });
 
-test('a config that stays unreadable is not overwritten, and the change is saved once it can be read again', { skip: cannotMakeFilesInaccessible }, () => {
+test('a config that stays unreadable refuses to save, and nothing changes in memory or on disk', { skip: cannotMakeFilesInaccessible }, () => {
   const dir = makeTempDir('karamon-config-');
   const file = path.join(dir, 'config.json');
   const original = JSON.stringify({ mcGameDir: 'D:\\Jeux\\Karamon' });
   fs.writeFileSync(file, original, 'utf8');
-  const logged: string[] = [];
 
   makeInaccessible(file);
-  const config = new Config(file, (message) => logged.push(message)).load();
-  config.set({ potatoMode: true });
-  assert.equal(config.get().potatoMode, true);
+  const config = new Config(file, () => {}).load();
+  assert.throws(() => config.set({ potatoMode: true }), ConfigNotReadYetError);
+  assert.equal(config.get().potatoMode, false);
   makeAccessible(file);
 
   assert.equal(fs.readFileSync(file, 'utf8'), original);
   assert.deepEqual(fs.readdirSync(dir), ['config.json']);
-  assert.ok(logged.some((message) => message.includes('pas encore enregistrée')));
-
   const reread = config.get();
   assert.equal(reread.mcGameDir, 'D:\\Jeux\\Karamon');
-  assert.equal(reread.potatoMode, true);
-  assert.equal(new Config(file, () => {}).load().get().potatoMode, true);
+  assert.equal(reread.potatoMode, false);
 });
 
 test('a config that could not be read at startup is used as soon as it can be read again', { skip: cannotMakeFilesInaccessible }, () => {
