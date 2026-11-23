@@ -71,3 +71,24 @@ test('une deuxième demande de synchronisation pendant la première la rejoint a
   assert.deepEqual(server.stats.heads.filter((name) => name === 'mods.zip'), ['mods.zip']);
   h.cleanup();
 });
+
+test('deux enregistrements rapprochés des bascules finissent sur l’état de la dernière config', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'sodium-fabric-0.8.jar': jarOf('sodium'), 'voxy-0.2.jar': jarOf('voxy'), 'lib-1.jar': jarOf('lib') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const c0 = { ...h.config };
+  const c1 = { ...c0, potatoMode: true, disableSodium: true };
+  const c2 = { ...c1, disableSodium: false };
+  let saved = c1;
+  const first = h.launcher.applyModToggles(c0, c1, quiet, () => saved);
+  saved = c2;
+  const second = h.launcher.applyModToggles(c1, c2, quiet, () => saved);
+  await Promise.all([first, second]);
+
+  const mods = fs.readdirSync(path.join(h.game, 'mods'));
+  assert.ok(mods.includes('sodium-fabric-0.8.jar'));
+  assert.ok(!mods.includes('sodium-fabric-0.8.jar.disabled'));
+  assert.ok(mods.includes('voxy-0.2.jar.disabled'));
+  h.cleanup();
+});

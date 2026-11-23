@@ -129,20 +129,18 @@ export class MinecraftLauncher {
     );
   }
 
-  applyToggles(config: AppConfig, trigger: Exclude<ToggleTrigger, 'sync'>, onStatus: StatusEmitter): Promise<void> {
-    const session = this.session(config);
+  applyModToggles(before: AppConfig, after: AppConfig, onStatus: StatusEmitter, current: () => AppConfig = () => after): Promise<void> {
+    const triggers = changedToggles(before, after);
+    if (triggers.length === 0) return Promise.resolve();
+    const session = this.session(after);
     return session.exclusive(async () => {
+      const config = current();
       if (session.gameRunning) {
-        onStatus(`${TOGGLE_LABELS[trigger]} : appliqué au prochain lancement du jeu.`);
+        for (const trigger of triggers) onStatus(`${TOGGLE_LABELS[trigger]} : appliqué au prochain lancement du jeu.`);
         return;
       }
-      reconcilePlayerToggles(session.instance, config, installedPackJars(session.instance), trigger, onStatus);
+      reconcilePlayerToggles(session.instance, config, installedPackJars(session.instance), triggers[0], onStatus);
     });
-  }
-
-  async applyModToggles(before: AppConfig, after: AppConfig, onStatus: StatusEmitter): Promise<void> {
-    if (after.potatoMode !== before.potatoMode) await this.applyToggles(after, 'potato', onStatus);
-    if (after.disableSodium !== before.disableSodium) await this.applyToggles(after, 'sodium', onStatus);
   }
 
   static jvmSettings(config: AppConfig, totalMemMb: number): { memoryMb: number; jvmArgs: string } {
@@ -271,4 +269,11 @@ export class MinecraftLauncher {
 
 function go(mb: number): string {
   return `${(mb / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Go`;
+}
+
+function changedToggles(before: AppConfig, after: AppConfig): Exclude<ToggleTrigger, 'sync'>[] {
+  const triggers: Exclude<ToggleTrigger, 'sync'>[] = [];
+  if (after.potatoMode !== before.potatoMode) triggers.push('potato');
+  if (after.disableSodium !== before.disableSodium) triggers.push('sodium');
+  return triggers;
 }
