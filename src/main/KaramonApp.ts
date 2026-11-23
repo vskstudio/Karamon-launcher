@@ -202,6 +202,10 @@ export class KaramonApp {
     registerConfigRoutes(router, {
       config: this.config,
       onChange: (before, after) => this.minecraft.applyModToggles(before, after, (msg) => this.status(msg)),
+      onChangeFailed: (message) => {
+        this.fileLog.warn(message);
+        this.window.emit(routes.onStatus, message);
+      },
     });
     registerMinecraftRoutes(
       router,
