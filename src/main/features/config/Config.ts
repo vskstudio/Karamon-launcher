@@ -45,6 +45,13 @@ const DEFAULTS: AppConfig = Object.freeze({
   server: { ...KARAMON.server },
 }) as AppConfig;
 
+export class ConfigNotReadYetError extends Error {
+  constructor() {
+    super('Tes réglages sont illisibles pour l\'instant (fichier verrouillé ?). Réessaie dans un instant.');
+    this.name = 'ConfigNotReadYetError';
+  }
+}
+
 export type ConfigLog = (message: string) => void;
 
 export class Config {
@@ -52,6 +59,7 @@ export class Config {
   private readonly log: ConfigLog;
   private data: AppConfig | null = null;
   private loadedFromDisk = false;
+  private inaccessible = false;
   private unsavedUpdates: AppConfigUpdate[] = [];
 
   constructor(filePath: string, log: ConfigLog) {
@@ -64,6 +72,7 @@ export class Config {
   load(): this {
     const state = this.file.read();
     this.loadedFromDisk = state.kind !== 'unreadable';
+    this.inaccessible = state.kind === 'unreadable' && state.cause === 'io';
     if (state.kind === 'unreadable') this.log(Config.unreadableMessage(this.file.path, state.cause, state.reason));
     this.data = state.kind === 'read' ? state.value : Config.clone(DEFAULTS);
     return this;
@@ -73,6 +82,12 @@ export class Config {
     if (!this.data) this.load();
     if (!this.loadedFromDisk) this.rereadIfNotLoadedYet();
     return Config.clone(this.data!);
+  }
+
+  getRead(): AppConfig {
+    const current = this.get();
+    if (this.inaccessible) throw new ConfigNotReadYetError();
+    return current;
   }
 
   set(updates: AppConfigUpdate): void {
@@ -85,6 +100,7 @@ export class Config {
 
   private rereadIfNotLoadedYet(): void {
     const state = this.file.read();
+    this.inaccessible = state.kind === 'unreadable' && state.cause === 'io';
     if (state.kind === 'unreadable') return;
     if (state.kind === 'read') this.data = this.unsavedUpdates.reduce(Config.apply, state.value);
     this.loadedFromDisk = true;

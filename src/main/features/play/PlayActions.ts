@@ -1,4 +1,4 @@
-import type { Config } from '../config/Config.ts';
+import { ConfigNotReadYetError, type AppConfig, type Config } from '../config/Config.ts';
 import { SessionEvidence } from '../crashes/SessionEvidence.ts';
 import type { DiscordRpc } from '../discord/DiscordRpc.ts';
 import { repairSummary } from '../integrity/RepairSummary.ts';
@@ -36,7 +36,7 @@ export interface PlayEvents {
 }
 
 export interface PlayActionsOptions {
-  config: Pick<Config, 'get'>;
+  config: Pick<Config, 'getRead'>;
   minecraft: MinecraftLauncher;
   packManifest: PackManifest;
   stats: PlayStats;
@@ -58,9 +58,9 @@ export class PlayActions {
   }
 
   async play(): Promise<void> {
-    const { config, minecraft, packManifest, stats, discord, events, status, progress, reports } = this.options;
+    const { minecraft, packManifest, stats, discord, events, status, progress, reports } = this.options;
     const startedAt = Date.now();
-    const cfg = config.get();
+    const cfg = this.readConfig();
     const wasRunning = minecraft.isRunning();
     const instance = minecraft.session(cfg).instance;
     const publishedPack = packManifest.latest();
@@ -109,9 +109,9 @@ export class PlayActions {
   }
 
   async syncMods(): Promise<void> {
-    const { config, minecraft, packManifest, status, progress, reports } = this.options;
+    const { minecraft, packManifest, status, progress, reports } = this.options;
     const startedAt = Date.now();
-    const cfg = config.get();
+    const cfg = this.readConfig();
     const publishedPack = packManifest.latest();
     try {
       progress(0);
@@ -130,8 +130,8 @@ export class PlayActions {
   }
 
   async repair(): Promise<RepairDone> {
-    const { config, minecraft, packManifest, status, progress } = this.options;
-    const cfg = config.get();
+    const { minecraft, packManifest, status, progress } = this.options;
+    const cfg = this.readConfig();
     try {
       progress(0);
       status("Réparation de l'installation : vérification complète...");
@@ -147,6 +147,15 @@ export class PlayActions {
     } catch (e) {
       status('Erreur de réparation: ' + (e as Error).message);
       progress(0);
+      throw e;
+    }
+  }
+
+  private readConfig(): AppConfig {
+    try {
+      return this.options.config.getRead();
+    } catch (e) {
+      if (e instanceof ConfigNotReadYetError) this.options.status(e.message);
       throw e;
     }
   }

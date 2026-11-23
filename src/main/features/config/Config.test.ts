@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Config } from './Config.ts';
+import { Config, ConfigNotReadYetError } from './Config.ts';
 import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 import { cannotMakeFilesInaccessible, makeAccessible, makeInaccessible } from '../../shared/Inaccessible.fixture.ts';
 
@@ -108,4 +108,24 @@ test('a config that could not be read at startup is used as soon as it can be re
   makeAccessible(file);
 
   assert.equal(config.get().mcGameDir, 'D:\\Jeux\\Karamon');
+});
+
+test('the config refuses to be used for installing while its file cannot be read, then serves it', { skip: cannotMakeFilesInaccessible }, () => {
+  const dir = makeTempDir('karamon-config-');
+  const file = path.join(dir, 'config.json');
+  fs.writeFileSync(file, JSON.stringify({ mcGameDir: 'D:\\Jeux\\Karamon' }), 'utf8');
+
+  makeInaccessible(file);
+  const config = new Config(file, () => {}).load();
+  assert.throws(() => config.getRead(), ConfigNotReadYetError);
+  makeAccessible(file);
+
+  assert.equal(config.getRead().mcGameDir, 'D:\\Jeux\\Karamon');
+});
+
+test('a config that does not parse is still usable with the defaults', () => {
+  const dir = makeTempDir('karamon-config-');
+  const file = path.join(dir, 'config.json');
+  fs.writeFileSync(file, '{"mcGameDir": "D:', 'utf8');
+  assert.equal(new Config(file, () => {}).load().getRead().mcGameDir, '');
 });
