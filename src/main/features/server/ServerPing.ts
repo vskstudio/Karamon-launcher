@@ -15,6 +15,7 @@ export type PingResult =
       sample?: SamplePlayer[];
     }
   | { online: false };
+import { KARAMON, KARAMON_DEFAULT_PROFILE } from '../../shared/KaramonProfile.ts';
 
 class VarInt {
   static write(value: number): Buffer {
@@ -50,11 +51,16 @@ interface MinecraftStatusJson {
 }
 
 export class ServerPing {
-  static readonly PROTOCOL_VERSION = 767;
   static readonly HANDSHAKE_NEXT_STATE = 1;
   static readonly STATUS_REQUEST = Buffer.from([0x01, 0x00]);
 
-  ping(host: string, port = 25565, timeoutMs = 5000): Promise<PingResult> {
+  private readonly protocolVersion: number;
+
+  constructor(protocolVersion: number = KARAMON_DEFAULT_PROFILE.protocolVersion) {
+    this.protocolVersion = protocolVersion;
+  }
+
+  ping(host: string, port: number = KARAMON.server.port, timeoutMs = 5000): Promise<PingResult> {
     return new Promise((resolve) => {
       const socket = new net.Socket();
       let resolved = false;
@@ -72,11 +78,8 @@ export class ServerPing {
       let buffer = Buffer.alloc(0);
       socket.on('data', (chunk: Buffer) => {
         buffer = Buffer.concat([buffer, chunk]);
-        try {
-          finish(this.decodeStatus(buffer));
-        } catch {
-          /* keep buffering until we have a full packet */
-        }
+        const status = this.statusOnceComplete(buffer);
+        if (status) finish(status);
       });
 
       socket.connect(port, host, () => {
@@ -92,13 +95,21 @@ export class ServerPing {
     portBuf.writeUInt16BE(port);
     const payload = Buffer.concat([
       VarInt.write(0x00),
-      VarInt.write(ServerPing.PROTOCOL_VERSION),
+      VarInt.write(this.protocolVersion),
       VarInt.write(hostBuf.length),
       hostBuf,
       portBuf,
       VarInt.write(ServerPing.HANDSHAKE_NEXT_STATE),
     ]);
     return Buffer.concat([VarInt.write(payload.length), payload]);
+  }
+
+  private statusOnceComplete(buf: Buffer): PingResult | null {
+    try {
+      return this.decodeStatus(buf);
+    } catch {
+      return null;
+    }
   }
 
   private decodeStatus(buf: Buffer): PingResult {

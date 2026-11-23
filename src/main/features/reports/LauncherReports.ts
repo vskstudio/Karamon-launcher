@@ -1,5 +1,7 @@
 import type { Config } from '../config/Config';
-import type { InstalledJavas } from '../java/InstalledJavas';
+import type { HttpClient } from '../../shared/HttpClient';
+import type { JavaDetector } from '../java/JavaDetector';
+import { KARAMON } from '../../shared/KaramonProfile';
 import type { PackManifest } from '../modpack/PackManifest';
 import { ReportCollector } from './ReportCollector';
 import { ReportManager } from './ReportManager';
@@ -11,11 +13,12 @@ const PACK_VERSION_WAIT_MS = 3000;
 
 export interface LauncherReportsOptions {
   dataDir: string;
+  http: Pick<HttpClient, 'post'>;
   launcherVersion: string;
   bundledPackVersion: string;
   packManifest: Pick<PackManifest, 'latest'>;
   config: Pick<Config, 'get' | 'set'>;
-  javas: Pick<InstalledJavas, 'versionFor'>;
+  javas: Pick<JavaDetector, 'versionInUse'>;
   gpuLabel: () => Promise<string | undefined>;
   playerName: () => string | undefined;
   instanceDir: () => string;
@@ -35,14 +38,14 @@ export function createLauncherReports(options: LauncherReportsOptions): ReportMa
         packManifest.latest().then((pack) => pack?.version),
         new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), PACK_VERSION_WAIT_MS).unref()),
       ]),
-    getJavaVersion: () => options.javas.versionFor(config.get().javaPath),
+    getJavaVersion: () => options.javas.versionInUse(config.get().javaPath, KARAMON.javaMajor),
     getGpu: options.gpuLabel,
     getPlayerName: options.playerName,
   });
   return new ReportManager({
     collector,
     queue: new ReportQueue(options.dataDir),
-    transport: new ReportTransport(),
+    transport: new ReportTransport(options.http),
     context: () => ({ gameDir: options.instanceDir(), ramMb: config.get().memoryMb }),
     autoSend: () => config.get().autoSendReports,
     setAutoSend: (value) => config.set({ autoSendReports: value }),

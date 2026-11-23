@@ -2,17 +2,20 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { pipeline } from 'stream/promises';
 import type { IncomingHttpHeaders, IncomingMessage } from 'http';
 import { fsyncFile } from './AtomicWrite.ts';
+import { KARAMON } from './KaramonProfile.ts';
 
 const REDIRECT_STATUS = new Set([301, 302, 307, 308]);
 const MAX_REDIRECTS = 10;
-const RANGE_MIN_SIZE = 8 * 1024 * 1024;
-const RANGE_PARTS = 8;
-const DEFAULT_HEADERS = {
-  'User-Agent': 'KaramonLauncher/2.0.11',
-  Accept: '*/*',
-};
+const RANGED_DOWNLOAD_MIN_BYTES = 8 * 1024 * 1024;
+const RANGED_DOWNLOAD_PARTS = 8;
+const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
+const HEAD_IDLE_TIMEOUT_MS = 10_000;
+const POST_IDLE_TIMEOUT_MS = 20_000;
+const DOWNLOAD_RESPONSE_TIMEOUT_MS = 60_000;
+const NETWORK_ATTEMPTS = 3;
 
 const AGENT = new https.Agent({
   keepAlive: true,
@@ -20,30 +23,56 @@ const AGENT = new https.Agent({
   family: 4,
 });
 
+function launcherUserAgent(appVersion: string): string {
+  return `${KARAMON.launcherName}/${appVersion}`;
+}
+
+export interface HttpClientOptions {
+  appVersion?: string;
+}
+
 export interface HttpResponse {
   status: number;
   body: Buffer;
 }
 
-export interface DownloadOptions {
+export function isSuccess(res: HttpResponse): boolean {
+  return res.status >= 200 && res.status < 300;
+}
+
+export function jsonBody<T>(res: HttpResponse, fallback: T): T {
+  try {
+    return JSON.parse(res.body.toString('utf8')) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export interface Deadlines {
+  idleTimeoutMs?: number;
+  responseTimeoutMs?: number;
+  totalTimeoutMs?: number;
+}
+
+export interface RequestOptions extends Deadlines {
+  headers?: Record<string, string>;
+}
+
+export interface GetOptions extends RequestOptions {
+  timeoutMs?: number;
+}
+
+export interface DownloadOptions extends Deadlines {
   expectedSha1?: string;
   expectedSha256?: string;
   label?: string;
   onProgress?: (fraction: number) => void;
   timeoutMs?: number;
-  stallTimeoutMs?: number;
-}
-
-export interface ByteRange {
-  start: number;
-  end: number;
 }
 
 export interface RangeRequest {
-  /** First byte, or with `end` omitted and a negative value, the last -start bytes. */
   start: number;
   end?: number;
-  /** ETag the file must still have; otherwise the request fails. */
   ifRange?: string;
 }
 
@@ -62,7 +91,56 @@ export interface RangeBuffer {
   etag: string;
 }
 
-/** The server cannot serve this range (no Range support, or the file changed). */
+export class InsecureUrlError extends Error {
+  constructor(url: string) {
+    super('URL non sécurisée refusée (HTTPS requis): ' + (url || '(vide)'));
+    this.name = 'InsecureUrlError';
+  }
+}
+
+export class TooManyRedirectsError extends Error {
+  constructor(url: string) {
+    super('Trop de redirections: ' + url);
+    this.name = 'TooManyRedirectsError';
+  }
+}
+
+export class HttpStatusError extends Error {
+  readonly status: number;
+  constructor(status: number, url: string) {
+    super(`HTTP ${status} pour ${url}`);
+    this.name = 'HttpStatusError';
+    this.status = status;
+  }
+}
+
+export type DeadlineKind = 'idle' | 'response' | 'total';
+
+export class TimeoutError extends Error {
+  readonly kind: DeadlineKind;
+  constructor(kind: DeadlineKind, ms: number, url: string) {
+    const seconds = Math.round(ms / 1000);
+    const what = kind === 'total' ? 'Délai total dépassé' : kind === 'response' ? 'Le serveur ne répond pas' : 'Plus aucune donnée reçue';
+    super(`${what} (${seconds} s): ${url}`);
+    this.name = 'TimeoutError';
+    this.kind = kind;
+  }
+}
+
+export class IncompleteDownloadError extends Error {
+  constructor(label: string, received: number, expected: number) {
+    super(`Téléchargement incomplet ${label}: ${received}/${expected} octets`);
+    this.name = 'IncompleteDownloadError';
+  }
+}
+
+export class DigestMismatchError extends Error {
+  constructor(algorithm: DigestAlgorithm, label: string, expected: string, actual: string) {
+    super(`${algorithm.toUpperCase()} mismatch for ${label}: expected ${expected}, got ${actual}`);
+    this.name = 'DigestMismatchError';
+  }
+}
+
 export class RangeUnsupportedError extends Error {
   constructor(message: string) {
     super(message);
@@ -70,28 +148,49 @@ export class RangeUnsupportedError extends Error {
   }
 }
 
-export function planByteRanges(size: number, parts = RANGE_PARTS): ByteRange[] {
-  if (size <= 0) return [];
-  const n = Math.max(1, Math.min(parts, size));
-  const chunk = Math.floor(size / n);
-  const ranges: ByteRange[] = [];
-  for (let i = 0; i < n; i++) {
-    const start = i * chunk;
-    const end = i === n - 1 ? size - 1 : start + chunk - 1;
-    ranges.push({ start, end });
+export class ResourceChangedError extends RangeUnsupportedError {
+  constructor(label: string) {
+    super(`${label} a changé sur le serveur pendant le téléchargement. Relance la synchronisation.`);
+    this.name = 'ResourceChangedError';
   }
-  return ranges;
 }
 
-export function parseTotalSize(headers: IncomingHttpHeaders, status: number): number {
-  const range = headerValue(headers['content-range']);
-  const match = range.match(/\/(\d+)\s*$/);
-  if (match) return Number(match[1]);
-  if (status === 200) {
-    const length = headerValue(headers['content-length']);
-    if (length) return Number(length);
+function isWorthRetrying(error: unknown): boolean {
+  if (error instanceof RangeUnsupportedError) return false;
+  if (error instanceof InsecureUrlError || error instanceof TooManyRedirectsError) return false;
+  if (error instanceof DigestMismatchError) return false;
+  if (error instanceof HttpStatusError) return error.status === 408 || error.status === 429 || error.status >= 500;
+  return true;
+}
+
+export async function withNetworkRetries<T>(run: () => Promise<T>, onFailedAttempt?: () => void): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt++) {
+    try {
+      return await run();
+    } catch (e) {
+      lastError = e;
+      onFailedAttempt?.();
+      if (!isWorthRetrying(e)) throw e;
+    }
   }
-  return 0;
+  throw lastError;
+}
+
+type DigestAlgorithm = 'sha1' | 'sha256';
+
+async function fileDigest(filePath: string, algorithm: DigestAlgorithm): Promise<string> {
+  const hash = crypto.createHash(algorithm);
+  await pipeline(fs.createReadStream(filePath), hash);
+  return hash.digest('hex');
+}
+
+async function hasDigest(filePath: string, algorithm: DigestAlgorithm, expected: string): Promise<boolean> {
+  try {
+    return (await fileDigest(filePath, algorithm)) === expected.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 function headerValue(raw: string | string[] | undefined): string {
@@ -99,294 +198,240 @@ function headerValue(raw: string | string[] | undefined): string {
   return typeof raw === 'string' ? raw : '';
 }
 
+function contentRange(headers: IncomingHttpHeaders): { start: number; end: number; total: number } | null {
+  const match = headerValue(headers['content-range']).match(/^bytes (\d+)-(\d+)\/(\d+)\s*$/);
+  if (!match) return null;
+  return { start: Number(match[1]), end: Number(match[2]), total: Number(match[3]) };
+}
+
+function isStrongEtag(etag: string): boolean {
+  return etag.length > 0 && !etag.startsWith('W/');
+}
+
+function byteRanges(size: number, parts: number): { start: number; end: number }[] {
+  const count = Math.max(1, Math.min(parts, size));
+  const chunk = Math.floor(size / count);
+  return Array.from({ length: count }, (_, i) => ({
+    start: i * chunk,
+    end: i === count - 1 ? size - 1 : (i + 1) * chunk - 1,
+  }));
+}
+
+function assertHttps(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new InsecureUrlError(url);
+  }
+  if (parsed.protocol !== 'https:') throw new InsecureUrlError(url);
+}
+
+class Watchdog {
+  private idleTimer: NodeJS.Timeout | null = null;
+  private totalTimer: NodeJS.Timeout | null = null;
+  private onExpire: (error: TimeoutError) => void = () => {};
+  private readonly idleMs: number;
+  private readonly url: string;
+
+  constructor(url: string, deadlines: Deadlines, fallbackIdleMs: number) {
+    this.url = url;
+    this.idleMs = deadlines.idleTimeoutMs ?? fallbackIdleMs;
+    const responseMs = deadlines.responseTimeoutMs ?? this.idleMs;
+    this.idleTimer = setTimeout(() => this.expire(new TimeoutError('response', responseMs, url)), responseMs);
+    if (deadlines.totalTimeoutMs !== undefined) {
+      const totalMs = deadlines.totalTimeoutMs;
+      this.totalTimer = setTimeout(() => this.expire(new TimeoutError('total', totalMs, url)), totalMs);
+    }
+  }
+
+  target(onExpire: (error: TimeoutError) => void): void {
+    this.onExpire = onExpire;
+  }
+
+  activity(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => this.expire(new TimeoutError('idle', this.idleMs, this.url)), this.idleMs);
+  }
+
+  stop(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    if (this.totalTimer) clearTimeout(this.totalTimer);
+    this.idleTimer = null;
+    this.totalTimer = null;
+  }
+
+  private expire(error: TimeoutError): void {
+    this.stop();
+    this.onExpire(error);
+  }
+}
+
+export type HttpMethod = 'GET' | 'HEAD' | 'POST';
+
+export interface HttpRequest extends RequestOptions {
+  method: HttpMethod;
+  body?: Buffer;
+}
+
+const IDLE_TIMEOUT_BY_METHOD: Record<HttpMethod, number> = {
+  GET: DEFAULT_IDLE_TIMEOUT_MS,
+  HEAD: HEAD_IDLE_TIMEOUT_MS,
+  POST: POST_IDLE_TIMEOUT_MS,
+};
+
+function readBody(res: IncomingMessage, url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let ended = false;
+    res.on('data', (chunk: Buffer) => chunks.push(chunk));
+    res.on('error', reject);
+    res.on('end', () => {
+      ended = true;
+      resolve(Buffer.concat(chunks));
+    });
+    res.on('close', () => {
+      if (!ended) reject(new Error('Connexion interrompue: ' + url));
+    });
+  });
+}
+
 export class HttpClient {
-  static assertHttps(url: string): void {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      throw new Error('URL invalide: ' + (url || '(vide)'));
-    }
-    if (parsed.protocol !== 'https:') {
-      throw new Error('URL non sécurisée refusée (HTTPS requis): ' + url);
-    }
+  private readonly userAgent: string;
+
+  constructor({ appVersion }: HttpClientOptions = {}) {
+    this.userAgent = appVersion ? launcherUserAgent(appVersion) : KARAMON.launcherName;
   }
 
-  private static redirectTarget(location: string | string[], baseUrl: string): string {
-    const value = Array.isArray(location) ? location[0] : location;
-    if (!value) throw new Error('Redirection invalide: ' + baseUrl);
-    const next = new URL(value, baseUrl).toString();
-    HttpClient.assertHttps(next);
-    return next;
+  async request(url: string, request: HttpRequest): Promise<HttpResponse> {
+    const res = await this.open(url, request);
+    return { status: res.statusCode ?? 0, body: await readBody(res, url) };
   }
 
-  static sha1File(filePath: string): string {
-    return HttpClient.hashFile(filePath, 'sha1');
-  }
-
-  static sha256File(filePath: string): string {
-    return HttpClient.hashFile(filePath, 'sha256');
-  }
-
-  private static hashFile(filePath: string, algorithm: string): string {
-    const hash = crypto.createHash(algorithm);
-    hash.update(fs.readFileSync(filePath));
-    return hash.digest('hex');
-  }
-
-  private static verifyDigest(filePath: string, expected: string, algorithm: 'sha1' | 'sha256', label: string): void {
-    const actual = HttpClient.hashFile(filePath, algorithm);
-    if (actual.toLowerCase() === expected.toLowerCase()) return;
-    fs.rmSync(filePath, { force: true });
-    throw new Error(
-      `${algorithm.toUpperCase()} mismatch for ${label}: expected ${expected}, got ${actual}`,
-    );
-  }
-
-  get(url: string, { timeoutMs = 30000 }: { timeoutMs?: number } = {}): Promise<HttpResponse> {
-    return new Promise((resolve, reject) => {
-      const fetchUrl = (target: string, redirects = 0): void => {
-        try {
-          HttpClient.assertHttps(target);
-        } catch (e) {
-          return reject(e);
-        }
-        const req = https.get(target, { agent: AGENT, headers: DEFAULT_HEADERS }, (res) => {
-          if (res.statusCode && REDIRECT_STATUS.has(res.statusCode) && res.headers.location) {
-            res.resume();
-            if (redirects >= MAX_REDIRECTS) {
-              return reject(new Error('Trop de redirections: ' + target));
-            }
-            try {
-              return fetchUrl(HttpClient.redirectTarget(res.headers.location, target), redirects + 1);
-            } catch (e) {
-              return reject(e);
-            }
-          }
-          const chunks: Buffer[] = [];
-          res.on('data', (c: Buffer) => chunks.push(c));
-          res.on('end', () =>
-            resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) }),
-          );
-        });
-        req.on('error', reject);
-        req.setTimeout(timeoutMs, () => {
-          req.destroy();
-          reject(new Error('Request timeout: ' + target));
-        });
-      };
-      fetchUrl(url);
+  get(url: string, { timeoutMs, ...options }: GetOptions = {}): Promise<HttpResponse> {
+    return this.request(url, {
+      ...options,
+      idleTimeoutMs: options.idleTimeoutMs ?? timeoutMs,
+      method: 'GET',
     });
   }
 
-  async getText(url: string): Promise<string> {
-    const res = await this.get(url);
-    if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status} for ${url}`);
+  async getText(url: string, options: RequestOptions = {}): Promise<string> {
+    const res = await this.get(url, options);
+    if (!isSuccess(res)) throw new HttpStatusError(res.status, url);
     return res.body.toString('utf8');
   }
 
-  /**
-   * Opens a byte range of `url` and returns the response stream. Rejects unless
-   * the server answers 206 for exactly that range: a server that ignores Range,
-   * or a file that changed since `ifRange` (ETag) was read, sends 200 instead.
-   * `end` omitted with a negative `start` asks for the last -start bytes.
-   */
-  openRange(url: string, range: RangeRequest, { timeoutMs = 30000 }: { timeoutMs?: number } = {}): Promise<RangeResponse> {
+  async getJson<T = unknown>(url: string, options: RequestOptions = {}): Promise<T> {
+    return JSON.parse(await this.getText(url, options)) as T;
+  }
+
+  post(url: string, body: Buffer | string, options: RequestOptions = {}): Promise<HttpResponse> {
+    const bytes = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
+    return this.request(url, {
+      ...options,
+      headers: { ...options.headers, 'Content-Length': String(bytes.length) },
+      body: bytes,
+      method: 'POST',
+    });
+  }
+
+  postJson(url: string, payload: unknown, options: RequestOptions = {}): Promise<HttpResponse> {
+    return this.post(url, JSON.stringify(payload), {
+      ...options,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers },
+    });
+  }
+
+  async head(url: string, options: RequestOptions = {}): Promise<IncomingHttpHeaders> {
+    const res = await this.open(url, { ...options, method: 'HEAD' });
+    res.resume();
+    const status = res.statusCode ?? 0;
+    if (!isSuccess({ status, body: Buffer.alloc(0) })) throw new HttpStatusError(status, url);
+    return res.headers;
+  }
+
+  async openRange(url: string, range: RangeRequest, options: Deadlines = {}): Promise<RangeResponse> {
     const spec = range.end === undefined ? `bytes=${range.start}` : `bytes=${range.start}-${range.end}`;
     const headers: Record<string, string> = { Range: spec, 'Accept-Encoding': 'identity' };
     if (range.ifRange) headers['If-Range'] = range.ifRange;
-    return new Promise((resolve, reject) => {
-      this.open(url, headers, timeoutMs, (err, res) => {
-        if (err || !res) return reject(err ?? new Error('Réponse vide'));
-        if (res.statusCode !== 206) {
-          res.resume();
-          return reject(new RangeUnsupportedError(`HTTP ${res.statusCode} pour la plage ${spec} de ${url}`));
-        }
-        const contentRange = headerValue(res.headers['content-range']);
-        const match = contentRange.match(/^bytes (\d+)-(\d+)\/(\d+)\s*$/);
-        if (!match) {
-          res.resume();
-          return reject(new RangeUnsupportedError(`Content-Range illisible (${contentRange}) pour ${url}`));
-        }
-        const first = Number(match[1]);
-        const last = Number(match[2]);
-        if (range.end !== undefined && (first !== range.start || last !== range.end)) {
-          res.resume();
-          return reject(new RangeUnsupportedError(`Plage ${first}-${last} reçue au lieu de ${spec} pour ${url}`));
-        }
-        resolve({
-          stream: res,
-          start: first,
-          end: last,
-          total: Number(match[3]),
-          etag: headerValue(res.headers.etag),
-        });
-      });
-    });
+    const res = await this.open(url, { ...options, headers, method: 'GET' });
+    const etag = headerValue(res.headers.etag);
+    const rejectWith = (error: Error): never => {
+      res.resume();
+      throw error;
+    };
+    if (res.statusCode !== 206) {
+      if (range.ifRange && res.statusCode === 200) rejectWith(new ResourceChangedError(url));
+      rejectWith(new RangeUnsupportedError(`HTTP ${res.statusCode} pour la plage ${spec} de ${url}`));
+    }
+    if (range.ifRange && etag && etag !== range.ifRange) rejectWith(new ResourceChangedError(url));
+    const served = contentRange(res.headers);
+    if (!served) return rejectWith(new RangeUnsupportedError(`Content-Range illisible pour ${url}`));
+    if (range.end !== undefined && (served.start !== range.start || served.end !== range.end)) {
+      rejectWith(new RangeUnsupportedError(`Plage ${served.start}-${served.end} reçue au lieu de ${spec} pour ${url}`));
+    }
+    return { stream: res, start: served.start, end: served.end, total: served.total, etag };
   }
 
-  /** A byte range in memory, with a stall timeout. For small reads (zip directories). */
-  async getRange(url: string, range: RangeRequest, { stallTimeoutMs = 30000 }: { stallTimeoutMs?: number } = {}): Promise<RangeBuffer> {
-    const opened = await this.openRange(url, range);
+  async getRange(url: string, range: RangeRequest, options: Deadlines = {}): Promise<RangeBuffer> {
+    const opened = await this.openRange(url, range, options);
+    const body = await readBody(opened.stream, url);
     const expected = opened.end - opened.start + 1;
-    const body = await new Promise<Buffer>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      let received = 0;
-      let timer = setTimeout(() => fail(new Error(`Téléchargement bloqué: ${url}`)), stallTimeoutMs);
-      const fail = (e: Error): void => {
-        clearTimeout(timer);
-        opened.stream.destroy();
-        reject(e);
-      };
-      opened.stream.on('data', (chunk: Buffer) => {
-        chunks.push(chunk);
-        received += chunk.length;
-        clearTimeout(timer);
-        timer = setTimeout(() => fail(new Error(`Téléchargement bloqué: ${url}`)), stallTimeoutMs);
-      });
-      opened.stream.on('error', (e) => fail(e as Error));
-      opened.stream.on('aborted', () => fail(new Error('Connexion interrompue: ' + url)));
-      opened.stream.on('end', () => {
-        clearTimeout(timer);
-        if (received !== expected) reject(new Error(`Plage incomplète ${received}/${expected} octets: ${url}`));
-        else resolve(Buffer.concat(chunks));
-      });
-    });
+    if (body.length !== expected) throw new IncompleteDownloadError(url, body.length, expected);
     return { body, start: opened.start, total: opened.total, etag: opened.etag };
   }
 
-  postJson(url: string, payload: unknown, { timeoutMs = 20000 }: { timeoutMs?: number } = {}): Promise<HttpResponse> {
-    return new Promise((resolve, reject) => {
-      try {
-        HttpClient.assertHttps(url);
-      } catch (e) {
-        return reject(e);
-      }
-      const body = Buffer.from(JSON.stringify(payload), 'utf8');
-      const headers = {
-        ...DEFAULT_HEADERS,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'Content-Length': String(body.length),
-      };
-      const req = https.request(url, { method: 'POST', agent: AGENT, headers }, (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (c: Buffer) => chunks.push(c));
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) }));
-        res.on('error', reject);
-      });
-      req.on('error', reject);
-      req.setTimeout(timeoutMs, () => {
-        req.destroy();
-        reject(new Error('Request timeout: ' + url));
-      });
-      req.end(body);
-    });
-  }
-
-  async getJson<T = unknown>(url: string): Promise<T> {
-    return JSON.parse(await this.getText(url)) as T;
-  }
-
-  head(url: string, { timeoutMs = 10000 }: { timeoutMs?: number } = {}): Promise<IncomingHttpHeaders> {
-    return new Promise((resolve, reject) => {
-      const sendHead = (target: string, redirects = 0): void => {
-        try {
-          HttpClient.assertHttps(target);
-        } catch (e) {
-          return reject(e);
-        }
-        const req = https.request(target, { method: 'HEAD', agent: AGENT, headers: DEFAULT_HEADERS }, (res) => {
-          res.resume();
-          if (res.statusCode && REDIRECT_STATUS.has(res.statusCode) && res.headers.location) {
-            if (redirects >= MAX_REDIRECTS) {
-              return reject(new Error('Trop de redirections: ' + target));
-            }
-            try {
-              return sendHead(HttpClient.redirectTarget(res.headers.location, target), redirects + 1);
-            } catch (e) {
-              return reject(e);
-            }
-          }
-          // An error page's headers (Cloudflare 403/5xx) must not pass for the file's ETag/length.
-          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`HTTP ${res.statusCode} pour ${target}`));
-          }
-          resolve(res.headers);
-        });
-        req.on('error', reject);
-        req.setTimeout(timeoutMs, () => {
-          req.destroy();
-          reject(new Error('HEAD timeout: ' + target));
-        });
-        req.end();
-      };
-      sendHead(url);
-    });
-  }
-
-  async download(url: string, dest: string, opts: DownloadOptions = {}): Promise<void> {
-    const {
-      expectedSha1 = '',
-      expectedSha256 = '',
-      label = '',
-      onProgress,
-      timeoutMs = 60000,
-      stallTimeoutMs = 30000,
-    } = opts;
+  async download(url: string, dest: string, options: DownloadOptions = {}): Promise<void> {
+    const { expectedSha1 = '', expectedSha256 = '', label = '', onProgress, timeoutMs, ...deadlines } = options;
+    const named = label || dest;
+    const transfer: Deadlines = {
+      ...deadlines,
+      responseTimeoutMs: deadlines.responseTimeoutMs ?? timeoutMs ?? DOWNLOAD_RESPONSE_TIMEOUT_MS,
+    };
     fs.mkdirSync(path.dirname(dest), { recursive: true });
 
-    if (expectedSha1 && fs.existsSync(dest)) {
-      const cached = HttpClient.sha1File(dest).toLowerCase();
-      if (cached === expectedSha1.toLowerCase()) return;
-    }
-    if (expectedSha256 && fs.existsSync(dest)) {
-      const cached = HttpClient.sha256File(dest).toLowerCase();
-      if (cached === expectedSha256.toLowerCase()) return;
-    }
+    if (expectedSha1 && (await hasDigest(dest, 'sha1', expectedSha1))) return;
+    if (expectedSha256 && (await hasDigest(dest, 'sha256', expectedSha256))) return;
 
-    const ranged = await this.downloadRanged(url, dest, {
-      label,
-      onProgress,
-      timeoutMs,
-      stallTimeoutMs,
-    });
-    if (!ranged) {
-      await this.downloadSingle(url, dest, {
-        label,
-        onProgress,
-        timeoutMs,
-        stallTimeoutMs,
-      });
+    const tmp = dest + '.tmp';
+    try {
+      const ranged = await this.downloadRanged(url, tmp, named, transfer, onProgress);
+      if (!ranged) await this.downloadWhole(url, tmp, named, transfer, onProgress);
+      if (expectedSha1) await HttpClient.verifyDigest(tmp, 'sha1', expectedSha1, named);
+      if (expectedSha256) await HttpClient.verifyDigest(tmp, 'sha256', expectedSha256, named);
+      fsyncFile(tmp);
+      fs.renameSync(tmp, dest);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      if (e instanceof DigestMismatchError) fs.rmSync(dest, { force: true });
+      throw e;
     }
+  }
 
-    if (expectedSha1) {
-      HttpClient.verifyDigest(dest, expectedSha1, 'sha1', label || dest);
-    }
-    if (expectedSha256) {
-      HttpClient.verifyDigest(dest, expectedSha256, 'sha256', label || dest);
-    }
+  private static async verifyDigest(file: string, algorithm: DigestAlgorithm, expected: string, label: string): Promise<void> {
+    const actual = await fileDigest(file, algorithm);
+    if (actual !== expected.toLowerCase()) throw new DigestMismatchError(algorithm, label, expected, actual);
   }
 
   private async downloadRanged(
     url: string,
-    dest: string,
-    opts: Required<Pick<DownloadOptions, 'label' | 'timeoutMs' | 'stallTimeoutMs'>> &
-      Pick<DownloadOptions, 'onProgress'>,
+    tmp: string,
+    label: string,
+    deadlines: Deadlines,
+    onProgress: DownloadOptions['onProgress'],
   ): Promise<boolean> {
-    let probe: { status: number; headers: IncomingHttpHeaders };
+    let probe: RangeResponse;
     try {
-      probe = await this.requestHeaders(url, { Range: 'bytes=0-0' }, opts.timeoutMs);
-    } catch {
-      return false;
+      probe = await this.openRange(url, { start: 0, end: 0 }, deadlines);
+    } catch (e) {
+      if (e instanceof RangeUnsupportedError) return false;
+      throw e;
     }
-    if (probe.status !== 206) return false;
-    const size = parseTotalSize(probe.headers, probe.status);
-    if (size < RANGE_MIN_SIZE) return false;
+    probe.stream.resume();
+    if (probe.total < RANGED_DOWNLOAD_MIN_BYTES || !isStrongEtag(probe.etag)) return false;
 
-    const ranges = planByteRanges(size, RANGE_PARTS);
-    const tmp = dest + '.tmp';
-    fs.rmSync(tmp, { force: true });
+    const size = probe.total;
     const fd = fs.openSync(tmp, 'w');
     try {
       fs.ftruncateSync(fd, size);
@@ -394,213 +439,121 @@ export class HttpClient {
       fs.closeSync(fd);
     }
 
-    const received = new Array(ranges.length).fill(0);
-    const report = (): void => {
-      if (!opts.onProgress) return;
-      const total = received.reduce((sum, n) => sum + n, 0);
-      opts.onProgress(Math.min(1, total / size));
-    };
-
-    try {
-      await Promise.all(
-        ranges.map((range, index) =>
-          this.downloadRangeToFile(url, tmp, range, opts, (n) => {
-            received[index] = n;
-            report();
-          }),
+    const ranges = byteRanges(size, RANGED_DOWNLOAD_PARTS);
+    const received = new Array<number>(ranges.length).fill(0);
+    const report = (): void => onProgress?.(Math.min(1, received.reduce((sum, n) => sum + n, 0) / size));
+    const parts = await Promise.allSettled(
+      ranges.map((range, index) =>
+        withNetworkRetries(
+          () =>
+            this.downloadPart(url, tmp, { ...range, ifRange: probe.etag }, label, deadlines, (n) => {
+              received[index] = n;
+              report();
+            }),
+          () => {
+            received[index] = 0;
+          },
         ),
-      );
-      fsyncFile(tmp);
-      fs.renameSync(tmp, dest);
-      return true;
-    } catch {
-      fs.rmSync(tmp, { force: true });
-      return false;
-    }
+      ),
+    );
+    const failures = parts.flatMap((part) => (part.status === 'rejected' ? [part.reason as unknown] : []));
+    if (failures.some((failure) => failure instanceof ResourceChangedError)) throw new ResourceChangedError(label);
+    if (failures.length > 0) throw failures[0];
+    return true;
   }
 
-  private downloadRangeToFile(
+  private async downloadPart(
     url: string,
-    dest: string,
-    range: ByteRange,
-    opts: Required<Pick<DownloadOptions, 'label' | 'timeoutMs' | 'stallTimeoutMs'>>,
+    tmp: string,
+    range: Required<RangeRequest>,
+    label: string,
+    deadlines: Deadlines,
     onBytes: (received: number) => void,
   ): Promise<void> {
-    const expected = range.end - range.start + 1;
-    return new Promise((resolve, reject) => {
-      this.open(url, { Range: `bytes=${range.start}-${range.end}` }, opts.timeoutMs, (err, res) => {
-        if (err || !res) return reject(err ?? new Error('Range vide'));
-        if (res.statusCode !== 206) {
-          res.resume();
-          return reject(new Error(`HTTP ${res.statusCode} range ${opts.label}`));
-        }
-        const out = fs.createWriteStream(dest, { flags: 'r+', start: range.start });
-        this.pipeToFile(res, out, {
-          label: opts.label,
-          expected,
-          stallTimeoutMs: opts.stallTimeoutMs,
-          onProgress: (received) => onBytes(received),
-        })
-          .then(resolve)
-          .catch(reject);
-      });
-    });
+    const opened = await this.openRange(url, range, deadlines);
+    const out = fs.createWriteStream(tmp, { flags: 'r+', start: range.start });
+    await this.pipeToFile(opened.stream, out, label, range.end - range.start + 1, onBytes);
   }
 
-  private downloadSingle(
+  private async downloadWhole(
     url: string,
-    dest: string,
-    opts: Required<Pick<DownloadOptions, 'label' | 'timeoutMs' | 'stallTimeoutMs'>> &
-      Pick<DownloadOptions, 'onProgress'>,
+    tmp: string,
+    label: string,
+    deadlines: Deadlines,
+    onProgress: DownloadOptions['onProgress'],
   ): Promise<void> {
-    const tmp = dest + '.tmp';
-    return new Promise((resolve, reject) => {
-      this.open(url, {}, opts.timeoutMs, (err, res) => {
-        if (err || !res) return reject(err ?? new Error('Réponse vide'));
-        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-          res.resume();
-          return reject(new Error(`HTTP ${res.statusCode} downloading ${opts.label || url}`));
-        }
-        const total = parseInt(headerValue(res.headers['content-length']) || '0', 10);
-        const out = fs.createWriteStream(tmp);
-        this.pipeToFile(res, out, {
-          label: opts.label || url,
-          expected: total,
-          stallTimeoutMs: opts.stallTimeoutMs,
-          onProgress: opts.onProgress
-            ? (received) => {
-                if (total > 0) opts.onProgress?.(received / total);
-              }
-            : undefined,
-        })
-          .then(() => {
-            fsyncFile(tmp);
-            fs.renameSync(tmp, dest);
-            resolve();
-          })
-          .catch((error) => {
-            fs.rmSync(tmp, { force: true });
-            reject(error);
-          });
-      });
+    const res = await this.open(url, { ...deadlines, method: 'GET' });
+    const status = res.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      res.resume();
+      throw new HttpStatusError(status, label);
+    }
+    const total = parseInt(headerValue(res.headers['content-length']) || '0', 10);
+    await this.pipeToFile(res, fs.createWriteStream(tmp), label, total, (received) => {
+      if (total > 0) onProgress?.(received / total);
     });
   }
 
-  private requestHeaders(
-    url: string,
-    extraHeaders: Record<string, string>,
-    timeoutMs: number,
-  ): Promise<{ status: number; headers: IncomingHttpHeaders }> {
-    return new Promise((resolve, reject) => {
-      this.open(url, extraHeaders, timeoutMs, (err, res) => {
-        if (err || !res) return reject(err ?? new Error('Réponse vide'));
-        res.resume();
-        resolve({ status: res.statusCode ?? 0, headers: res.headers });
-      });
-    });
-  }
-
-  private open(
-    url: string,
-    extraHeaders: Record<string, string>,
-    timeoutMs: number,
-    cb: (err: Error | null, res?: IncomingMessage) => void,
-  ): void {
-    const fetchUrl = (target: string, redirects = 0): void => {
-      try {
-        HttpClient.assertHttps(target);
-      } catch (e) {
-        return cb(e as Error);
-      }
-      const req = https.get(
-        target,
-        { agent: AGENT, headers: { ...DEFAULT_HEADERS, ...extraHeaders } },
-        (res) => {
-          if (res.statusCode && REDIRECT_STATUS.has(res.statusCode) && res.headers.location) {
-            res.resume();
-            if (redirects >= MAX_REDIRECTS) {
-              return cb(new Error('Trop de redirections: ' + target));
-            }
-            try {
-              return fetchUrl(HttpClient.redirectTarget(res.headers.location, target), redirects + 1);
-            } catch (e) {
-              return cb(e as Error);
-            }
-          }
-          cb(null, res);
-        },
-      );
-      req.on('error', (e) => cb(e));
-      req.setTimeout(timeoutMs, () => {
-        req.destroy();
-        cb(new Error('Download timeout: ' + target));
-      });
-    };
-    fetchUrl(url);
-  }
-
-  private pipeToFile(
+  private async pipeToFile(
     res: IncomingMessage,
     out: fs.WriteStream,
-    opts: {
-      label: string;
-      expected: number;
-      stallTimeoutMs: number;
-      onProgress?: (received: number) => void;
-    },
+    label: string,
+    expected: number,
+    onBytes: (received: number) => void,
   ): Promise<void> {
+    let received = 0;
+    res.on('data', (chunk: Buffer) => {
+      received += chunk.length;
+      onBytes(received);
+    });
+    await pipeline(res, out);
+    if (expected > 0 && received < expected) throw new IncompleteDownloadError(label, received, expected);
+  }
+
+  private open(url: string, request: HttpRequest): Promise<IncomingMessage> {
+    const watchdog = new Watchdog(url, request, IDLE_TIMEOUT_BY_METHOD[request.method]);
+    const headers = { 'User-Agent': this.userAgent, Accept: '*/*', ...request.headers };
+    const followsRedirects = request.method !== 'POST';
     return new Promise((resolve, reject) => {
-      let received = 0;
-      let settled = false;
-      let stallTimer: NodeJS.Timeout | null = null;
-      const fail = (err: Error): void => {
-        if (settled) return;
-        settled = true;
-        if (stallTimer) clearTimeout(stallTimer);
-        try {
-          res.destroy();
-        } catch {
-          /* ignore */
-        }
-        try {
-          out.destroy();
-        } catch {
-          /* ignore */
-        }
-        reject(err);
+      const fail = (error: Error): void => {
+        watchdog.stop();
+        reject(error);
       };
-      const armStallTimer = (): void => {
-        if (stallTimer) clearTimeout(stallTimer);
-        stallTimer = setTimeout(() => {
-          fail(
-            new Error(
-              `Download stalled (${Math.round(opts.stallTimeoutMs / 1000)}s sans données): ` + opts.label,
-            ),
-          );
-        }, opts.stallTimeoutMs);
-      };
-      armStallTimer();
-      res.on('data', (chunk: Buffer) => {
-        received += chunk.length;
-        opts.onProgress?.(received);
-        armStallTimer();
-      });
-      res.on('error', (e) => fail(e as Error));
-      res.on('aborted', () => fail(new Error('Connexion interrompue: ' + opts.label)));
-      res.pipe(out);
-      out.on('finish', () => {
-        if (settled) return;
-        if (stallTimer) clearTimeout(stallTimer);
-        if (opts.expected > 0 && received < opts.expected) {
-          settled = true;
-          return reject(
-            new Error(`Download incomplet ${opts.label}: ${received}/${opts.expected} octets`),
-          );
+      const send = (target: string, redirects: number): void => {
+        try {
+          assertHttps(target);
+        } catch (e) {
+          return fail(e as Error);
         }
-        settled = true;
-        resolve();
-      });
-      out.on('error', (e) => fail(e as Error));
+        const req = https.request(target, { method: request.method, agent: AGENT, headers }, (res) => {
+          const location = res.headers.location;
+          if (followsRedirects && res.statusCode && REDIRECT_STATUS.has(res.statusCode) && location) {
+            res.resume();
+            if (redirects >= MAX_REDIRECTS) return fail(new TooManyRedirectsError(target));
+            let next: string;
+            try {
+              next = new URL(location, target).toString();
+            } catch {
+              return fail(new InsecureUrlError(location));
+            }
+            return send(next, redirects + 1);
+          }
+          const socket = res.socket;
+          const onSocketData = (): void => watchdog.activity();
+          watchdog.activity();
+          watchdog.target((error) => res.destroy(error));
+          socket?.on('data', onSocketData);
+          res.on('close', () => {
+            watchdog.stop();
+            socket?.off('data', onSocketData);
+          });
+          resolve(res);
+        });
+        watchdog.target((error) => req.destroy(error));
+        req.on('error', fail);
+        req.end(request.body);
+      };
+      send(url, 0);
     });
   }
 }

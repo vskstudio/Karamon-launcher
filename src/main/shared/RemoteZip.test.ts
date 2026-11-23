@@ -7,14 +7,13 @@ import path from 'path';
 import { PassThrough } from 'stream';
 import AdmZip from 'adm-zip';
 import { RemoteZip } from './RemoteZip.ts';
-import { RangeUnsupportedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
+import { RangeUnsupportedError, ResourceChangedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
 
-/** In-memory server for one file, counting what it sends. */
 function fakeServer(file: () => Buffer, etag: () => string) {
   const stats = { requests: 0, bytes: 0 };
   const slice = (range: RangeRequest) => {
     const body = file();
-    if (range.ifRange && range.ifRange !== etag()) throw new RangeUnsupportedError('HTTP 200 (fichier changé)');
+    if (range.ifRange && range.ifRange !== etag()) throw new ResourceChangedError('pack.zip');
     const start = range.end === undefined && range.start < 0 ? Math.max(0, body.length + range.start) : range.start;
     const end = range.end === undefined ? body.length - 1 : Math.min(range.end, body.length - 1);
     stats.requests++;
@@ -29,7 +28,6 @@ function fakeServer(file: () => Buffer, etag: () => string) {
     async openRange(_url: string, range: RangeRequest) {
       const s = slice(range);
       const stream = new PassThrough();
-      // Small chunks, to cut local headers in the middle.
       for (let i = 0; i < s.data.length; i += 7) stream.write(s.data.subarray(i, i + 7));
       stream.end();
       return { stream, start: s.start, end: s.end, total: s.total, etag: etag() };
@@ -105,7 +103,7 @@ test('refuse de mélanger deux versions si l archive est republiée en cours de 
   fs.writeFileSync(target, 'ancien');
   await assert.rejects(
     zip.extractTo(zip.entries.find((e) => e.entryName === 'mods/b.jar')!, target),
-    (e: Error) => e.name === 'RangeUnsupportedError',
+    (e: Error) => e instanceof RangeUnsupportedError,
   );
   assert.equal(fs.readFileSync(target, 'utf8'), 'ancien');
   fs.rmSync(dir, { recursive: true, force: true });

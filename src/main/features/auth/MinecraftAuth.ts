@@ -1,4 +1,5 @@
 import type { MinecraftProfile } from './MinecraftProfile';
+import { HttpClient, isSuccess, jsonBody } from '../../shared/HttpClient.ts';
 
 const LOGIN_URL = 'https://api.minecraftservices.com/authentication/login_with_xbox';
 const PROFILE_URL = 'https://api.minecraftservices.com/minecraft/profile';
@@ -19,18 +20,20 @@ export interface MinecraftToken {
 }
 
 export class MinecraftAuth {
+  private readonly http: Pick<HttpClient, 'postJson' | 'get'>;
+
+  constructor(http: Pick<HttpClient, 'postJson' | 'get'>) {
+    this.http = http;
+  }
+
   async login(userHash: string, xstsToken: string): Promise<MinecraftToken> {
-    const res = await fetch(LOGIN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ identityToken: `XBL3.0 x=${userHash};${xstsToken}` }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
+    const res = await this.http.postJson(LOGIN_URL, { identityToken: `XBL3.0 x=${userHash};${xstsToken}` });
+    if (!isSuccess(res)) {
+      const body = res.body.toString('utf8');
       const detail = body ? `: ${body.slice(0, 300)}` : '';
       throw new Error(`Minecraft a refusé l'authentification (HTTP ${res.status})${detail}`);
     }
-    const data = (await res.json()) as LoginResponse;
+    const data = jsonBody<LoginResponse>(res, {});
     if (!data.access_token) {
       throw new Error('Réponse Minecraft invalide (jeton manquant)');
     }
@@ -39,16 +42,16 @@ export class MinecraftAuth {
   }
 
   async fetchProfile(accessToken: string): Promise<MinecraftProfile> {
-    const res = await fetch(PROFILE_URL, {
+    const res = await this.http.get(PROFILE_URL, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
     });
     if (res.status === 404) {
       throw new Error('Ce compte ne possède pas Minecraft Java Edition.');
     }
-    if (!res.ok) {
+    if (!isSuccess(res)) {
       throw new Error(`Profil Minecraft introuvable (HTTP ${res.status})`);
     }
-    const data = (await res.json()) as ProfileResponse;
+    const data = jsonBody<ProfileResponse>(res, {});
     if (!data.id || !data.name) {
       throw new Error('Profil Minecraft invalide');
     }

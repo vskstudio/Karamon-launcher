@@ -2,6 +2,7 @@ import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpClient, HttpResponse } from '../../shared/HttpClient.ts';
 import { isStripeCheckoutPage } from './CheckoutNavigation.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
+import { KARAMON } from '../../shared/KaramonProfile.ts';
 
 export type ShopOfferKind = 'pack' | 'subscription';
 
@@ -26,12 +27,12 @@ export interface ShopCatalog {
 
 export type ShopCheckoutResult = { status: 'paid' } | { status: 'cancelled' };
 
-const SHOP_API = 'https://karamon.fr/api/shop';
+const SHOP_API = KARAMON.shopApiUrl;
 const OFFERS_URL = `${SHOP_API}/offers`;
 const CHECKOUT_URL = `${SHOP_API}/checkout`;
 const PLAYER_URL = `${SHOP_API}/players/`;
-const IMAGE_ORIGIN = 'https://karamon.fr/';
-const PORTAL_ORIGINS = ['https://karamon.fr/', 'https://billing.stripe.com/'];
+const IMAGE_ORIGIN = `${KARAMON.websiteUrl}/`;
+const PORTAL_ORIGINS = [`${KARAMON.websiteUrl}/`, 'https://billing.stripe.com/'];
 const SHOP_TERMS_VERSION = '2026-10-17';
 const HTTP_TOO_MANY_REQUESTS = 429;
 const OFFER_ID_MAX_LENGTH = 128;

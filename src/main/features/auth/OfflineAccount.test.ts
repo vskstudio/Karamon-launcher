@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mojangNameStatus, offlineUuid } from './OfflineAccount.ts';
 
-// Reference values from Java: UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(UTF_8))
 test('the offline UUID is the one Minecraft computes', () => {
   assert.equal(offlineUuid('Notch'), 'b50ad385-829d-3141-a216-7e7d7539ba7f');
   assert.equal(offlineUuid('Steve'), '5627dd98-e6be-3c21-b8a8-e92344183641');
@@ -21,7 +20,7 @@ test('the offline UUID is version 3 with the IETF variant', () => {
   }
 });
 
-const answering = (status: number) => async () => ({ status });
+const answering = (status: number) => ({ get: async () => ({ status, body: Buffer.alloc(0) }) });
 
 test('Mojang answering 200 means the name is taken', async () => {
   assert.equal(await mojangNameStatus('Notch', answering(200)), 'taken');
@@ -36,8 +35,10 @@ test('an error, a rate limit or no network leaves the answer unknown', async () 
   assert.equal(await mojangNameStatus('Kara', answering(429)), 'unknown');
   assert.equal(await mojangNameStatus('Kara', answering(503)), 'unknown');
   assert.equal(
-    await mojangNameStatus('Kara', async () => {
-      throw new Error('getaddrinfo ENOTFOUND');
+    await mojangNameStatus('Kara', {
+      get: async () => {
+        throw new Error('getaddrinfo ENOTFOUND');
+      },
     }),
     'unknown',
   );
@@ -45,9 +46,11 @@ test('an error, a rate limit or no network leaves the answer unknown', async () 
 
 test('the name is put in the URL encoded', async () => {
   let seen = '';
-  await mojangNameStatus('a_b', async (url) => {
-    seen = url;
-    return { status: 404 };
+  await mojangNameStatus('a_b', {
+    get: async (url) => {
+      seen = url;
+      return { status: 404, body: Buffer.alloc(0) };
+    },
   });
   assert.equal(seen, 'https://api.minecraftservices.com/minecraft/profile/lookup/name/a_b');
 });

@@ -5,7 +5,8 @@ import { XboxAuth } from './XboxAuth';
 import { MinecraftAuth, type MinecraftToken } from './MinecraftAuth';
 import { TokenStore } from './TokenStore';
 import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore';
-import { OFFLINE_ACCESS_TOKEN, mojangNameStatus } from './OfflineAccount';
+import { OFFLINE_ACCESS_TOKEN, mojangNameStatus, offlineNameStatus, type NameStatus } from './OfflineAccount';
+import type { HttpClient } from '../../shared/HttpClient';
 
 const REFRESH_LEEWAY_MS = 60_000;
 
@@ -29,10 +30,15 @@ export class AuthSession {
   constructor(
     private readonly store: TokenStore,
     private readonly accounts: AccountStore,
-    private readonly microsoft: MicrosoftAuth = new MicrosoftAuth(),
-    private readonly xbox: XboxAuth = new XboxAuth(),
-    private readonly minecraft: MinecraftAuth = new MinecraftAuth(),
+    private readonly http: HttpClient,
+    private readonly microsoft: MicrosoftAuth = new MicrosoftAuth(http),
+    private readonly xbox: XboxAuth = new XboxAuth(http),
+    private readonly minecraft: MinecraftAuth = new MinecraftAuth(http),
   ) {}
+
+  checkName(name: string): Promise<NameStatus> {
+    return offlineNameStatus(name, this.http);
+  }
 
   state(): AuthSessionResult {
     const microsoft = this.microsoftProfile();
@@ -53,7 +59,7 @@ export class AuthSession {
   async loginOffline(name: string): Promise<MinecraftProfile> {
     const problem = offlineNameProblem(name);
     if (problem) throw new Error(problem);
-    if ((await mojangNameStatus(name)) === 'taken') throw new Error(OFFLINE_NAME_TAKEN);
+    if ((await mojangNameStatus(name, this.http)) === 'taken') throw new Error(OFFLINE_NAME_TAKEN);
     const entry = this.accounts.addOffline(name);
     return { id: entry.id, name: entry.name, kind: 'offline' };
   }

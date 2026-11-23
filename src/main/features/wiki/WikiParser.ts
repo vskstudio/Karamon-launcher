@@ -2,8 +2,10 @@ import { HTMLElement, NodeType, parse, type Node } from 'node-html-parser';
 import { WIKI_SLUG_PATTERN } from '../../../shared/WikiSlug.ts';
 import type { WikiBlock, WikiCalloutTone, WikiGroup, WikiInline, WikiPage, WikiPageRef } from './WikiTypes.ts';
 
-export const WIKI_ORIGIN = 'https://karamon.fr';
-const WIKI_HOST = 'karamon.fr';
+import { KARAMON } from '../../shared/KaramonProfile.ts';
+
+export const WIKI_ORIGIN = KARAMON.websiteUrl;
+const WIKI_HOST = KARAMON.websiteHost;
 const WIKI_PATH = new RegExp(`^/wiki/(${WIKI_SLUG_PATTERN})/?$`);
 const CALLOUT_TONES: readonly WikiCalloutTone[] = ['note', 'tip', 'warning', 'important'];
 const BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li', 'table', 'tr', 'aside', 'figure', 'figcaption', 'h2', 'h3', 'h4', 'section']);

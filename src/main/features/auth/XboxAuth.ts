@@ -1,3 +1,5 @@
+import { HttpClient, isSuccess, jsonBody } from '../../shared/HttpClient.ts';
+
 const XBL_URL = 'https://user.auth.xboxlive.com/user/authenticate';
 const XSTS_URL = 'https://xsts.auth.xboxlive.com/xsts/authorize';
 
@@ -17,6 +19,12 @@ export interface XboxToken {
 }
 
 export class XboxAuth {
+  private readonly http: Pick<HttpClient, 'postJson'>;
+
+  constructor(http: Pick<HttpClient, 'postJson'>) {
+    this.http = http;
+  }
+
   async authenticate(microsoftAccessToken: string): Promise<XboxToken> {
     const xbl = await this.xboxLive(microsoftAccessToken);
     const xsts = await this.xsts(xbl.token);
@@ -24,43 +32,34 @@ export class XboxAuth {
   }
 
   private async xboxLive(msAccessToken: string): Promise<XboxToken> {
-    const res = await fetch(XBL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        Properties: {
-          AuthMethod: 'RPS',
-          SiteName: 'user.auth.xboxlive.com',
-          RpsTicket: `d=${msAccessToken}`,
-        },
-        RelyingParty: 'http://auth.xboxlive.com',
-        TokenType: 'JWT',
-      }),
+    const res = await this.http.postJson(XBL_URL, {
+      Properties: {
+        AuthMethod: 'RPS',
+        SiteName: 'user.auth.xboxlive.com',
+        RpsTicket: `d=${msAccessToken}`,
+      },
+      RelyingParty: 'http://auth.xboxlive.com',
+      TokenType: 'JWT',
     });
-    if (!res.ok) {
+    if (!isSuccess(res)) {
       throw new Error(`Xbox Live a refusé l'authentification (HTTP ${res.status})`);
     }
-    return this.parseXboxResponse((await res.json()) as XboxResponse);
+    return this.parseXboxResponse(jsonBody<XboxResponse>(res, {}));
   }
 
   private async xsts(xblToken: string): Promise<XboxToken> {
-    const res = await fetch(XSTS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        Properties: { SandboxId: 'RETAIL', UserTokens: [xblToken] },
-        RelyingParty: 'rp://api.minecraftservices.com/',
-        TokenType: 'JWT',
-      }),
+    const res = await this.http.postJson(XSTS_URL, {
+      Properties: { SandboxId: 'RETAIL', UserTokens: [xblToken] },
+      RelyingParty: 'rp://api.minecraftservices.com/',
+      TokenType: 'JWT',
     });
     if (res.status === 401) {
-      const body = (await res.json().catch(() => ({}))) as XstsErrorBody;
-      throw new Error(this.translateXstsError(body));
+      throw new Error(this.translateXstsError(jsonBody<XstsErrorBody>(res, {})));
     }
-    if (!res.ok) {
+    if (!isSuccess(res)) {
       throw new Error(`XSTS a échoué (HTTP ${res.status})`);
     }
-    return this.parseXboxResponse((await res.json()) as XboxResponse);
+    return this.parseXboxResponse(jsonBody<XboxResponse>(res, {}));
   }
 
   private parseXboxResponse(data: XboxResponse): XboxToken {

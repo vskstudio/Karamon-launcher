@@ -1,6 +1,8 @@
+import { KARAMON } from '../../shared/KaramonProfile.ts';
+
 export type CheckoutNavigation = 'paid' | 'cancelled' | 'allowed' | 'blocked';
 
-const SHOP_HOST = 'karamon.fr';
+const SHOP_HOST = KARAMON.websiteHost;
 const STRIPE_HOST = 'stripe.com';
 const STRIPE_CHECKOUT_HOST = 'checkout.stripe.com';
 const PURCHASE_OUTCOME_PARAM = 'achat';

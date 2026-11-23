@@ -43,3 +43,23 @@ test('a custom address is asked alone', async () => {
   assert.deepEqual(await status.ping(), { online: false });
   assert.deepEqual(pinged, ['mc.example.org']);
 });
+
+test('each ping asks the address set now, not the one set at startup', async () => {
+  const pinged: string[] = [];
+  let server = { host: 'mc.example.org', port: 25565 };
+  const status = new ServerStatus({
+    pinger: {
+      ping: async (candidate, port) => {
+        pinged.push(`${candidate}:${port}`);
+        return { online: false };
+      },
+    },
+    server: () => server,
+    publicServerHost: 'karamon.fr',
+    statusFallbackHost: 'play.karamon.fr',
+  });
+  await status.ping();
+  server = { host: 'test.example.org', port: 25570 };
+  await status.ping();
+  assert.deepEqual(pinged, ['mc.example.org:25565', 'test.example.org:25570']);
+});

@@ -1,12 +1,15 @@
 import { Client } from '@xhayper/discord-rpc';
 import type { ServerStatus } from '../server/ServerStatus';
+import { KARAMON } from '../../shared/KaramonProfile.ts';
 
 const APP_ID = '1550981242508410994';
 const LARGE_IMAGE_KEY = 'karamon';
 const PING_INTERVAL_MS = 60_000;
 const RECONNECT_INTERVAL_MS = 30_000;
+const SHOWN_ADDRESS = KARAMON.server.host;
 
 export type RpcState = 'menu' | 'playing';
+
 
 export interface DiscordRpcOptions {
   status: Pick<ServerStatus, 'ping'>;
@@ -22,8 +25,13 @@ export class DiscordRpc {
   private retryTimer: NodeJS.Timeout | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
+  private lastLoggedActivity = '';
 
-  constructor(private readonly opts: DiscordRpcOptions) {}
+  private readonly opts: DiscordRpcOptions;
+
+  constructor(opts: DiscordRpcOptions) {
+    this.opts = opts;
+  }
 
   start(): void {
     void this.connect();
@@ -41,15 +49,8 @@ export class DiscordRpc {
 
   setPlaying(): void {
     this.state = 'playing';
-    // The game client owns the activity while Minecraft is open, including the
-    // live player count. Pushing here would replace that line with the address.
   }
 
-  /**
-   * While Minecraft runs, the launcher stops pinging the server for the player
-   * count: the game shows it itself. Reconnection to Discord keeps going, it is
-   * a local socket and costs nothing.
-   */
   setPingPaused(paused: boolean): void {
     if (paused) {
       if (this.pingTimer) clearInterval(this.pingTimer);
@@ -66,11 +67,7 @@ export class DiscordRpc {
     if (this.retryTimer) clearInterval(this.retryTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
     if (!this.client) return;
-    try {
-      await this.client.destroy();
-    } catch {
-      /* ignore */
-    }
+    await this.client.destroy().catch(() => undefined);
     this.client = null;
     this.connected = false;
   }
@@ -93,11 +90,7 @@ export class DiscordRpc {
     } catch (e) {
       this.opts.log?.(`[Discord] connexion impossible : ${(e as Error).message}`);
       this.connected = false;
-      try {
-        await this.client?.destroy();
-      } catch {
-        /* ignore */
-      }
+      await this.client?.destroy().catch(() => undefined);
       this.client = null;
     } finally {
       this.connecting = false;
@@ -113,9 +106,9 @@ export class DiscordRpc {
   private playersText(): string {
     if (this.playerCount !== null) {
       const word = this.playerCount === 1 ? 'joueur' : 'joueurs';
-      return `${this.playerCount} ${word} en ligne · play.karamon.fr`;
+      return `${this.playerCount} ${word} en ligne · ${SHOWN_ADDRESS}`;
     }
-    return 'play.karamon.fr';
+    return SHOWN_ADDRESS;
   }
 
   private push(): void {
@@ -129,10 +122,10 @@ export class DiscordRpc {
     const activity = {
       ...base,
       largeImageKey: LARGE_IMAGE_KEY,
-      largeImageText: 'Karamon · play.karamon.fr',
+      largeImageText: `${KARAMON.profileName} · ${SHOWN_ADDRESS}`,
     };
     this.client.user.setActivity(activity).then(
-      () => this.opts.log?.(`[Discord] activité: ${this.state}, ${this.playersText()}`),
+      () => this.logActivityChange(`[Discord] activité: ${this.state}, ${base.state}`),
       (err: Error) => {
         this.opts.log?.(`[Discord] setActivity échoué (avec image): ${err?.message ?? err}`);
         this.client?.user?.setActivity(base).then(
@@ -142,5 +135,11 @@ export class DiscordRpc {
         );
       },
     );
+  }
+
+  private logActivityChange(line: string): void {
+    if (line === this.lastLoggedActivity) return;
+    this.lastLoggedActivity = line;
+    this.opts.log?.(line);
   }
 }

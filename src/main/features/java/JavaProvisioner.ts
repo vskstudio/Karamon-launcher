@@ -5,13 +5,15 @@ import { promisify } from 'util';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import type { Paths } from '../../shared/Paths.ts';
 import { extractZipToDir } from '../../shared/ZipExtract.ts';
+import { KARAMON } from '../../shared/KaramonProfile.ts';
 import type { JavaDetector } from './JavaDetector.ts';
+import { javaExecutableName, javaExecutablesUnder, probeJava } from './JavaRuntime.ts';
 
 const execFileP = promisify(execFile);
 
-const REQUIRED_MAJOR = 21;
-const RUNTIME_DIR_NAME = 'jre-21';
-const ADOPTIUM_DOWNLOAD_TIMEOUT_MS = 600000;
+const REQUIRED_MAJOR = KARAMON.javaMajor;
+const REQUIRED_JAVA = `Java ${REQUIRED_MAJOR}`;
+const ADOPTIUM_DOWNLOAD_RESPONSE_TIMEOUT_MS = 600000;
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
 type ArchiveExt = '.zip' | '.tar.gz';
@@ -45,12 +47,20 @@ interface AdoptiumAsset {
 export type StatusEmitter = (msg: string) => void;
 export type ProgressEmitter = (fraction: number) => void;
 
+export function managedJavaRuntimeRoot(paths: Paths): string {
+  return path.join(paths.dataDir, 'runtime', `jre-${REQUIRED_MAJOR}`);
+}
+
+async function majorOf(javaPath: string): Promise<number | null> {
+  return (await probeJava(javaPath))?.major ?? null;
+}
+
 export class JavaProvisioner {
   private readonly paths: Paths;
   private readonly http: HttpClient;
-  private readonly detector: JavaDetector;
+  private readonly detector: Pick<JavaDetector, 'detect' | 'invalidate'>;
 
-  constructor(paths: Paths, http: HttpClient, detector: JavaDetector) {
+  constructor(paths: Paths, http: HttpClient, detector: Pick<JavaDetector, 'detect' | 'invalidate'>) {
     this.paths = paths;
     this.http = http;
     this.detector = detector;
@@ -61,26 +71,22 @@ export class JavaProvisioner {
     onStatus: StatusEmitter,
     onProgress: ProgressEmitter,
   ): Promise<string> {
-    // Exactly Java 21: Cobblemon refuses any other version, so a newer Java (26) stops Fabric at launch.
-    if (configuredPath && (await this.probeMajor(configuredPath)) === REQUIRED_MAJOR) return configuredPath;
+    if (configuredPath && (await majorOf(configuredPath)) === REQUIRED_MAJOR) return configuredPath;
 
     const managed = this.managedJavaPath();
-    if (managed && (await this.probeMajor(managed)) === REQUIRED_MAJOR) return managed;
+    if (managed && (await majorOf(managed)) === REQUIRED_MAJOR) return managed;
 
-    const detected = await this.detector.detect();
-    const preferred = detected.find(
-      (c) => JavaProvisioner.parseMajor(c.version) === REQUIRED_MAJOR,
-    );
+    const preferred = (await this.detector.detect()).find((install) => install.major === REQUIRED_MAJOR);
     if (preferred) return preferred.path;
 
     const platform = ADOPTIUM_PLATFORMS[process.platform];
     if (!platform) {
-      throw new Error(
-        `Java ${REQUIRED_MAJOR} requis et non détecté. Installe-le depuis adoptium.net puis relance le launcher.`,
-      );
+      throw new Error(`${REQUIRED_JAVA} requis et non détecté. Installe-le depuis adoptium.net puis relance le launcher.`);
     }
 
-    return await this.installAdoptium(platform, onStatus, onProgress);
+    const installed = await this.installAdoptium(platform, onStatus, onProgress);
+    this.detector.invalidate();
+    return installed;
   }
 
   private async installAdoptium(
@@ -93,15 +99,15 @@ export class JavaProvisioner {
       `https://api.adoptium.net/v3/assets/latest/${REQUIRED_MAJOR}/hotspot` +
       `?architecture=${arch}&image_type=jre&os=${platform.os}&vendor=eclipse`;
 
-    onStatus('Recherche de Java 21 (Adoptium Temurin)...');
+    onStatus(`Recherche de ${REQUIRED_JAVA} (Adoptium Temurin)...`);
     const assets = await this.http.getJson<AdoptiumAsset[]>(apiUrl);
     const asset = JavaProvisioner.pickArchiveAsset(assets, platform.archiveExt);
     if (!asset) {
-      throw new Error('Aucune archive Java 21 disponible chez Adoptium pour cette architecture.');
+      throw new Error(`Aucune archive ${REQUIRED_JAVA} disponible chez Adoptium pour cette architecture.`);
     }
 
     const versionLabel = asset.version.semver ?? asset.version.openjdk_version ?? 'inconnu';
-    onStatus(`Téléchargement de Java 21 (${versionLabel}, ~45 Mo)...`);
+    onStatus(`Téléchargement de ${REQUIRED_JAVA} (${versionLabel}, ~45 Mo)...`);
 
     const checksum = asset.binary.package.checksum;
     if (!SHA256_HEX.test(checksum ?? '')) {
@@ -113,25 +119,25 @@ export class JavaProvisioner {
     const tmpArchive = path.join(cacheDir, path.basename(asset.binary.package.name));
 
     await this.http.download(asset.binary.package.link, tmpArchive, {
-      label: 'Java 21',
-      timeoutMs: ADOPTIUM_DOWNLOAD_TIMEOUT_MS,
+      label: REQUIRED_JAVA,
+      responseTimeoutMs: ADOPTIUM_DOWNLOAD_RESPONSE_TIMEOUT_MS,
       expectedSha256: checksum,
       onProgress,
     });
 
-    onStatus('Extraction de Java 21...');
+    onStatus(`Extraction de ${REQUIRED_JAVA}...`);
     await this.extractRuntime(tmpArchive, platform.archiveExt);
     fs.rmSync(tmpArchive, { force: true });
 
     const javaPath = this.managedJavaPath();
     if (!javaPath) {
-      throw new Error(`Extraction terminée mais ${JavaProvisioner.javaExecutable()} introuvable dans le runtime.`);
+      throw new Error(`Extraction terminée mais ${javaExecutableName()} introuvable dans le runtime.`);
     }
-    const major = await this.probeMajor(javaPath);
+    const major = await majorOf(javaPath);
     if (major !== REQUIRED_MAJOR) {
-      throw new Error(`Le runtime extrait n'est pas Java ${REQUIRED_MAJOR} (détecté: ${major ?? '?'}).`);
+      throw new Error(`Le runtime extrait n'est pas ${REQUIRED_JAVA} (détecté: ${major ?? '?'}).`);
     }
-    onStatus(`Java ${REQUIRED_MAJOR} prêt.`);
+    onStatus(`${REQUIRED_JAVA} prêt.`);
     return javaPath;
   }
 
@@ -148,46 +154,12 @@ export class JavaProvisioner {
     await extractZipToDir(archivePath, root);
   }
 
-  private static javaExecutable(): string {
-    return process.platform === 'win32' ? 'java.exe' : 'java';
-  }
-
   private runtimeRoot(): string {
-    return path.join(this.paths.dataDir, 'runtime', RUNTIME_DIR_NAME);
+    return managedJavaRuntimeRoot(this.paths);
   }
 
   private managedJavaPath(): string | null {
-    const root = this.runtimeRoot();
-    if (!fs.existsSync(root)) return null;
-    const exe = JavaProvisioner.javaExecutable();
-    let entries: string[];
-    try {
-      entries = fs.readdirSync(root);
-    } catch {
-      return null;
-    }
-    for (const entry of entries) {
-      const candidates = [
-        path.join(root, entry, 'bin', exe),
-        path.join(root, entry, 'Contents', 'Home', 'bin', exe),
-      ];
-      for (const c of candidates) {
-        if (fs.existsSync(c)) return c;
-      }
-    }
-    return null;
-  }
-
-  private async probeMajor(javaPath: string): Promise<number | null> {
-    try {
-      const { stderr, stdout } = await execFileP(javaPath, ['-version'], { timeout: 4000 });
-      const text = stderr || stdout || '';
-      const m = text.match(/version "([^"]+)"/);
-      if (!m) return null;
-      return JavaProvisioner.parseMajor(m[1]);
-    } catch {
-      return null;
-    }
+    return javaExecutablesUnder(this.runtimeRoot())[0] ?? null;
   }
 
   private static pickArchiveAsset(
@@ -196,17 +168,5 @@ export class JavaProvisioner {
   ): AdoptiumAsset | null {
     if (!Array.isArray(assets) || assets.length === 0) return null;
     return assets.find((a) => a.binary.package.name?.toLowerCase().endsWith(archiveExt)) ?? null;
-  }
-
-  static parseMajor(version: string): number {
-    if (!version) return 0;
-    const m = version.match(/^(\d+)/);
-    if (!m) return 0;
-    const n = parseInt(m[1], 10);
-    if (n === 1) {
-      const second = version.match(/^1\.(\d+)/);
-      return second ? parseInt(second[1], 10) : 0;
-    }
-    return n;
   }
 }

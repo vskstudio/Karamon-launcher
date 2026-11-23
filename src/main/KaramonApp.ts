@@ -10,7 +10,7 @@ import { HttpClient } from './shared/HttpClient';
 import { FileLog } from './shared/FileLog';
 import { GameKeepAlive } from './GameKeepAlive';
 import { SystemCertificates } from './shared/SystemCertificates';
-import { loadPackProfile, type PackProfile } from './shared/PackProfile';
+import { loadKaramonProfile, type KaramonProfile } from './shared/KaramonProfile';
 import { Config } from './features/config/Config';
 import { registerConfigRoutes } from './features/config/ConfigRoutes';
 import { ServerPing } from './features/server/ServerPing';
@@ -30,8 +30,9 @@ import { SodiumOff } from './features/sodium/SodiumOff';
 import { AutoUpdater } from './features/updater/AutoUpdater';
 import { registerUpdaterRoutes } from './features/updater/UpdaterRoutes';
 import { JavaDetector } from './features/java/JavaDetector';
+import { managedJavaRuntimeRoot } from './features/java/JavaProvisioner';
+import { javaInstallRoots } from './features/java/JavaRuntime';
 import { JavaProvisioner } from './features/java/JavaProvisioner';
-import { InstalledJavas } from './features/java/InstalledJavas';
 import { registerJavaRoutes } from './features/java/JavaRoutes';
 import { PlayStats } from './features/stats/PlayStats';
 import { registerStatsRoutes } from './features/stats/StatsRoutes';
@@ -64,15 +65,14 @@ export class KaramonApp {
   private readonly paths = Paths.default();
   private readonly fileLog = new FileLog(this.paths.logsDir);
   private readonly config = new Config(this.paths.configFile, (message) => this.fileLog.warn(message)).load();
-  private readonly http = new HttpClient();
-  private readonly auth = new AuthSession(new TokenStore(this.paths.authCache), new AccountStore(this.paths.accountsFile));
+  private readonly http = new HttpClient({ appVersion: app.getVersion() });
+  private readonly auth = new AuthSession(new TokenStore(this.paths.authCache), new AccountStore(this.paths.accountsFile), this.http);
   private readonly stats = new PlayStats(this.paths.dataDir);
   private readonly crashes = new CrashReports();
-  private readonly javaDetector = new JavaDetector();
-  private readonly javas = new InstalledJavas(this.javaDetector);
+  private readonly javaDetector = new JavaDetector([...javaInstallRoots(), managedJavaRuntimeRoot(this.paths)]);
   private readonly window: WindowManager;
   private readonly keepAlive: GameKeepAlive;
-  private readonly pack: PackProfile;
+  private readonly pack: KaramonProfile;
   private readonly packManifest: PackManifest;
   private readonly minecraft: MinecraftLauncher;
   private readonly updater: AutoUpdater;
@@ -88,7 +88,7 @@ export class KaramonApp {
       quit: () => app.quit(),
       quitsWhenLastWindowCloses: process.platform !== 'darwin',
     });
-    this.pack = loadPackProfile(distDir);
+    this.pack = loadKaramonProfile(distDir);
     this.packManifest = new PackManifest({
       http: this.http,
       manifestUrl: new URL('pack.json', this.pack.cdnBaseUrl).toString(),
@@ -121,22 +121,23 @@ export class KaramonApp {
       log: (level, msg) => this.fileLog.write(level, `[Mise à jour] ${msg}`),
     });
     this.serverStatus = new ServerStatus({
-      pinger: new ServerPing(),
+      pinger: new ServerPing(this.pack.protocolVersion),
       server: () => this.config.get().server,
       publicServerHost: this.pack.publicServerHost,
       statusFallbackHost: this.pack.statusFallbackHost,
     });
     this.discord = new DiscordRpc({
       status: this.serverStatus,
-      log: (msg) => this.window.emit(routes.onStatus, msg),
+      log: (msg) => this.fileLog.info(`[Discord] ${msg}`),
     });
     this.reports = createLauncherReports({
       dataDir: this.paths.dataDir,
+      http: this.http,
       launcherVersion: app.getVersion(),
       bundledPackVersion: this.pack.version,
       packManifest: this.packManifest,
       config: this.config,
-      javas: this.javas,
+      javas: this.javaDetector,
       gpuLabel,
       playerName: () => this.auth.state().active?.name,
       instanceDir: () => this.instanceDir(),
@@ -220,7 +221,7 @@ export class KaramonApp {
       window: () => this.window.current(),
     });
     registerModpackRoutes(router, { packManifest: this.packManifest, instanceDir });
-    registerJavaRoutes(router, this.javas);
+    registerJavaRoutes(router, this.javaDetector);
     registerStatsRoutes(router, this.stats);
     registerScreenshotRoutes(router, instanceDir);
     registerCrashRoutes(router, this.crashes, instanceDir);

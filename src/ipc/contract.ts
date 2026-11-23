@@ -20,7 +20,7 @@ import type { UpdateCheckResult, UpdateInfo } from '../main/features/updater/Aut
 import type { ModsListResult } from '../main/features/modpack/ModpackSync';
 import type { PackInfo } from '../main/features/modpack/PackManifest';
 import type { SystemInfo } from '../main/features/system/SystemInfo';
-import type { JavaCandidate } from '../main/features/java/JavaDetector';
+import type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime';
 import type { PlayStatsData } from '../main/features/stats/PlayStats';
 import type { ScreenshotsListResult } from '../main/features/screenshots/Screenshots';
 import type { CrashReportsListResult } from '../main/features/crashes/CrashReports';
@@ -41,7 +41,7 @@ export type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../main/featu
 export type { ModEntry, ModsListResult } from '../main/features/modpack/ModpackSync';
 export type { PackInfo } from '../main/features/modpack/PackManifest';
 export type { SystemInfo } from '../main/features/system/SystemInfo';
-export type { JavaCandidate } from '../main/features/java/JavaDetector';
+export type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime';
 export type { PlayStatsData as PlayStats } from '../main/features/stats/PlayStats';
 export type { ScreenshotEntry, ScreenshotsListResult } from '../main/features/screenshots/Screenshots';
 export type { CrashReport, CrashReportsListResult } from '../main/features/crashes/CrashReports';

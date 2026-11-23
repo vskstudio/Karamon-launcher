@@ -1,7 +1,6 @@
 import { routes } from '../../../ipc/contract';
 import type { RouteRegistry } from '../../ipc/IpcRouter';
 import type { AuthSession } from './AuthSession';
-import { offlineNameStatus } from './OfflineAccount';
 import { resetSkin, saveSkin } from './OfflineSkin';
 import type { SkinLookup } from './SkinLookup';
 
@@ -19,7 +18,7 @@ export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instanc
     log(`Compte sans licence enregistré : ${profile.name} (${profile.id})`);
     return profile;
   });
-  router.handle(routes.authCheckName, (name) => offlineNameStatus(name));
+  router.handle(routes.authCheckName, (name) => auth.checkName(name));
   router.handle(routes.authSwitch, (accountId) => auth.switchTo(accountId));
   router.handle(routes.authLogout, () => auth.logout());
   router.handle(routes.authGetSession, () => auth.state());

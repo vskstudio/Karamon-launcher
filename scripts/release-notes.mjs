@@ -1,8 +1,15 @@
 import { execFileSync } from 'child_process';
-import { resolve } from 'path';
+import { readFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const MAX_CHANGES = 8;
+const PACK_JSON = join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'pack.json');
+
+function bundledPack() {
+  const pack = JSON.parse(readFileSync(PACK_JSON, 'utf8'));
+  return { minecraft: pack.minecraft, fabricVersion: pack.loaderVersion, cdnBaseUrl: pack.cdnBaseUrl };
+}
 
 export function changesSince(subjects) {
   return subjects
@@ -11,13 +18,13 @@ export function changesSince(subjects) {
     .slice(0, MAX_CHANGES);
 }
 
-export function releaseNotes(version, changes = []) {
+export function releaseNotes(version, changes = [], pack = bundledPack()) {
   const notes = [];
   if (changes.length > 0) {
     notes.push('## Nouveautés', ...changes.map((change) => `- ${change}`), '');
   }
   notes.push(
-    'Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric 0.18.4, Minecraft 1.21.1).',
+    `Launcher officiel Karamon (Cobbleverse 1.7.42, Fabric ${pack.fabricVersion}, Minecraft ${pack.minecraft}).`,
     '',
     '## Windows',
     `Installe \`Karamon-Launcher-Setup-${version}.exe\`, connecte-toi avec Microsoft, mets à jour les mods, puis JOUER.`,
@@ -28,7 +35,7 @@ export function releaseNotes(version, changes = []) {
     '## Linux',
     `Télécharge \`Karamon-Launcher-${version}.AppImage\`, rends-le exécutable (\`chmod +x\`) puis lance-le.`,
     '',
-    "Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis https://karamon.fr/downloads/.",
+    `Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis ${pack.cdnBaseUrl}.`,
   );
   return notes.join('\n') + '\n';
 }
