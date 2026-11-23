@@ -42,7 +42,7 @@ function fancyReplacements(minecraftVersion: string): [string, string][] {
   return [
     ['[source:local]/config/fancymenu/assets/cobbleverse_title.png', '[source:local]/config/fancymenu/assets/karamon_title.png'],
     ['[source:local]/config/fancymenu/assets/latias_latios_background.png', '[source:local]/config/fancymenu/assets/karamon_background.png'],
-    ['https://discord.lumy.fun', KARAMON.gameMenuDiscordUrl],
+    ['https://discord.lumy.fun', KARAMON.discordUrl],
     ['https://www.lumyverse.com/cobbleverse', KARAMON.websiteUrl],
     [`%#FF5500%**KARAMON 1.0.0**%#% ${minecraftVersionTag(minecraftVersion)}`, karamonVersionLine(minecraftVersion)],
     ['source = &eby &c&lLUMY&b&lVERSE', 'source = '],
@@ -319,7 +319,7 @@ export function applyKaramonBranding(instance: GameInstance, { minecraftVersion,
   const listeners = path.join(fancyRoot, 'listener_instances.txt');
   if (fs.existsSync(listeners)) {
     const previous = fs.readFileSync(listeners, 'utf8');
-    const next = previous.split('https://www.lumyverse.com/wiki/changelog/').join(KARAMON.gameMenuDiscordUrl);
+    const next = previous.split('https://www.lumyverse.com/wiki/changelog/').join(KARAMON.discordUrl);
     if (next !== previous) fs.writeFileSync(listeners, next, 'utf8');
   }
 

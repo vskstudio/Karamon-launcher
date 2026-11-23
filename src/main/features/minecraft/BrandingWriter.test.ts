@@ -50,7 +50,7 @@ test('the title screen menu swaps logo, discord, version and hides Apex', () => 
   const next = brandedFile(FANCY_MENU, src);
   assert.match(next, /karamon_title\.png/);
   assert.doesNotMatch(next, /cobbleverse_title\.png/);
-  assert.match(next, new RegExp(KARAMON.gameMenuDiscordUrl.replace(/\./g, '\\.')));
+  assert.match(next, new RegExp(KARAMON.discordUrl.replace(/\./g, '\\.')));
   assert.doesNotMatch(next, /discord\.lumy\.fun/);
   assert.doesNotMatch(next, /open_changelogs/);
   assert.doesNotMatch(next, /COBBLE%#%VERSE/);
