@@ -4,6 +4,7 @@ import { toast } from '../ui';
 import { api } from './api';
 import { log } from './console';
 import { config, saveConfig, system } from './config';
+import { hideWhileSaving } from './hideWhileSaving';
 
 export interface PotatoSuggestion {
   reasons: string[];
@@ -23,8 +24,15 @@ export function dismissRepairOffer(): void {
 }
 
 export async function answerPotatoSuggestion(enable: boolean): Promise<void> {
-  potatoSuggestion.value = null;
-  await saveConfig(enable ? { potatoMode: true, potatoHintDismissed: true } : { potatoHintDismissed: true });
+  const outcome = await hideWhileSaving(potatoSuggestion, null, () =>
+    saveConfig(enable ? { potatoMode: true, potatoHintDismissed: true } : { potatoHintDismissed: true }),
+  );
+  if (!outcome.ok) {
+    const text = `Enregistrement impossible : ${outcome.error}`;
+    toast(text, 'error');
+    log(text, 'error');
+    return;
+  }
   if (enable) {
     toast('Mode PC modeste activé. Tu peux le couper dans les réglages.');
     log('Mode PC modeste activé.', 'success');

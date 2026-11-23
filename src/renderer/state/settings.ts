@@ -3,6 +3,7 @@ import type { AppConfig, AppConfigUpdate } from '../../ipc/contract';
 import { config, saveConfig } from './config';
 import { DEFAULT_MEMORY_MB, DEFAULT_SECOND_MEMORY_MB } from './memory';
 import { potatoSuggestion } from './notices';
+import { hideWhileSaving } from './hideWhileSaving';
 
 export type SettingsDraft = Omit<AppConfig, 'server' | 'potatoHintDismissed'>;
 export type SettingKey = keyof SettingsDraft;
@@ -53,10 +54,9 @@ export async function saveSettings(): Promise<void> {
   for (const key of dirtySettingKeys.value) {
     Object.assign(update, { [key]: normalized(edits[key]) });
   }
-  if (update.potatoMode !== undefined && !config.value?.potatoHintDismissed) {
-    update.potatoHintDismissed = true;
-    potatoSuggestion.value = null;
-  }
-  await saveConfig(update);
+  const answersSuggestion = update.potatoMode !== undefined && !config.value?.potatoHintDismissed;
+  if (answersSuggestion) update.potatoHintDismissed = true;
+  const outcome = await hideWhileSaving(potatoSuggestion, answersSuggestion ? null : potatoSuggestion.value, () => saveConfig(update));
+  if (!outcome.ok) throw new Error(outcome.error);
   settingsEdits.value = {};
 }
