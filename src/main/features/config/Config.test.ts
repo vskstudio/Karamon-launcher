@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Config } from './Config.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 
 function tempConfig(raw?: object): Config {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-config-'));
+  const dir = makeTempDir('karamon-config-');
   const file = path.join(dir, 'config.json');
   if (raw) fs.writeFileSync(file, JSON.stringify(raw), 'utf8');
   return new Config(file, () => {}).load();
@@ -32,7 +32,7 @@ test('the automatic report consent is disabled for old configs', () => {
 });
 
 test('a config that does not parse is kept aside instead of being overwritten by the defaults', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-config-'));
+  const dir = makeTempDir('karamon-config-');
   const file = path.join(dir, 'config.json');
   const truncated = '{"mcGameDir": "D:\\\\Jeux\\\\Karamon", "memoryMb": 8';
   fs.writeFileSync(file, truncated, 'utf8');

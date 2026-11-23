@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { LauncherProfile } from './LauncherProfile.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 
 const SPEC = { name: 'Karamon', versionId: 'fabric-loader-0.16-1.21.1', gameDir: '/jeux/karamon', memoryMb: 8192, jvmArgs: '' };
 
 function launcherDir(content?: string | Buffer): { dir: string; file: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-profile-'));
+  const dir = makeTempDir('launcher-profile-');
   const file = path.join(dir, 'launcher_profiles.json');
   if (content !== undefined) fs.writeFileSync(file, content);
   return { dir, file };

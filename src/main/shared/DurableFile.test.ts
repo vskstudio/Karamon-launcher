@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { JsonFile, UnreadableFileError, jsonObject, type UnreadablePolicy } from './DurableFile.ts';
+import { makeTempDir } from './TempDir.fixture.ts';
 
 interface Count {
   count: number;
 }
 
 function countFile(content: string | null, whenUnreadable: UnreadablePolicy): { file: JsonFile<Count>; dir: string; target: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'durable-file-'));
+  const dir = makeTempDir('durable-file-');
   const target = path.join(dir, 'count.json');
   if (content !== null) fs.writeFileSync(target, content);
   const decode = (raw: unknown): Count => {

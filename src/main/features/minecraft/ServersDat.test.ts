@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { ServersDat } from './ServersDat.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'servers-dat-'));
+  return makeTempDir('servers-dat-');
 }
 
 function listed(dir: string): string {

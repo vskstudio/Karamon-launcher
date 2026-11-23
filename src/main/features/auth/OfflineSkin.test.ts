@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { resetSkin, saveSkin, savedSkinDataUrl } from './OfflineSkin.ts';
 import { SKIN_MAX_BYTES_ACCEPTED_BY_KARAMON_MOD } from '../../../shared/Karamon.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 
 function png(width: number, height: number): Buffer {
   const b = Buffer.alloc(33);
@@ -19,18 +19,17 @@ function png(width: number, height: number): Buffer {
 }
 
 test('only 64x64 or 64x32 PNGs of 32 KB at most are saved as skins', () => {
-  const instance = new GameInstance(fs.mkdtempSync(path.join(os.tmpdir(), 'skin-')));
+  const instance = new GameInstance(makeTempDir('skin-'));
   const save = (png: Buffer) => () => saveSkin(instance, 'Zoe_42', png, 'classic');
   assert.doesNotThrow(save(png(64, 64)));
   assert.doesNotThrow(save(png(64, 32)));
   assert.throws(save(png(128, 128)), /64 × 64/);
   assert.throws(save(Buffer.from('GIF89a......................')), /PNG/);
   assert.throws(save(Buffer.alloc(SKIN_MAX_BYTES_ACCEPTED_BY_KARAMON_MOD + 1)), /32 Ko/);
-  fs.rmSync(instance.dir, { recursive: true, force: true });
 });
 
 test('saves what the mod reads, and a reset is a one-shot default', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skin-'));
+  const dir = makeTempDir('skin-');
   const instance = new GameInstance(dir);
   saveSkin(instance, 'Zoe_42', png(64, 64), 'slim');
   const skins = path.join(dir, 'karamon', 'skins');

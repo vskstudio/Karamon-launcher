@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { AccountStore, MICROSOFT_ACTIVE } from './AccountStore.ts';
+import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 
 function tempStore(): { store: AccountStore; file: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-accounts-'));
+  const dir = makeTempDir('karamon-accounts-');
   const file = path.join(dir, 'accounts.json');
   return { store: new AccountStore(file), file };
 }
