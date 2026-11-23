@@ -79,3 +79,23 @@ test('Voxy stays off as long as one of the two settings wants it off', () => {
   assert.deepEqual(enabledJars(instance), [...PACK_JARS].sort());
   fs.rmSync(instance.dir, { recursive: true, force: true });
 });
+
+test('Sodium switched off by an older launcher comes back when the setting is turned off', () => {
+  const instance = gameDir();
+  const parkedByOldLauncher = [
+    'sodium-fabric-0.8.12+mc1.21.1.jar',
+    'sodium-extra-fabric-0.9.3+mc1.21.1.jar',
+    'reeses-sodium-options-fabric-2.2.3+mc1.21.1.jar',
+    'iris-fabric-1.8.14-beta.1+mc1.21.1.jar',
+    'voxy-0.2.15-beta+mc1.21.1.jar',
+  ];
+  for (const name of parkedByOldLauncher) fs.renameSync(path.join(instance.modsDir, name), path.join(instance.modsDir, name + '.disabled'));
+  fs.writeFileSync(instance.legacySodiumState, JSON.stringify({ version: 1, mods: parkedByOldLauncher }, null, 2));
+
+  toggle(instance, { potatoMode: false, disableSodium: false });
+
+  assert.deepEqual(enabledJars(instance), [...PACK_JARS].sort());
+  assert.deepEqual(fs.readdirSync(instance.modsDir).filter((f) => f.endsWith('.disabled')), []);
+  assert.equal(fs.existsSync(instance.legacySodiumState), false);
+  fs.rmSync(instance.dir, { recursive: true, force: true });
+});
