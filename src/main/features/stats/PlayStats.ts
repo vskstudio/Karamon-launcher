@@ -1,5 +1,5 @@
-import fs from 'fs';
 import path from 'path';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 export interface PlayStatsData {
   totalPlayMs: number;
@@ -16,25 +16,19 @@ const EMPTY: PlayStatsData = {
 };
 
 export class PlayStats {
-  private readonly file: string;
+  private readonly file: JsonFile<PlayStatsData>;
   private sessionStart: number | null = null;
 
   constructor(dataDir: string) {
-    this.file = path.join(dataDir, 'stats.json');
+    this.file = new JsonFile(path.join(dataDir, 'stats.json'), PlayStats.decode, {
+      whenUnreadable: 'set-aside',
+      indented: false,
+    });
   }
 
   read(): PlayStatsData {
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<PlayStatsData>;
-      return {
-        totalPlayMs: typeof raw.totalPlayMs === 'number' ? raw.totalPlayMs : 0,
-        sessions: typeof raw.sessions === 'number' ? raw.sessions : 0,
-        lastPlayedAt: typeof raw.lastPlayedAt === 'number' ? raw.lastPlayedAt : null,
-        firstPlayedAt: typeof raw.firstPlayedAt === 'number' ? raw.firstPlayedAt : null,
-      };
-    } catch {
-      return { ...EMPTY };
-    }
+    const state = this.file.read();
+    return state.kind === 'read' ? state.value : { ...EMPTY };
   }
 
   startSession(): void {
@@ -62,10 +56,19 @@ export class PlayStats {
 
   private write(data: PlayStatsData): void {
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this.file, JSON.stringify(data), 'utf8');
+      this.file.write(data);
     } catch {
-      /* best-effort */
+      return;
     }
+  }
+
+  private static decode(raw: unknown): PlayStatsData {
+    const data = jsonObject(raw);
+    return {
+      totalPlayMs: typeof data.totalPlayMs === 'number' ? data.totalPlayMs : 0,
+      sessions: typeof data.sessions === 'number' ? data.sessions : 0,
+      lastPlayedAt: typeof data.lastPlayedAt === 'number' ? data.lastPlayedAt : null,
+      firstPlayedAt: typeof data.firstPlayedAt === 'number' ? data.firstPlayedAt : null,
+    };
   }
 }

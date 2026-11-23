@@ -8,6 +8,7 @@ import { registerWindowRoutes } from './WindowRoutes';
 import { Paths } from './shared/Paths';
 import { HttpClient } from './shared/HttpClient';
 import { FileLog } from './shared/FileLog';
+import { GameKeepAlive } from './GameKeepAlive';
 import { SystemCertificates } from './shared/SystemCertificates';
 import { loadPackProfile, type PackProfile } from './shared/PackProfile';
 import { Config } from './features/config/Config';
@@ -62,7 +63,7 @@ import { registerSystemRoutes } from './features/system/SystemRoutes';
 export class KaramonApp {
   private readonly paths = Paths.default();
   private readonly fileLog = new FileLog(this.paths.logsDir);
-  private readonly config = new Config(this.paths.configFile).load();
+  private readonly config = new Config(this.paths.configFile, (message) => this.fileLog.warn(message)).load();
   private readonly http = new HttpClient();
   private readonly auth = new AuthSession(new TokenStore(this.paths.authCache), new AccountStore(this.paths.accountsFile));
   private readonly stats = new PlayStats(this.paths.dataDir);
@@ -70,6 +71,7 @@ export class KaramonApp {
   private readonly javaDetector = new JavaDetector();
   private readonly javas = new InstalledJavas(this.javaDetector);
   private readonly window: WindowManager;
+  private readonly keepAlive: GameKeepAlive;
   private readonly pack: PackProfile;
   private readonly packManifest: PackManifest;
   private readonly minecraft: MinecraftLauncher;
@@ -81,6 +83,11 @@ export class KaramonApp {
 
   constructor(distDir: string, assetsDir: string) {
     this.window = new WindowManager(distDir, assetsDir);
+    this.keepAlive = new GameKeepAlive({
+      window: this.window,
+      quit: () => app.quit(),
+      quitsWhenLastWindowCloses: process.platform !== 'darwin',
+    });
     this.pack = loadPackProfile(distDir);
     this.packManifest = new PackManifest({
       http: this.http,
@@ -144,10 +151,9 @@ export class KaramonApp {
       stats: this.stats,
       discord: this.discord,
       updater: this.updater,
-      crashes: this.crashes,
       reports: this.reports,
       events: playEventsTo(this.window),
-      closeWindow: () => this.window.close(),
+      keepAlive: this.keepAlive,
       status: (msg) => this.status(msg),
       progress: (value) => this.window.emit(routes.onProgress, Math.max(0, Math.min(1, value))),
       log: (msg) => this.fileLog.info(msg),
@@ -176,13 +182,9 @@ export class KaramonApp {
       });
       this.updater.start();
       this.discord.start();
-      app.on('activate', () => {
-        if (!this.window.exists()) this.window.create();
-      });
+      app.on('activate', () => this.keepAlive.windowRequested());
     });
-    app.on('window-all-closed', () => {
-      if (process.platform !== 'darwin') app.quit();
-    });
+    app.on('window-all-closed', () => this.keepAlive.allWindowsClosed());
     app.on('before-quit', () => {
       this.stats.endSession();
       void this.discord.destroy();
@@ -223,7 +225,7 @@ export class KaramonApp {
     registerScreenshotRoutes(router, instanceDir);
     registerCrashRoutes(router, this.crashes, instanceDir);
     registerReportRoutes(router, this.reports);
-    registerBackupRoutes(router, new Backup(this.paths.dataDir), instanceDir);
+    registerBackupRoutes(router, new Backup(this.paths.dataDir, () => this.minecraft.isRunning()), instanceDir);
     registerShopRoutes(
       router,
       new Shop({

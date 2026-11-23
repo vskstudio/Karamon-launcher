@@ -9,7 +9,7 @@ function tempConfig(raw?: object): Config {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-config-'));
   const file = path.join(dir, 'config.json');
   if (raw) fs.writeFileSync(file, JSON.stringify(raw), 'utf8');
-  return new Config(file).load();
+  return new Config(file, () => {}).load();
 }
 
 test('an old config without the second game memory gets 6 Go', () => {
@@ -29,6 +29,23 @@ test('a second game memory out of bounds falls back to 6 Go', () => {
 
 test('the automatic report consent is disabled for old configs', () => {
   assert.equal(tempConfig({ memoryMb: 8192 }).get().autoSendReports, false);
+});
+
+test('a config that does not parse is kept aside instead of being overwritten by the defaults', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-config-'));
+  const file = path.join(dir, 'config.json');
+  const truncated = '{"mcGameDir": "D:\\\\Jeux\\\\Karamon", "memoryMb": 8';
+  fs.writeFileSync(file, truncated, 'utf8');
+  const logged: string[] = [];
+
+  const config = new Config(file, (message) => logged.push(message)).load();
+  config.set({ potatoMode: true });
+
+  const aside = fs.readdirSync(dir).filter((name) => name.startsWith('config.json.illisible-'));
+  assert.equal(aside.length, 1);
+  assert.equal(fs.readFileSync(path.join(dir, aside[0]), 'utf8'), truncated);
+  assert.equal(new Config(file, () => {}).load().get().potatoMode, true);
+  assert.ok(logged.some((message) => message.includes('illisible')));
 });
 
 test('the automatic report consent is saved and read back', () => {

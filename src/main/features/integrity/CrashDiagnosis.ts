@@ -1,10 +1,8 @@
-import fs from 'fs';
-import path from 'path';
+import { SessionEvidence, readFileTail } from '../crashes/SessionEvidence.ts';
 
-/** A startup crash: the game died within this window after being spawned. */
-export const EARLY_CRASH_WINDOW_MS = 2 * 60 * 1000;
+const EARLY_CRASH_WINDOW_MS = 2 * 60 * 1000;
 const LOG_TAIL_BYTES = 256 * 1024;
-const CLOCK_SLACK_MS = 5000;
+const NORMAL_SHUTDOWN_LINE = /\[Render thread\/INFO\]: Stopping!/;
 
 const SIGNATURES: Array<{ regex: RegExp; reason: string }> = [
   { regex: /zip END header not found/i, reason: 'archive tronquée (zip END header not found)' },
@@ -20,14 +18,12 @@ export function isEarlyCrash(code: number | null, startedAt: number, endedAt: nu
   return code !== 0 && endedAt - startedAt <= EARLY_CRASH_WINDOW_MS;
 }
 
-/** Reasons the crash text points at damaged files; empty when it doesn't. */
 export function detectCorruption(text: string): string[] {
   const reasons = SIGNATURES.filter(({ regex }) => regex.test(text)).map(({ reason }) => reason);
   if (nulNearJsonError(text)) reasons.push(NUL_REASON);
   return reasons;
 }
 
-/** A NUL (raw or escaped) on a line at most a few lines after a JSON parse error. */
 function nulNearJsonError(text: string): boolean {
   if (!NUL_MARKER.test(text)) return false;
   const lines = text.split(/\r?\n/);
@@ -39,71 +35,17 @@ function nulNearJsonError(text: string): boolean {
   return false;
 }
 
-/** The crash report written by this run (if any) plus the tail of latest.log. */
 export function readCrashEvidence(gameDir: string, sinceMs: number): string {
-  const parts: string[] = [];
-  const report = newestCrashReport(path.join(gameDir, 'crash-reports'), sinceMs - CLOCK_SLACK_MS);
-  if (report) parts.push(readText(report));
-  const log = path.join(gameDir, 'logs', 'latest.log');
-  try {
-    if (fs.statSync(log).mtimeMs >= sinceMs - CLOCK_SLACK_MS) parts.push(readTail(log, LOG_TAIL_BYTES));
-  } catch {
-    /* no log */
-  }
-  return parts.join('\n');
+  const evidence = new SessionEvidence(gameDir, sinceMs);
+  const log = evidence.latestLog();
+  return [evidence.newestCrashReportText(), log && readFileTail(log, LOG_TAIL_BYTES)]
+    .filter((part): part is string => !!part)
+    .join('\n');
 }
 
-/**
- * The game ran its normal shutdown (`Stopping!` in this run's latest.log) and wrote no crash report:
- * a non-zero code after that is a native crash while quitting (0xC0000409 seen with Voxy/voice/drivers).
- */
 export function stoppedCleanly(gameDir: string, sinceMs: number): boolean {
-  if (newestCrashReport(path.join(gameDir, 'crash-reports'), sinceMs - CLOCK_SLACK_MS)) return false;
-  const log = path.join(gameDir, 'logs', 'latest.log');
-  try {
-    if (fs.statSync(log).mtimeMs < sinceMs - CLOCK_SLACK_MS) return false;
-  } catch {
-    return false;
-  }
-  return /\[Render thread\/INFO\]: Stopping!/.test(readTail(log, LOG_TAIL_BYTES));
-}
-
-function newestCrashReport(dir: string, sinceMs: number): string | null {
-  let best: { file: string; mtime: number } | null = null;
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith('.txt')) continue;
-      const file = path.join(dir, name);
-      const mtime = fs.statSync(file).mtimeMs;
-      if (mtime >= sinceMs && (!best || mtime > best.mtime)) best = { file, mtime };
-    }
-  } catch {
-    return null;
-  }
-  return best?.file ?? null;
-}
-
-function readText(file: string): string {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
-function readTail(file: string, bytes: number): string {
-  try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      const length = Math.min(size, bytes);
-      const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, size - length);
-      return buffer.toString('utf8');
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return '';
-  }
+  const evidence = new SessionEvidence(gameDir, sinceMs);
+  if (evidence.newestCrashReport()) return false;
+  const log = evidence.latestLog();
+  return !!log && NORMAL_SHUTDOWN_LINE.test(readFileTail(log, LOG_TAIL_BYTES));
 }

@@ -5,11 +5,12 @@ import os from 'os';
 import path from 'path';
 import {
   detectCorruption,
-  EARLY_CRASH_WINDOW_MS,
   isEarlyCrash,
   readCrashEvidence,
   stoppedCleanly,
 } from './CrashDiagnosis.ts';
+
+const TWO_MINUTES = 2 * 60 * 1000;
 
 test('reconnaît un jar tronqué', () => {
   const text = 'java.util.zip.ZipException: zip END header not found\n\tat java.base/java.util.zip.ZipFile';
@@ -39,9 +40,9 @@ test('ignore un crash sans rapport avec des fichiers abîmés', () => {
 
 test('ne considère que les sorties en erreur dans les deux premières minutes', () => {
   assert.equal(isEarlyCrash(1, 0, 30_000), true);
-  assert.equal(isEarlyCrash(-1, 0, EARLY_CRASH_WINDOW_MS), true);
+  assert.equal(isEarlyCrash(-1, 0, TWO_MINUTES), true);
   assert.equal(isEarlyCrash(0, 0, 30_000), false);
-  assert.equal(isEarlyCrash(1, 0, EARLY_CRASH_WINDOW_MS + 1), false);
+  assert.equal(isEarlyCrash(1, 0, TWO_MINUTES + 1), false);
 });
 
 test('lit le dernier rapport de crash de la session et la fin de latest.log', () => {

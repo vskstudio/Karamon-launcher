@@ -22,6 +22,16 @@ test('a corrupt file falls back to the Microsoft account', () => {
   assert.deepEqual(store.load(), { active: MICROSOFT_ACTIVE, offline: [] });
 });
 
+test('adding an account over a corrupt file keeps the old file aside', () => {
+  const { store, file } = tempStore();
+  fs.writeFileSync(file, '{"offline": [{"name": "Kara_42"');
+  store.addOffline('Steve');
+  const aside = fs.readdirSync(path.dirname(file)).filter((name) => name.startsWith('accounts.json.illisible-'));
+  assert.equal(aside.length, 1);
+  assert.equal(fs.readFileSync(path.join(path.dirname(file), aside[0]), 'utf8'), '{"offline": [{"name": "Kara_42"');
+  assert.deepEqual(store.load().offline.map((a) => a.name), ['Steve']);
+});
+
 test('an offline account is remembered with its offline UUID and becomes active', () => {
   const { store } = tempStore();
   const entry = store.addOffline('Notch');

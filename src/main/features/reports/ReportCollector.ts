@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { SessionEvidence, readFileTail, trimToTail } from '../crashes/SessionEvidence.ts';
 import { redactReportText } from './ReportRedactor.ts';
 import type { LauncherReport, ReportFile, ReportTrigger } from './ReportTypes.ts';
 
@@ -40,7 +40,6 @@ export interface CollectReportInput {
   summary: string[];
   gameDir: string;
   ramMb: number;
-  /** Début de la session : un crash-report ou hs_err plus ancien vient d'une autre session. */
   since?: number;
 }
 
@@ -81,12 +80,13 @@ export class ReportCollector {
   }
 
   private collectFiles(gameDir: string, redact: (text: string) => string, since: number): ReportFile[] {
-    const accepted = (pattern: RegExp) => (name: string) => pattern.test(name) && panelFileLimit(name) !== undefined;
+    const evidence = new SessionEvidence(gameDir, since);
+    const acceptedByPanel = (file: string): boolean => panelFileLimit(path.basename(file)) !== undefined;
     const candidates = [
       path.join(this.options.dataDir, 'logs', 'launcher.log'),
-      path.join(gameDir, 'logs', 'latest.log'),
-      newestFile(path.join(gameDir, 'crash-reports'), accepted(/^crash-.*\.txt$/), since),
-      newestFile(gameDir, accepted(/^hs_err_pid\d+\.log$/), since),
+      evidence.latestLog(),
+      evidence.crashReports().find(acceptedByPanel),
+      evidence.hsErrLogs().find(acceptedByPanel),
     ];
     const files: ReportFile[] = [];
     for (const file of candidates) {
@@ -94,9 +94,9 @@ export class ReportCollector {
       const name = path.basename(file);
       const limit = panelFileLimit(name);
       if (limit === undefined) continue;
-      const content = readUtf8Tail(file, limit);
+      const content = readFileTail(file, limit);
       if (!content) continue;
-      files.push({ name, content: fitRedactedTail(redact(content), limit) });
+      files.push({ name, content: trimToTail(redact(content), limit) });
     }
     return files;
   }
@@ -125,53 +125,6 @@ function localMachineNames(): string[] {
     return names;
   }
   return names;
-}
-
-function newestFile(dir: string, accepts: (name: string) => boolean, since: number): string | null {
-  let newest: { file: string; mtime: number } | null = null;
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (!accepts(name)) continue;
-      const file = path.join(dir, name);
-      const stat = fs.statSync(file);
-      if (!stat.isFile() || stat.mtimeMs < since) continue;
-      if (!newest || stat.mtimeMs > newest.mtime) newest = { file, mtime: stat.mtimeMs };
-    }
-  } catch {
-    return null;
-  }
-  return newest?.file ?? null;
-}
-
-const TRUNCATED_MARKER = '[début tronqué]\n';
-const TRUNCATED_MARKER_BYTES = Buffer.byteLength(TRUNCATED_MARKER);
-
-export function readUtf8Tail(file: string, limitBytes: number): string {
-  try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      const length = size <= limitBytes ? size : Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES);
-      const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, size - length);
-      if (length === size) return buffer.toString('utf8');
-      const firstLineEnd = buffer.indexOf(0x0a);
-      const completeLines = firstLineEnd < 0 ? '' : buffer.subarray(firstLineEnd + 1).toString('utf8');
-      return TRUNCATED_MARKER + completeLines;
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return '';
-  }
-}
-
-export function fitRedactedTail(text: string, limitBytes: number): string {
-  if (Buffer.byteLength(text) <= limitBytes) return text;
-  const body = Buffer.from(text.startsWith(TRUNCATED_MARKER) ? text.slice(TRUNCATED_MARKER.length) : text);
-  const window = body.subarray(body.length - Math.max(0, limitBytes - TRUNCATED_MARKER_BYTES));
-  const firstLineEnd = window.indexOf(0x0a);
-  return TRUNCATED_MARKER + (firstLineEnd < 0 ? '' : window.subarray(firstLineEnd + 1).toString('utf8'));
 }
 
 function fitReport(report: LauncherReport): LauncherReport {

@@ -205,3 +205,16 @@ test('ne joint pas le crash-report ni le hs_err d’une session précédente', a
   assert.deepEqual(fresh.files.map((file) => file.name), ['latest.log', 'hs_err_pid2.log']);
   fs.rmSync(f.root, { recursive: true, force: true });
 });
+
+test('un rapport d’échec de synchronisation ne joint pas le latest.log de la partie précédente', async () => {
+  const f = fixture();
+  const latest = path.join(f.gameDir, 'logs', 'latest.log');
+  write(latest, '[Render thread/INFO]: partie de la veille');
+  const yesterday = new Date(Date.now() - 86_400_000);
+  fs.utimesSync(latest, yesterday, yesterday);
+  write(path.join(f.dataDir, 'logs', 'launcher.log'), 'Synchronisation du pack: HTTP 503');
+
+  const report = await f.collector.collect({ trigger: 'sync_failed', summary: ['Synchronisation du pack'], gameDir: f.gameDir, ramMb: 4096, since: Date.now() - 30_000 });
+  assert.deepEqual(report.files.map((file) => file.name), ['launcher.log']);
+  fs.rmSync(f.root, { recursive: true, force: true });
+});

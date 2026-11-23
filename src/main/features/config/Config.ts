@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 export interface ServerInfo {
   host: string;
@@ -45,32 +44,33 @@ const DEFAULTS: AppConfig = Object.freeze({
   server: { host: 'play.karamon.fr', port: 25565 },
 }) as AppConfig;
 
+export type ConfigLog = (message: string) => void;
+
 export class Config {
-  private readonly filePath: string;
+  private readonly file: JsonFile<AppConfig>;
+  private readonly log: ConfigLog;
   private data: AppConfig | null = null;
 
-  constructor(filePath: string) {
-    this.filePath = filePath;
+  constructor(filePath: string, log: ConfigLog) {
+    this.file = new JsonFile(filePath, (raw) => Config.normalize(Config.merge(DEFAULTS, jsonObject(raw) as AppConfigUpdate)), {
+      whenUnreadable: 'set-aside',
+    });
+    this.log = log;
   }
 
   load(): this {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as AppConfigUpdate;
-        this.data = Config.normalize(Config.merge(DEFAULTS, raw));
-        return this;
-      }
-    } catch (error) {
-      console.warn(`Config ${this.filePath} illisible, valeurs par défaut utilisées:`, error);
+    const state = this.file.read();
+    if (state.kind === 'unreadable') {
+      this.log(`Config ${this.file.path} illisible (${state.reason}), réglages par défaut utilisés jusqu'au prochain enregistrement, qui gardera l'ancien fichier à côté`);
     }
-    this.data = Config.clone(DEFAULTS);
+    this.data = state.kind === 'read' ? state.value : Config.clone(DEFAULTS);
     return this;
   }
 
-  save(): void {
+  private save(): void {
     if (!this.data) return;
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf8');
+    const { keptUnreadableAs } = this.file.write(this.data);
+    if (keptUnreadableAs) this.log(`Config illisible gardée sous ${keptUnreadableAs}`);
   }
 
   get(): AppConfig {

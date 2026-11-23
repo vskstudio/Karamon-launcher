@@ -92,7 +92,7 @@ export class MinecraftLauncher {
         const servers = new ServersDat(dir);
         servers.ensureServer(host, name, devMode);
         // Dev mode: a ready entry for a server running on this machine.
-        if (devMode) servers.ensureServer('localhost', `${name} (local)`, true);
+        if (devMode) servers.ensureDevServer(name);
         return { ok: true, dir };
       } catch (e) {
         return { ok: false, dir, error: (e as Error).message };

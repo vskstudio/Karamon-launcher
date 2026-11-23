@@ -78,6 +78,20 @@ export class WindowManager implements EventSink {
     this.window?.close();
   }
 
+  hide(): void {
+    if (this.exists()) this.window!.hide();
+  }
+
+  reveal(): void {
+    if (!this.exists()) {
+      this.create();
+      return;
+    }
+    if (this.window!.isMinimized()) this.window!.restore();
+    this.window!.show();
+    this.window!.focus();
+  }
+
   emit<Payload>(route: EventRoute<Payload>, payload: NoInfer<Payload>): void {
     if (this.exists()) {
       this.window!.webContents.send(route.channel, payload);

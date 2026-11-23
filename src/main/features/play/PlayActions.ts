@@ -1,5 +1,5 @@
 import type { Config } from '../config/Config';
-import type { CrashReports } from '../crashes/CrashReports';
+import { SessionEvidence } from '../crashes/SessionEvidence';
 import type { DiscordRpc } from '../discord/DiscordRpc';
 import { repairSummary } from '../integrity/RepairSummary';
 import type { MinecraftLauncher } from '../minecraft/MinecraftLauncher';
@@ -9,8 +9,7 @@ import type { ReportManager } from '../reports/ReportManager';
 import { failureSummary, failureTrigger } from '../reports/ReportTriggers';
 import type { PlayStats } from '../stats/PlayStats';
 import type { AutoUpdater } from '../updater/AutoUpdater';
-
-const CLOSE_DELAY_MS = 2000;
+import type { GameKeepAlive } from '../../GameKeepAlive';
 
 export interface GameState {
   running: boolean;
@@ -42,10 +41,9 @@ export interface PlayActionsOptions {
   stats: PlayStats;
   discord: DiscordRpc;
   updater: AutoUpdater;
-  crashes: CrashReports;
   reports: Pick<ReportManager, 'reportInBackground'>;
   events: PlayEvents;
-  closeWindow: () => void;
+  keepAlive: Pick<GameKeepAlive, 'gameStarted' | 'lastGameExited'>;
   status: StatusEmitter;
   progress: ProgressEmitter;
   log: (message: string) => void;
@@ -79,13 +77,14 @@ export class PlayActions {
             stats.endSession();
             discord.setMenu();
             events.gameState({ running: false });
+            this.options.keepAlive.lastGameExited({ crashed: trigger !== null || corruption.length > 0 });
           }
           events.consoleLine(code === 0 ? 'Minecraft fermé.' : `Minecraft fermé (code ${code}).`);
           if (corruption.length > 0) void this.repairAfterCrash(corruption);
           if (trigger) {
             reports.reportInBackground(
               trigger,
-              [`Code de sortie ${code}`, ...corruption, ...this.options.crashes.recentCrashCause(gameDir)],
+              [`Code de sortie ${code}`, ...corruption, ...new SessionEvidence(gameDir, startedAt).crashSummary()],
               startedAt,
             );
           }
@@ -99,7 +98,7 @@ export class PlayActions {
       this.setGameRunning(true);
       events.gameState({ running: true });
       status('Minecraft lancé !');
-      if (cfg.closeLauncherOnGameStart) setTimeout(() => this.options.closeWindow(), CLOSE_DELAY_MS);
+      this.options.keepAlive.gameStarted(cfg.closeLauncherOnGameStart);
     } catch (e) {
       status('Erreur: ' + (e as Error).message);
       progress(0);

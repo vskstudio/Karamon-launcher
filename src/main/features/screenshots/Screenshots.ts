@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { protocol, net } from 'electron';
 import { pathToFileURL } from 'url';
+import { playerFileIn } from '../../shared/PlayerFileName.ts';
 
 export interface ScreenshotEntry {
   name: string;
@@ -72,7 +73,7 @@ export class Screenshots {
           mtime: stat.mtimeMs,
         });
       } catch {
-        // skip unreadable
+        continue;
       }
     }
     entries.sort((a, b) => b.mtime - a.mtime);
@@ -80,12 +81,7 @@ export class Screenshots {
   }
 
   delete(gameDir: string, name: string): ScreenshotsListResult {
-    if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-      throw new Error('Nom invalide');
-    }
-    const dir = Screenshots.dirFor(gameDir);
-    const full = path.join(dir, name);
-    if (fs.existsSync(full)) fs.unlinkSync(full);
+    fs.rmSync(playerFileIn(Screenshots.dirFor(gameDir), name), { force: true });
     return this.list(gameDir);
   }
 }
