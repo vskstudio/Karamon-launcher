@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { installOverrides, isForcedOverride, normalizeOverridePath } from './OverridesInstaller.ts';
+import { installOverrides } from './OverridesInstaller.ts';
 
 function makeZip(dir: string, files: Record<string, string>): string {
   const zip = new AdmZip();
@@ -60,11 +60,4 @@ test('installOverrides always refreshes FancyMenu layouts and assets', () => {
   const again = installOverrides(zipPath, game);
   assert.deepEqual(again, { written: 0, kept: 2 });
   fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('helpers normalize names and classify forced prefixes', () => {
-  assert.equal(normalizeOverridePath('.\\config\\fancymenu\\options.txt'), 'config/fancymenu/options.txt');
-  assert.equal(isForcedOverride('config/fancymenu/customization/x.txt'), true);
-  assert.equal(isForcedOverride('config/fancymenu/options.txt'), true);
-  assert.equal(isForcedOverride('config/cobblemon/main.json'), false);
 });

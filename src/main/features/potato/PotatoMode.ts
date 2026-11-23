@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
-import { JarParking } from '../modpack/JarParking.ts';
-import { POTATO_MODS, potatoModFor, readModId } from './PotatoMods.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
+import { POTATO_MODS } from './PotatoMods.ts';
 import {
   IRIS_RULES,
   OPTIONS_RULES,
@@ -17,26 +17,12 @@ import {
   type SettingsDoc,
 } from './PotatoSettings.ts';
 
-/**
- * Mode PC modeste on disk. While it is on, each launch (after the pack sync)
- * turns shaders off, lowers the video settings and parks the heavy client-only
- * mods as `<jar>.disabled`. What it changed is kept in .karamon-potato-state.json
- * in the game folder, so turning the mode off puts the player's values and the
- * mods back. Every step is best-effort: a missing or unreadable file is skipped.
- */
-
-const STATE_FILE = '.karamon-potato-state.json';
-
 interface Target {
   file: string;
   rules: Rule[];
   parse: (text: string) => SettingsDoc;
 }
 
-/**
- * A missing file is skipped: the sync writes options.txt and iris.properties
- * before the mode runs at launch, and Sodium writes its file on first start.
- */
 const TARGETS: Target[] = [
   { file: 'options.txt', rules: OPTIONS_RULES, parse: (t) => keyValueDoc(t, ':') },
   { file: 'config/iris.properties', rules: IRIS_RULES, parse: (t) => keyValueDoc(t, '=') },
@@ -45,59 +31,42 @@ const TARGETS: Target[] = [
 
 interface PotatoState {
   version: 1;
-  /** Game-folder-relative file → keys the mode changed in it. */
   files: Record<string, FileBackup>;
-  /** Jar names (without `.disabled`) the mode parked. */
-  mods: string[];
 }
 
-export interface PotatoReport {
-  /** `file: key` written (apply) or put back (restore). */
+export interface PotatoSettingsReport {
   settings: string[];
-  /** Jars parked (apply) or put back (restore). */
-  mods: string[];
   errors: string[];
 }
 
-function isPotatoJar(jarPath: string, fileName: string): boolean {
-  const mod = potatoModFor(fileName);
-  return mod !== null && readModId(jarPath) === mod.id;
+export interface PotatoReport extends PotatoSettingsReport {
+  mods: string[];
 }
 
 export class PotatoMode {
-  /** Jars currently parked in this game folder, for ModpackSync. */
-  static parkedJars(gameDir: string): string[] {
-    return PotatoMode.readState(gameDir).mods;
-  }
 
-  /** Mode on: applies it. Mode off: puts back whatever it changed. */
-  static reconcile(gameDir: string, enabled: boolean): PotatoReport {
-    return enabled ? PotatoMode.apply(gameDir) : PotatoMode.restore(gameDir);
-  }
-
-  static apply(gameDir: string): PotatoReport {
-    const state = PotatoMode.readState(gameDir);
-    const report: PotatoReport = { settings: [], mods: [], errors: [] };
+  static applySettings(instance: GameInstance): PotatoSettingsReport {
+    const state = PotatoMode.readState(instance);
+    const report: PotatoSettingsReport = { settings: [], errors: [] };
     for (const target of TARGETS) {
       try {
-        PotatoMode.applyTarget(gameDir, target, state, report);
+        PotatoMode.applyTarget(instance, target, state, report);
       } catch (e) {
         report.errors.push(`${target.file}: ${(e as Error).message}`);
       }
     }
-    PotatoMode.parkMods(gameDir, state, report);
-    PotatoMode.writeState(gameDir, state, report);
+    PotatoMode.writeState(instance, state, report);
     return report;
   }
 
-  static restore(gameDir: string): PotatoReport {
-    const state = PotatoMode.readState(gameDir);
-    const report: PotatoReport = { settings: [], mods: [], errors: [] };
+  static restoreSettings(instance: GameInstance): PotatoSettingsReport {
+    const state = PotatoMode.readState(instance);
+    const report: PotatoSettingsReport = { settings: [], errors: [] };
     for (const [file, backup] of Object.entries(state.files)) {
       const target = TARGETS.find((t) => t.file === file);
       if (!target) continue;
       try {
-        const full = path.join(gameDir, file);
+        const full = path.join(instance.dir, file);
         if (!fs.existsSync(full)) continue;
         const doc = target.parse(fs.readFileSync(full, 'utf8'));
         const restored = restoreRules(doc, backup);
@@ -108,13 +77,17 @@ export class PotatoMode {
       }
     }
     state.files = {};
-    state.mods = PotatoMode.unparkMods(gameDir, state.mods, report);
-    PotatoMode.writeState(gameDir, state, report);
+    PotatoMode.writeState(instance, state, report);
     return report;
   }
 
-  private static applyTarget(gameDir: string, target: Target, state: PotatoState, report: PotatoReport): void {
-    const full = path.join(gameDir, target.file);
+  private static applyTarget(
+    instance: GameInstance,
+    target: Target,
+    state: PotatoState,
+    report: PotatoSettingsReport,
+  ): void {
+    const full = path.join(instance.dir, target.file);
     if (!fs.existsSync(full)) return;
     const doc = target.parse(fs.readFileSync(full, 'utf8'));
     const backup = state.files[target.file] ?? emptyBackup();
@@ -125,45 +98,32 @@ export class PotatoMode {
     report.settings.push(...written.map((key) => `${target.file}: ${key}`));
   }
 
-  private static parkMods(gameDir: string, state: PotatoState, report: PotatoReport): void {
-    state.mods = JarParking.park(gameDir, state.mods, isPotatoJar, report);
-  }
-
-  private static unparkMods(gameDir: string, names: string[], report: PotatoReport): string[] {
-    return JarParking.unpark(gameDir, names, report);
-  }
-
-  private static readState(gameDir: string): PotatoState {
+  private static readState(instance: GameInstance): PotatoState {
     try {
-      const raw = JSON.parse(fs.readFileSync(path.join(gameDir, STATE_FILE), 'utf8')) as Partial<PotatoState>;
+      const raw = JSON.parse(fs.readFileSync(instance.potatoState, 'utf8')) as Partial<PotatoState>;
       const files: Record<string, FileBackup> = {};
       for (const [file, backup] of Object.entries(raw.files ?? {})) {
         if (backup && typeof backup.before === 'object' && typeof backup.applied === 'object') {
           files[file] = { before: { ...backup.before }, applied: { ...backup.applied } };
         }
       }
-      const mods = Array.isArray(raw.mods) ? raw.mods.filter((m): m is string => typeof m === 'string') : [];
-      return { version: 1, files, mods };
+      return { version: 1, files };
     } catch {
-      return { version: 1, files: {}, mods: [] };
+      return { version: 1, files: {} };
     }
   }
 
-  private static writeState(gameDir: string, state: PotatoState, report: PotatoReport): void {
-    const file = path.join(gameDir, STATE_FILE);
+  private static writeState(instance: GameInstance, state: PotatoState, report: PotatoSettingsReport): void {
+    const file = instance.potatoState;
     try {
-      if (Object.keys(state.files).length === 0 && state.mods.length === 0) {
-        fs.rmSync(file, { force: true });
-      } else {
-        writeFileAtomic(file, JSON.stringify(state, null, 2));
-      }
+      if (Object.keys(state.files).length === 0) fs.rmSync(file, { force: true });
+      else writeFileAtomic(file, JSON.stringify(state, null, 2));
     } catch (e) {
-      report.errors.push(`${STATE_FILE}: ${(e as Error).message}`);
+      report.errors.push(`${path.basename(file)}: ${(e as Error).message}`);
     }
   }
 }
 
-/** Short French summary of a report for the launcher console. */
 export function potatoSummary(enabled: boolean, report: PotatoReport): string {
   const parts: string[] = [];
   if (report.settings.length > 0) {

@@ -25,8 +25,6 @@ import { registerMinecraftRoutes } from './features/minecraft/MinecraftRoutes';
 import { ModpackSync } from './features/modpack/ModpackSync';
 import { PackManifest } from './features/modpack/PackManifest';
 import { registerModpackRoutes } from './features/modpack/ModpackRoutes';
-import { PotatoMode } from './features/potato/PotatoMode';
-import { SodiumOff } from './features/sodium/SodiumOff';
 import { AutoUpdater } from './features/updater/AutoUpdater';
 import { registerUpdaterRoutes } from './features/updater/UpdaterRoutes';
 import { JavaDetector } from './features/java/JavaDetector';
@@ -105,7 +103,6 @@ export class KaramonApp {
         http: this.http,
         disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
         fallbackClientOptions: this.pack.clientOptions,
-        parkedJars: (dir) => [...PotatoMode.parkedJars(dir), ...SodiumOff.parkedJars(dir)],
       }),
       gameLauncher: new GameLauncher({
         paths: this.paths,
@@ -220,13 +217,20 @@ export class KaramonApp {
       instanceDir,
       window: () => this.window.current(),
     });
-    registerModpackRoutes(router, { packManifest: this.packManifest, instanceDir });
+    registerModpackRoutes(router, {
+      packManifest: this.packManifest,
+      instanceDir,
+      listMods: () => this.minecraft.listMods(this.config.get()),
+    });
     registerJavaRoutes(router, this.javaDetector);
     registerStatsRoutes(router, this.stats);
     registerScreenshotRoutes(router, instanceDir);
     registerCrashRoutes(router, this.crashes, instanceDir);
     registerReportRoutes(router, this.reports);
-    registerBackupRoutes(router, new Backup(this.paths.dataDir, () => this.minecraft.isRunning()), instanceDir);
+    registerBackupRoutes(router, new Backup(this.paths.dataDir, () => this.minecraft.isRunning()), (operation) => {
+      const session = this.minecraft.session(this.config.get());
+      return session.exclusive(() => operation(session.instance.dir));
+    });
     registerShopRoutes(
       router,
       new Shop({

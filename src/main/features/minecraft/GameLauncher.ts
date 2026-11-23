@@ -1,16 +1,18 @@
-import { DevMode } from '../../shared/DevMode';
+import { DevMode } from '../../shared/DevMode.ts';
 import { spawn, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron/main';
-import { Paths } from '../../shared/Paths';
-import type { HttpClient } from '../../shared/HttpClient';
-import type { ActiveSession, AuthSession } from '../auth/AuthSession';
-import { VersionResolver, type MojangVersion } from './VersionResolver';
-import { LibraryDownloader } from './LibraryDownloader';
-import { AssetDownloader } from './AssetDownloader';
-import { ArgumentResolver } from './ArgumentResolver';
-import { launchIdentity } from './LaunchIdentity';
+import { Paths } from '../../shared/Paths.ts';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { ActiveSession, AuthSession } from '../auth/AuthSession.ts';
+import { VersionResolver, type MojangVersion } from './VersionResolver.ts';
+import { LibraryDownloader } from './LibraryDownloader.ts';
+import { AssetDownloader } from './AssetDownloader.ts';
+import { ArgumentResolver } from './ArgumentResolver.ts';
+import { launchIdentity } from './LaunchIdentity.ts';
+import { FabricInstaller } from './FabricInstaller.ts';
+import { forEachOutputLine } from './OutputLines.ts';
 
 export interface GameLauncherOptions {
   paths: Paths;
@@ -25,100 +27,80 @@ export interface LaunchSpec {
   memoryMb: number;
   jvmArgs: string;
   gameDir: string;
-  /** Adds DevMode.JVM_FLAG so the mod shows the server browser. */
   devMode?: boolean;
 }
 
 export interface LaunchEvents {
   onStatus: (msg: string) => void;
   onProgress: (fraction: number) => void;
-  onExit: (code: number | null) => void;
+  onExit: (code: number | null, spawnedAt: number) => void;
   onLog: (line: string) => void;
 }
-
-const DEFAULT_MEMORY_MB = 4096;
 
 export class GameLauncher {
   private readonly resolver: VersionResolver;
   private readonly libraries: LibraryDownloader;
   private readonly assets: AssetDownloader;
-  /** One game per account, keyed by profile id. */
-  private readonly running = new Map<string, ChildProcess>();
+  private readonly fabric: FabricInstaller;
+  private readonly opts: GameLauncherOptions;
+  private readonly accountsInGame = new Set<string>();
 
-  constructor(private readonly opts: GameLauncherOptions) {
+  constructor(opts: GameLauncherOptions) {
+    this.opts = opts;
     this.resolver = new VersionResolver(opts.http, opts.paths);
     this.libraries = new LibraryDownloader(opts.http);
     this.assets = new AssetDownloader(opts.http);
-  }
-
-  isRunning(): boolean {
-    return this.running.size > 0;
+    this.fabric = new FabricInstaller({ mcVersion: opts.mcVersion, fabricVersion: opts.fabricVersion, http: opts.http });
   }
 
   async launch(spec: LaunchSpec, events: LaunchEvents): Promise<void> {
     events.onStatus('Authentification...');
     const session = await this.opts.auth.getActive();
     const account = session.profile.id;
-    // The server kicks the first game when the same account joins twice.
-    if (this.running.has(account)) {
+    if (this.accountsInGame.has(account)) {
       throw new Error(`${session.profile.name} est déjà en jeu : change de compte pour lancer une autre instance.`);
     }
+    this.accountsInGame.add(account);
+    let child: ChildProcess;
+    try {
+      events.onStatus('Préparation de la version...');
+      const version = await this.installVersion(events);
 
-    events.onStatus('Préparation de la version...');
-    const version = await this.installVersion(events);
+      events.onStatus('Construction de la commande...');
+      const args = this.buildArgs(version, spec, session);
 
-    events.onStatus('Construction de la commande...');
-    const args = this.buildArgs(version, spec, session);
-
-    events.onProgress(1);
-    events.onStatus('Lancement de Minecraft...');
-
-    const javaPath = spec.javaPath || 'java';
-    const child = spawn(javaPath, args, {
-      cwd: spec.gameDir,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    this.running.set(account, child);
+      events.onProgress(1);
+      events.onStatus('Lancement de Minecraft...');
+      child = spawn(spec.javaPath, args, {
+        cwd: spec.gameDir,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+    } catch (e) {
+      this.accountsInGame.delete(account);
+      throw e;
+    }
+    const spawnedAt = Date.now();
     child.unref();
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      for (const line of chunk.toString('utf8').split('\n')) {
-        if (line.trim()) events.onLog(line);
-      }
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      for (const line of chunk.toString('utf8').split('\n')) {
-        if (line.trim()) events.onLog(line);
-      }
-    });
-    child.on('exit', (code) => {
-      this.running.delete(account);
-      events.onExit(code);
-    });
+    if (child.stdout) forEachOutputLine(child.stdout, events.onLog);
+    if (child.stderr) forEachOutputLine(child.stderr, events.onLog);
+    let exited = false;
+    const exit = (code: number | null): void => {
+      if (exited) return;
+      exited = true;
+      this.accountsInGame.delete(account);
+      events.onExit(code, spawnedAt);
+    };
+    child.on('exit', (code) => exit(code));
     child.on('error', (err) => {
-      this.running.delete(account);
       events.onLog(`Erreur Java: ${err.message}`);
-      events.onExit(-1);
+      exit(-1);
     });
   }
 
   private async installVersion(events: LaunchEvents): Promise<MojangVersion> {
-    const fabricId = `fabric-loader-${this.opts.fabricVersion}-${this.opts.mcVersion}`;
-    const fabricUrl = `https://meta.fabricmc.net/v2/versions/loader/${this.opts.mcVersion}/${this.opts.fabricVersion}/profile/json`;
-    const fabricJsonPath = path.join(this.opts.paths.versionsDir, fabricId, `${fabricId}.json`);
-
-    let fabricText: string;
-    if (fs.existsSync(fabricJsonPath)) {
-      fabricText = fs.readFileSync(fabricJsonPath, 'utf8');
-    } else {
-      events.onStatus('Téléchargement du profil Fabric...');
-      fabricText = await this.opts.http.getText(fabricUrl);
-      fs.mkdirSync(path.dirname(fabricJsonPath), { recursive: true });
-      fs.writeFileSync(fabricJsonPath, fabricText, 'utf8');
-    }
+    const fabricText = await this.fabric.profileJson(this.opts.paths.versionsDir);
 
     const version = await this.resolver.resolveFromText(fabricText);
 
@@ -139,7 +121,6 @@ export class GameLauncher {
     events.onStatus('Téléchargement des librairies...');
     await this.libraries.downloadAll(version.libraries ?? [], this.opts.paths.librariesDir, (frac, label) => {
       events.onProgress(0.1 + frac * 0.3);
-      // UI only: one line per file would push the useful part out of launcher.log (and the reports).
       events.onLog(`Librairies: ${label}`);
     });
 
@@ -169,8 +150,7 @@ export class GameLauncher {
     cpEntries.push(clientJarPath);
     const classpath = cpEntries.join(path.delimiter);
 
-    const memMb = spec.memoryMb || DEFAULT_MEMORY_MB;
-    const heapArgs = [`-Xmx${memMb}m`, '-Xms512m'];
+    const heapArgs = [`-Xmx${spec.memoryMb}m`, '-Xms512m'];
     const userJvm = (spec.jvmArgs || '').split(/\s+/).filter(Boolean);
     if (spec.devMode) userJvm.push(DevMode.JVM_FLAG);
 

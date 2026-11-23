@@ -75,12 +75,10 @@ test('options.txt: only lowers, keeps unknown lines and CRLF, then restores the 
   assert.equal(backup.before.renderDistance, '16');
   assert.equal(backup.before.biomeBlendRadius, null);
 
-  // Second launch while on: nothing to write, backup still holds the first values.
   const again = keyValueDoc(text, ':');
   assert.deepEqual(applyRules(again, OPTIONS_RULES, backup), []);
   assert.equal(backup.before.renderDistance, '16');
 
-  // The player changes the clouds in game, then turns the mode off.
   const played = keyValueDoc(text.replace('renderClouds:"false"', 'renderClouds:"true"'), ':');
   const restored = restoreRules(played, backup);
   const back = played.serialize();
@@ -98,7 +96,7 @@ test('a second apply does not overwrite the backup taken when the mode was turne
   const backup = emptyBackup();
   const doc = keyValueDoc('renderDistance:12\n', ':');
   applyRules(doc, OPTIONS_RULES, backup);
-  doc.set('renderDistance', '10'); // raised in game while the mode is on
+  doc.set('renderDistance', '10');
   applyRules(doc, OPTIONS_RULES, backup);
   assert.equal(doc.get('renderDistance'), '6');
   assert.equal(backup.before.renderDistance, '12');
@@ -131,7 +129,6 @@ test('sodium-options.json: dotted paths, fast leaves, restore', () => {
   assert.equal(lowered.quality.weather_quality, 'FAST');
   assert.equal(lowered.quality.enable_vignette, false);
   assert.equal(lowered.performance.use_entity_culling, true);
-  // Absent: Sodium's default is already the cheap one, nothing added.
   assert.equal(lowered.performance.use_block_face_culling, undefined);
   assert.equal(lowered.notifications.has_seen_donation_prompt, true);
 
@@ -146,12 +143,10 @@ test('lowEndReasons: RAM, Intel-only GPU, few threads', () => {
   assert.deepEqual(lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x8086 }] }), [
     'carte graphique intégrée',
   ]);
-  // Intel iGPU + NVIDIA card: the laptop has a real GPU.
   assert.deepEqual(
     lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x8086 }, { vendorId: 0x10de }] }),
     [],
   );
-  // Software renderer only (vendor unknown): not reported.
   assert.deepEqual(lowEndReasons({ totalMemMb: 16000, cpuCount: 8, gpus: [{ vendorId: 0x1ae0 }] }), []);
   assert.deepEqual(lowEndReasons({ totalMemMb: 12000, cpuCount: 4, gpus: [] }), ['4 threads']);
 });

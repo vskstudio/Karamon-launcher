@@ -5,10 +5,6 @@ export interface ClientOptions {
   resourcePacks: string[];
   shaderPack: string;
   enableShaders: boolean;
-  /**
-   * Raised by the pack when an update must impose its shader choice (shaderPack,
-   * enableShaders, shaderpacks/*.txt) over the player's. 0 when absent.
-   */
   shaderRevision: number;
 }
 
@@ -29,19 +25,23 @@ export function parseClientOptions(raw: unknown): ClientOptions | null {
   };
 }
 
+export function parseClientOptionsText(text: string): ClientOptions | null {
+  try {
+    return parseClientOptions(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
 export function loadClientOptions(distDir: string): ClientOptions | null {
   const candidates = [
     path.join(distDir, 'client-options.json'),
-    path.join(distDir, '..', '..', 'content', 'client-options.json'),
+    path.join(distDir, '..', 'content', 'client-options.json'),
   ];
   for (const file of candidates) {
-    try {
-      if (!fs.existsSync(file)) continue;
-      const parsed = parseClientOptions(JSON.parse(fs.readFileSync(file, 'utf8')));
-      if (parsed) return parsed;
-    } catch {
-      /* try next candidate */
-    }
+    if (!fs.existsSync(file)) continue;
+    const parsed = parseClientOptionsText(fs.readFileSync(file, 'utf8'));
+    if (parsed) return parsed;
   }
   return null;
 }

@@ -1,8 +1,8 @@
 import path from 'path';
-import { Paths } from '../../shared/Paths';
-import type { HttpClient } from '../../shared/HttpClient';
-import { VersionManifest } from './VersionManifest';
-import type { Rule } from './RuleEvaluator';
+import { Paths } from '../../shared/Paths.ts';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import { VersionManifest } from './VersionManifest.ts';
+import type { Rule } from './RuleEvaluator.ts';
 
 export interface MojangArtifact {
   path?: string;

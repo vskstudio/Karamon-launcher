@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseClientOptions } from './ClientOptions.ts';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { loadClientOptions, parseClientOptions } from './ClientOptions.ts';
 
 test('parseClientOptions keeps the exact pack list', () => {
   const parsed = parseClientOptions({
@@ -27,4 +30,17 @@ test('parseClientOptions reads shaderRevision, 0 when absent or invalid', () => 
 
 test('parseClientOptions rejects a missing shader', () => {
   assert.equal(parseClientOptions({ resourcePacks: ['vanilla'] }), null);
+});
+
+test('loadClientOptions finds content/client-options.json next to a dist folder that lacks it', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-client-options-'));
+  const dist = path.join(root, 'dist');
+  fs.mkdirSync(dist);
+  fs.mkdirSync(path.join(root, 'content'));
+  fs.writeFileSync(
+    path.join(root, 'content', 'client-options.json'),
+    JSON.stringify({ resourcePacks: ['vanilla', 'file/Karamon UI'], shaderPack: 'KARAMON - Shader' }),
+  );
+  assert.deepEqual(loadClientOptions(dist)?.resourcePacks, ['vanilla', 'file/Karamon UI']);
+  fs.rmSync(root, { recursive: true, force: true });
 });

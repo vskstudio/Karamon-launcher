@@ -4,7 +4,6 @@ import { ArgumentResolver, type ArgumentVars } from './ArgumentResolver.ts';
 import { launchIdentity } from './LaunchIdentity.ts';
 import type { MojangVersion } from './VersionResolver.ts';
 
-// The string arguments of versions/1.21.1/1.21.1.json (arguments.game).
 const MC_1_21_1: MojangVersion = {
   id: '1.21.1',
   arguments: {

@@ -1,8 +1,8 @@
 import fs from 'fs';
-import type { HttpClient } from '../../shared/HttpClient';
-import { extractZipToDir, resolveInside } from '../../shared/ZipExtract';
-import { RuleEvaluator } from './RuleEvaluator';
-import type { MojangLibrary, MojangArtifact } from './VersionResolver';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import { extractZipToDir, resolveInside } from '../../shared/ZipExtract.ts';
+import { RuleEvaluator } from './RuleEvaluator.ts';
+import type { MojangLibrary, MojangArtifact } from './VersionResolver.ts';
 
 export interface DownloadProgress {
   (fraction: number, label: string): void;

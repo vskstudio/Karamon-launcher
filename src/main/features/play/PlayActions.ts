@@ -2,6 +2,7 @@ import type { Config } from '../config/Config';
 import { SessionEvidence } from '../crashes/SessionEvidence';
 import type { DiscordRpc } from '../discord/DiscordRpc';
 import { repairSummary } from '../integrity/RepairSummary';
+import { GameRunningError } from '../minecraft/InstanceSession';
 import type { MinecraftLauncher } from '../minecraft/MinecraftLauncher';
 import type { ProgressEmitter, StatusEmitter } from '../modpack/ModpackSync';
 import type { PackManifest, RemotePack } from '../modpack/PackManifest';
@@ -51,7 +52,6 @@ export interface PlayActionsOptions {
 
 export class PlayActions {
   private readonly options: PlayActionsOptions;
-  private repairing: Promise<RepairDone> | null = null;
 
   constructor(options: PlayActionsOptions) {
     this.options = options;
@@ -122,21 +122,14 @@ export class PlayActions {
       const message = (e as Error).message;
       status('Erreur de synchronisation: ' + message);
       progress(0);
-      reports.reportInBackground('sync_failed', ['Synchronisation du pack', message], startedAt);
+      if (!(e instanceof GameRunningError)) {
+        reports.reportInBackground('sync_failed', ['Synchronisation du pack', message], startedAt);
+      }
       throw e;
     }
   }
 
-  repair(): Promise<RepairDone> {
-    if (!this.repairing) {
-      this.repairing = this.runRepair().finally(() => {
-        this.repairing = null;
-      });
-    }
-    return this.repairing;
-  }
-
-  private async runRepair(): Promise<RepairDone> {
+  async repair(): Promise<RepairDone> {
     const { config, minecraft, packManifest, status, progress } = this.options;
     const cfg = config.get();
     try {

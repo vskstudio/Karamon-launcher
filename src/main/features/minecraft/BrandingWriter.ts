@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export const LUMYMON_WELCOME_VERSION = 3;
 export const KARAMON_DISCORD = 'https://discord.gg/karamon';
@@ -17,14 +18,10 @@ const SHOWN_ELEMENT_IDS = [
   '069855b2-1b02-4412-aba8-7123339d8afb-1746103697603',
 ];
 
-// Cobbleverse title line: "**COBBLEVERSE** [1.7.42-CF](click:open_changelogs) [1.21.1]" on CurseForge,
-// "[1.7.42]" on Modrinth. Any version tag becomes the Karamon wordmark.
 const COBBLEVERSE_VERSION_LINE =
   /%#FF5500%\*\*COBBLE%#%VERSE\*\* \[[^\]\n]+\]\(click:open_changelogs\) %#D3D3D3%\[%#%%#00E64D%1\.21\.1%#%%#D3D3D3%\]%#%/g;
 
-// Cobbleverse sized these image elements for its 2041x297 wordmark. The Karamon logo is
-// 2048x490, so keep the width and give each the matching height, growing upwards.
-export const TITLE_FITS: { id: string; height: number; y: number }[] = [
+const TITLE_FITS: { id: string; height: number; y: number }[] = [
   { id: '8b2f987c-d9c8-4a38-a0db-0d79261ce265-1734823207699', height: 64, y: -86 },
   { id: '16118991-7a2c-430a-bb97-26dd39f90f78-1746104621713', height: 77, y: 8 },
   { id: 'bde11e74-ca8c-4e37-b183-faf2de2bc48a-1783541933564', height: 26, y: -245 },
@@ -88,7 +85,7 @@ function setHiddenFlag(lines: string[], from: number, to: number, hidden: boolea
   }
 }
 
-export function hideFancyElement(text: string, id: string): string {
+function hideFancyElement(text: string, id: string): string {
   return forEachLayoutBlock(text, id, (lines, from, to) => {
     for (let i = from; i <= to; i++) {
       if (/^\s*stay_on_screen\s*=/.test(lines[i])) lines[i] = '  stay_on_screen = false';
@@ -99,7 +96,7 @@ export function hideFancyElement(text: string, id: string): string {
   });
 }
 
-export function showFancyElement(text: string, id: string): string {
+function showFancyElement(text: string, id: string): string {
   return forEachLayoutBlock(text, id, (lines, from, to) => {
     for (let i = from; i <= to; i++) {
       if (/^\s*stay_on_screen\s*=/.test(lines[i])) lines[i] = '  stay_on_screen = true';
@@ -110,7 +107,7 @@ export function showFancyElement(text: string, id: string): string {
   });
 }
 
-export function fitFancyElement(text: string, id: string, height: number, y: number): string {
+function fitFancyElement(text: string, id: string, height: number, y: number): string {
   return forEachLayoutBlock(text, id, (lines, from, to) => {
     for (let i = from; i <= to; i++) {
       if (/^\s*height\s*=/.test(lines[i])) lines[i] = `  height = ${height}`;
@@ -119,13 +116,13 @@ export function fitFancyElement(text: string, id: string, height: number, y: num
   });
 }
 
-export function setVanillaButtonHidden(text: string, id: string, hidden: boolean): string {
+function setVanillaButtonHidden(text: string, id: string, hidden: boolean): string {
   return forEachLayoutBlock(text, id, (lines, from, to) => {
     setHiddenFlag(lines, from, to, hidden);
   });
 }
 
-export function patchFancyMenu(text: string): string {
+function patchFancyMenu(text: string): string {
   let next = text.replace(COBBLEVERSE_VERSION_LINE, KARAMON_VERSION);
   for (const [from, to] of FANCY_REPLACEMENTS) next = next.split(from).join(to);
   for (const id of HIDDEN_ELEMENT_IDS) next = hideFancyElement(next, id);
@@ -146,20 +143,19 @@ function setFancyOption(text: string, kind: 'B' | 'S', key: string, value: strin
   return `${text.replace(/\s*$/, '')}\n${line}\n`;
 }
 
-export function patchFancyOptions(text: string): string {
+function patchFancyOptions(text: string): string {
   let next = text;
   next = setFancyOption(next, 'B', 'show_custom_window_icon', 'true');
   next = setFancyOption(next, 'S', 'custom_window_title', 'KARAMON');
   next = setFancyOption(next, 'S', 'custom_window_icon_32', ICON_32);
   next = setFancyOption(next, 'S', 'custom_window_icon_16', ICON_16);
   next = setFancyOption(next, 'S', 'custom_window_icon_macos', ICON_ICNS);
-  // Pack players must not see FancyMenu's Customization / Tools / Help bar.
   next = setFancyOption(next, 'B', 'show_customization_overlay', 'false');
   next = setFancyOption(next, 'B', 'modpack_mode', 'true');
   return next;
 }
 
-export function skipLumyMonWelcome(raw: string): string {
+function skipLumyMonWelcome(raw: string): string {
   let data: Record<string, unknown> = {};
   const trimmed = raw.replace(/\u0000/g, '').trim();
   if (trimmed.length > 0) {
@@ -186,7 +182,15 @@ type PackOverride = {
   force_compatible?: boolean;
 };
 
-export function patchPackOverrides(raw: string, defaultPacks?: string[]): string {
+function patchedPackOverrides(raw: string, defaultPacks?: string[]): string | null {
+  try {
+    return patchPackOverrides(raw, defaultPacks);
+  } catch {
+    return null;
+  }
+}
+
+function patchPackOverrides(raw: string, defaultPacks?: string[]): string {
   const data = JSON.parse(raw) as {
     default_packs?: string[];
     pack_overrides?: Record<string, PackOverride>;
@@ -224,13 +228,13 @@ function writeIfChanged(file: string, next: string): void {
   fs.writeFileSync(file, next, 'utf8');
 }
 
-export const XAERO_MINIMAP_HUD =
+const XAERO_MINIMAP_HUD =
   'module;id=xaerominimap:minimap;x=0;y=0;centered=false;fromRight=true;fromBottom=false;flippedVer=false;flippedHor=false;\n';
 
 const XAERO_MINIMAP_MODULE =
   'module;id=xaerominimap:minimap;active=true;x=0;y=0;centered=false;fromRight=true;fromBottom=false;flippedVer=false;flippedHor=false;';
 
-export function pinXaeroMinimapModule(raw: string): string {
+function pinXaeroMinimapModule(raw: string): string {
   if (!/^module;id=xaerominimap:minimap;/m.test(raw)) return raw;
   const nl = raw.includes('\r\n') ? '\r\n' : '\n';
   const ended = raw.endsWith('\n') || raw.endsWith('\r\n');
@@ -239,17 +243,17 @@ export function pinXaeroMinimapModule(raw: string): string {
   return next;
 }
 
-function pinXaeroConfigs(gameDir: string): void {
+function pinXaeroConfigs(configDir: string): void {
   const hudTargets = [
-    path.join(gameDir, 'config', 'xaerohud.txt'),
-    path.join(gameDir, 'config', 'defaultoptions', 'xaerohud.txt'),
-    path.join(gameDir, 'config', 'yosbr', 'config', 'xaerohud.txt'),
+    path.join(configDir, 'xaerohud.txt'),
+    path.join(configDir, 'defaultoptions', 'xaerohud.txt'),
+    path.join(configDir, 'yosbr', 'config', 'xaerohud.txt'),
   ];
   for (const file of hudTargets) writeIfChanged(file, XAERO_MINIMAP_HUD);
 
   const miniTargets = [
-    path.join(gameDir, 'config', 'xaerominimap.txt'),
-    path.join(gameDir, 'config', 'yosbr', 'config', 'xaerominimap.txt'),
+    path.join(configDir, 'xaerominimap.txt'),
+    path.join(configDir, 'yosbr', 'config', 'xaerominimap.txt'),
   ];
   for (const file of miniTargets) {
     if (!fs.existsSync(file)) continue;
@@ -258,9 +262,9 @@ function pinXaeroConfigs(gameDir: string): void {
   }
 }
 
-function copyFancyAssetsFromUiPack(gameDir: string): void {
-  const srcDir = path.join(gameDir, 'resourcepacks', 'Karamon UI', 'assets', 'karamon', 'textures', 'gui');
-  const destDir = path.join(gameDir, 'config', 'fancymenu', 'assets');
+function copyFancyAssetsFromUiPack(resourcePacksDir: string, configDir: string): void {
+  const srcDir = path.join(resourcePacksDir, 'Karamon UI', 'assets', 'karamon', 'textures', 'gui');
+  const destDir = path.join(configDir, 'fancymenu', 'assets');
   const copies: [string, string][] = [
     ['title.png', 'karamon_title.png'],
     ['background.png', 'karamon_background.png'],
@@ -276,10 +280,11 @@ function copyFancyAssetsFromUiPack(gameDir: string): void {
   }
 }
 
-export function applyKaramonBranding(gameDir: string, resourcePacks?: string[]): void {
-  copyFancyAssetsFromUiPack(gameDir);
+export function applyKaramonBranding(instance: GameInstance, resourcePacks?: string[]): void {
+  const { configDir } = instance;
+  copyFancyAssetsFromUiPack(instance.resourcePacksDir, configDir);
 
-  const fancyDir = path.join(gameDir, 'config', 'fancymenu', 'customization');
+  const fancyDir = path.join(configDir, 'fancymenu', 'customization');
   if (fs.existsSync(fancyDir)) {
     for (const name of fs.readdirSync(fancyDir)) {
       if (!name.endsWith('.txt')) continue;
@@ -290,7 +295,7 @@ export function applyKaramonBranding(gameDir: string, resourcePacks?: string[]):
     }
   }
 
-  const fancyRoot = path.join(gameDir, 'config', 'fancymenu');
+  const fancyRoot = path.join(configDir, 'fancymenu');
   const fancyOptions = path.join(fancyRoot, 'options.txt');
   if (fs.existsSync(fancyOptions)) {
     const previous = fs.readFileSync(fancyOptions, 'utf8');
@@ -305,19 +310,16 @@ export function applyKaramonBranding(gameDir: string, resourcePacks?: string[]):
     if (next !== previous) fs.writeFileSync(listeners, next, 'utf8');
   }
 
-  const lumy = path.join(gameDir, 'config', 'lumymon.json');
+  const lumy = path.join(configDir, 'lumymon.json');
   const lumyRaw = fs.existsSync(lumy) ? fs.readFileSync(lumy, 'utf8') : '';
   writeIfChanged(lumy, skipLumyMonWelcome(lumyRaw));
 
-  const overrides = path.join(gameDir, 'config', 'resourcepackoverrides.json');
+  const overrides = path.join(configDir, 'resourcepackoverrides.json');
   if (fs.existsSync(overrides)) {
-    try {
-      const previous = fs.readFileSync(overrides, 'utf8');
-      writeIfChanged(overrides, patchPackOverrides(previous, resourcePacks));
-    } catch {
-      /* leave malformed overrides */
-    }
+    const previous = fs.readFileSync(overrides, 'utf8');
+    const patched = patchedPackOverrides(previous, resourcePacks);
+    if (patched !== null) writeIfChanged(overrides, patched);
   }
 
-  pinXaeroConfigs(gameDir);
+  pinXaeroConfigs(configDir);
 }

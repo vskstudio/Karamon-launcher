@@ -7,18 +7,6 @@ import { fsyncFile } from './AtomicWrite.ts';
 
 let tmpCounter = 0;
 
-/**
- * Reads a zip from disk one entry at a time. Only the central directory and the
- * entry being read sit in memory, so a 400 Mo mods.zip costs the size of its
- * biggest jar instead of the whole archive (adm-zip loads the full file).
- *
- * Sizes and offsets come from the central directory, so entries whose general
- * purpose flag announces a data descriptor that is not there still read fine.
- *
- * The central directory parsing and the streamed, CRC-checked write are
- * exported for RemoteZip, which reads the same structures over HTTP ranges.
- */
-
 const EOCD_SIGNATURE = 0x06054b50;
 const EOCD_SIZE = 22;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
@@ -29,7 +17,6 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 export const LOCAL_SIGNATURE = 0x04034b50;
 export const LOCAL_HEADER_SIZE = 30;
 const MAX_COMMENT = 0xffff;
-/** Bytes to read from the end of a zip to be sure to hold its end records. */
 export const ZIP_TAIL_SIZE = EOCD_SIZE + MAX_COMMENT + ZIP64_LOCATOR_SIZE + ZIP64_EOCD_SIZE;
 export const STORED = 0;
 export const DEFLATED = 8;
@@ -71,7 +58,6 @@ export class ZipReader {
     }
   }
 
-  /** Opens, runs `fn`, and always closes the file. */
   static with<T>(zipPath: string, fn: (zip: ZipReader) => T): T {
     const zip = ZipReader.open(zipPath);
     try {
@@ -81,7 +67,6 @@ export class ZipReader {
     }
   }
 
-  /** Async variant of `with`: the file stays open until `fn` settles. */
   static async withAsync<T>(zipPath: string, fn: (zip: ZipReader) => Promise<T>): Promise<T> {
     const zip = ZipReader.open(zipPath);
     try {
@@ -91,7 +76,6 @@ export class ZipReader {
     }
   }
 
-  /** Whole entry in memory: for small files (configs) only. */
   read(entry: ZipEntry): Buffer {
     const fd = this.requireFd();
     const start = this.dataStart(fd, entry);
@@ -117,11 +101,6 @@ export class ZipReader {
     return data;
   }
 
-  /**
-   * Streams one entry to `target` without holding it in memory, and without
-   * blocking the event loop (the Electron main process keeps answering the
-   * window). See writeEntryStream for the temp file, CRC and rename.
-   */
   async extractTo(entry: ZipEntry, target: string, { durable = false }: { durable?: boolean } = {}): Promise<void> {
     const fd = this.requireFd();
     assertSupportedMethod(entry);
@@ -150,7 +129,6 @@ export class ZipReader {
   }
 }
 
-/** Size of the local header (fixed part + name + extra) given its first 30 bytes. */
 export function localHeaderLength(header: Buffer, entry: ZipEntry): number {
   if (header.length < LOCAL_HEADER_SIZE || header.readUInt32LE(0) !== LOCAL_SIGNATURE) {
     throw new Error(`Entrée zip illisible: ${entry.entryName}`);
@@ -164,13 +142,6 @@ export function assertSupportedMethod(entry: ZipEntry): void {
   }
 }
 
-/**
- * Writes the compressed bytes of `entry` read from `source` to `target`: the
- * data goes to a temp file next to the target, its size and CRC are checked,
- * then it is renamed over the target. With `durable` the temp file is flushed
- * to disk first, so a power cut never leaves a zero-filled file. A bad entry
- * leaves the previous target untouched and no temp file behind.
- */
 export async function writeEntryStream(
   source: Readable,
   entry: ZipEntry,
@@ -228,12 +199,6 @@ function readCentralDirectory(fd: number, fileSize: number, label: string): ZipE
   return parseCentralDirectory(cd, loc.count, label);
 }
 
-/**
- * Finds the central directory from the last bytes of a zip (`tail`, which
- * starts at `tailStart` in the file). `readZip64Record` returns the 56 bytes of
- * the ZIP64 end record at an absolute offset; it is only called for ZIP64 files
- * whose record is not already inside `tail`.
- */
 export function locateCentralDirectory(
   tail: Buffer,
   tailStart: number,

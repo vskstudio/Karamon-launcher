@@ -4,12 +4,10 @@ import crypto from 'crypto';
 import zlib from 'zlib';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
 import { hasValidZipEnd, isArchiveName } from './ZipTail.ts';
-
-export const INTEGRITY_CACHE_FILE = '.karamon-integrity-cache.json';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export interface ExpectedFile {
   size?: number;
-  /** Lowercase hex SHA-1 of the file as stored on disk. */
   sha1?: string;
 }
 
@@ -17,21 +15,13 @@ interface HashRecord {
   size: number;
   mtimeMs: number;
   sha1?: string;
-  /** CRC-32 of the content, as zip archives record it. */
   crc?: number;
 }
 
 export interface FileVerifierOptions {
-  /** Rehash every file, ignoring the size/mtime cache (« Réparer l'installation »). */
   force?: boolean;
 }
 
-/**
- * Decides whether an installed pack file is intact. Size always, the zip end
- * record for archives (catches a zero-filled tail even when the cached hash is
- * stale), and the SHA-1 when the manifest gives one. Hashes are cached per file
- * by size + mtime so a normal launch only rehashes what changed.
- */
 export class FileVerifier {
   private readonly cachePath: string;
   private readonly root: string;
@@ -40,13 +30,12 @@ export class FileVerifier {
   private dirty = false;
   private readonly damagedFiles = new Set<string>();
 
-  constructor(gameDir: string, { force = false }: FileVerifierOptions = {}) {
-    this.root = path.resolve(gameDir);
-    this.cachePath = path.join(gameDir, INTEGRITY_CACHE_FILE);
+  constructor(instance: GameInstance, { force = false }: FileVerifierOptions = {}) {
+    this.root = path.resolve(instance.dir);
+    this.cachePath = instance.integrityCache;
     this.force = force;
   }
 
-  /** Files found on disk but damaged (wrong size, broken archive, wrong hash). */
   get damaged(): string[] {
     return [...this.damagedFiles];
   }
@@ -64,23 +53,17 @@ export class FileVerifier {
     return ok;
   }
 
-  /** Persists the hash cache; best-effort. */
-  save(): void {
-    if (!this.dirty || !this.records) return;
+  save(): string | null {
+    if (!this.dirty || !this.records) return null;
     try {
       writeFileAtomic(this.cachePath, JSON.stringify(this.records));
       this.dirty = false;
-    } catch {
-      /* best-effort cache */
+      return null;
+    } catch (e) {
+      return (e as Error).message;
     }
   }
 
-  /**
-   * True when the file on disk has exactly this content, judged by size and the
-   * CRC-32 a zip records for each entry: lets a sync skip the entries of a
-   * remote archive that are already installed. Cached by size + mtime like SHA-1.
-   * A mismatch is not « damaged »: the file may just be an older version.
-   */
   async matchesZipEntry(filePath: string, size: number, crc: number): Promise<boolean> {
     let stat: fs.Stats;
     try {
@@ -89,7 +72,6 @@ export class FileVerifier {
       return false;
     }
     if (!stat.isFile() || stat.size !== size) return false;
-    // Zero-filled after a crash, same size and mtime: the cached CRC would lie.
     if (isArchiveName(filePath) && !hasValidZipEnd(filePath)) return false;
     const records = this.load();
     const key = this.key(filePath);
@@ -102,23 +84,21 @@ export class FileVerifier {
     return actual === crc;
   }
 
-  /** Records the CRC of a file just written from a zip entry, so the next sync skips it without rereading it. */
   remember(filePath: string, crc: number): void {
+    let stat: fs.Stats;
     try {
-      const stat = fs.statSync(filePath);
-      this.load()[this.key(filePath)] = { size: stat.size, mtimeMs: stat.mtimeMs, crc };
-      this.dirty = true;
+      stat = fs.statSync(filePath);
     } catch {
-      /* best-effort cache */
+      return;
     }
+    this.load()[this.key(filePath)] = { size: stat.size, mtimeMs: stat.mtimeMs, crc };
+    this.dirty = true;
   }
 
   private async check(filePath: string, stat: fs.Stats, expected: ExpectedFile): Promise<boolean> {
     if (typeof expected.size === 'number' && stat.size !== expected.size) return false;
     const archiveOk = !isArchiveName(filePath) || hasValidZipEnd(filePath);
     if (!expected.sha1) return archiveOk;
-    // A broken zip tail with a cached good hash means the cache is stale
-    // (zero-filled after a crash, same size and mtime): rehash to be sure.
     const sha1 = await this.cachedSha1(filePath, stat, !archiveOk);
     return sha1 === expected.sha1.toLowerCase();
   }
