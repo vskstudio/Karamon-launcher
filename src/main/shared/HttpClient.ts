@@ -143,7 +143,7 @@ export class RangeUnsupportedError extends Error {
   }
 }
 
-export class ResourceChangedError extends RangeUnsupportedError {
+export class ResourceChangedError extends Error {
   constructor(label: string) {
     super(`${label} a changé sur le serveur pendant le téléchargement. Relance la synchronisation.`);
     this.name = 'ResourceChangedError';
@@ -151,7 +151,7 @@ export class ResourceChangedError extends RangeUnsupportedError {
 }
 
 function isWorthRetrying(error: unknown): boolean {
-  if (error instanceof RangeUnsupportedError) return false;
+  if (error instanceof RangeUnsupportedError || error instanceof ResourceChangedError) return false;
   if (error instanceof InsecureUrlError || error instanceof TooManyRedirectsError) return false;
   if (error instanceof DigestMismatchError) return false;
   if (error instanceof HttpStatusError) return error.status === 408 || error.status === 429 || error.status >= 500;

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { extractZipToDir, resolveInside } from '../../shared/ZipExtract.ts';
 import type { ZipEntry } from '../../shared/ZipReader.ts';
-import { RangeUnsupportedError, type HttpClient } from '../../shared/HttpClient.ts';
+import { RangeUnsupportedError, ResourceChangedError, type HttpClient } from '../../shared/HttpClient.ts';
 import { githubAssetFreshness } from '../../shared/GitHubPack.ts';
 import type { ClientOptions } from '../../shared/ClientOptions.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
@@ -123,8 +123,19 @@ export class ModpackSync {
     };
   }
 
-  sync(request: SyncRequest): Promise<SyncResult> {
-    return new SyncRun(this.deps, request).run();
+  async sync(request: SyncRequest): Promise<SyncResult> {
+    try {
+      return await new SyncRun(this.deps, request).run();
+    } catch (e) {
+      if (!(e instanceof ResourceChangedError)) throw e;
+    }
+    request.onStatus('Le pack a été mis à jour sur le serveur pendant la synchronisation, nouvelle vérification...');
+    try {
+      return await new SyncRun(this.deps, request).run();
+    } catch (e) {
+      if (!(e instanceof ResourceChangedError)) throw e;
+      throw new Error('Le pack change en ce moment sur le serveur. Relance la synchronisation dans quelques minutes.');
+    }
   }
 
 }

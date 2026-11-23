@@ -2,7 +2,7 @@ import fs from 'fs';
 import { commonTopLevelPrefix } from '../../shared/ZipExtract.ts';
 import { ZipReader, type ZipEntry } from '../../shared/ZipReader.ts';
 import { RemoteZip } from '../../shared/RemoteZip.ts';
-import { RangeUnsupportedError, type HttpClient } from '../../shared/HttpClient.ts';
+import { RangeUnsupportedError, ResourceChangedError, type HttpClient } from '../../shared/HttpClient.ts';
 import { packAssetUrl } from '../../shared/GitHubPack.ts';
 import type { GameInstance } from '../../shared/GameInstance.ts';
 import {
@@ -115,6 +115,7 @@ export class RangedSource implements PackSource {
         RemoteZip.open(http, baseUrl + ASSETS_ZIP),
       ]);
     } catch (e) {
+      if (e instanceof ResourceChangedError) throw e;
       return { failure: e instanceof RangeUnsupportedError ? null : (e as Error).message };
     }
     if (mods.etag !== keys.mods || assets.etag !== keys.assets) return { failure: null };

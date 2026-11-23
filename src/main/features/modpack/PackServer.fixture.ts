@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { PassThrough } from 'stream';
 import AdmZip from 'adm-zip';
-import { RangeUnsupportedError, type HttpClient, type RangeRequest } from '../../shared/HttpClient.ts';
+import { RangeUnsupportedError, ResourceChangedError, type HttpClient, type RangeRequest } from '../../shared/HttpClient.ts';
 import type { AppConfig } from '../../../ipc/contract.ts';
 import { ModpackSync } from './ModpackSync.ts';
 import { MinecraftLauncher, type LaunchEvents } from '../minecraft/MinecraftLauncher.ts';
@@ -136,7 +136,7 @@ export class PackServer {
     const name = this.nameOf(url);
     const body = this.body(name);
     if (!this.ranges) throw new RangeUnsupportedError('HTTP 200');
-    if (r.ifRange && r.ifRange !== this.etagOf(name)) throw new RangeUnsupportedError('HTTP 200 (changé)');
+    if (r.ifRange && r.ifRange !== this.etagOf(name)) throw new ResourceChangedError(name);
     const start = r.end === undefined && r.start < 0 ? Math.max(0, body.length + r.start) : r.start;
     const end = r.end === undefined ? body.length - 1 : r.end;
     this.stats.bytes += end - start + 1;

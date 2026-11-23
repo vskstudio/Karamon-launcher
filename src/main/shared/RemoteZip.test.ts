@@ -7,7 +7,7 @@ import path from 'path';
 import { PassThrough } from 'stream';
 import AdmZip from 'adm-zip';
 import { RemoteZip } from './RemoteZip.ts';
-import { RangeUnsupportedError, ResourceChangedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
+import { ResourceChangedError, type HttpClient, type RangeRequest } from './HttpClient.ts';
 
 function fakeServer(file: () => Buffer, etag: () => string) {
   const stats = { requests: 0, bytes: 0 };
@@ -103,7 +103,7 @@ test('refuse de mélanger deux versions si l archive est republiée en cours de 
   fs.writeFileSync(target, 'ancien');
   await assert.rejects(
     zip.extractTo(zip.entries.find((e) => e.entryName === 'mods/b.jar')!, target),
-    (e: Error) => e instanceof RangeUnsupportedError,
+    (e: Error) => e instanceof ResourceChangedError,
   );
   assert.equal(fs.readFileSync(target, 'utf8'), 'ancien');
   fs.rmSync(dir, { recursive: true, force: true });

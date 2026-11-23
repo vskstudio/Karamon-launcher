@@ -6,6 +6,7 @@ import AdmZip from 'adm-zip';
 import { makeTempDir } from '../../shared/TempDir.fixture.ts';
 import { PackServer, RELEASE_BASE, jarOf, launcherHarness, publishPack, sha1Of, zipOf } from './PackServer.fixture.ts';
 import { ModpackSync, type SyncRequest } from './ModpackSync.ts';
+import { ResourceChangedError } from '../../shared/HttpClient.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
 import { writeInstalledPack, readInstalledPack } from './InstalledPack.ts';
 
@@ -236,6 +237,48 @@ test('les archives temporaires d’une synchronisation interrompue sont supprim�
   assert.ok(fs.existsSync(kept));
   assert.ok(fs.existsSync(instance.syncState));
   assert.ok(lines.some((line) => line.includes('4 fichier(s) temporaire(s)')));
+  h.cleanup();
+});
+
+test('un pack republié pendant la synchronisation est revérifié en entier avec ses nouvelles clés', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) } });
+  const h = launcherHarness(server);
+  await h.sync();
+
+  publishPack(server, { jars: { 'demo-2.0.jar': jarOf('demo2', 64) } });
+  const release = server.holdDownloads();
+  const lines: string[] = [];
+  const running = h.sync((line) => lines.push(line));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  publishPack(server, { jars: { 'demo-3.0.jar': jarOf('demo3', 64) } });
+  release();
+  await running;
+
+  assert.deepEqual(fs.readdirSync(path.join(h.game, 'mods')).filter((f) => f.endsWith('.jar')), ['demo-3.0.jar']);
+  assert.ok(lines.some((line) => line.includes('mis à jour sur le serveur pendant la synchronisation')));
+  assert.ok(!lines.some((line) => line.includes('Téléchargement partiel impossible')));
+  server.resetStats();
+  await h.sync();
+  assert.deepEqual(server.stats.downloads, []);
+  assert.equal(server.stats.bytes, 0);
+  h.cleanup();
+});
+
+test('un pack qui change sans cesse pendant la synchronisation donne une erreur claire', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'demo-1.0.jar': jarOf('demo', 64) } });
+  const h = launcherHarness(server);
+  await h.sync();
+  publishPack(server, { jars: { 'demo-2.0.jar': jarOf('demo2', 64) } });
+  const http = server.http;
+  Object.assign(http, {
+    openRange: async () => {
+      throw new ResourceChangedError('mods.zip');
+    },
+  });
+
+  await assert.rejects(directSync(server, h.game, new ModpackSync({ http })), /Le pack change en ce moment sur le serveur/);
   h.cleanup();
 });
 
