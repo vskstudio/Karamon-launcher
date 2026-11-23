@@ -1,0 +1,188 @@
+.ui-page.skins {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.skins__stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-6) var(--space-4);
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+}
+
+.skins__stage-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+}
+
+.skins__stage-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 55%, transparent 20%, var(--bg) 80%);
+}
+
+.skins__figure {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: min(380px, 56vh);
+  aspect-ratio: 1 / 2;
+}
+
+.skins__canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 24px 24px rgba(0, 0, 0, 0.6));
+  animation: skins-turn var(--medium) var(--ease);
+}
+
+.skins__empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  width: min(240px, 80%);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  background: rgba(11, 10, 13, 0.82);
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  border-radius: var(--radius-md);
+}
+
+.skins__controls {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.skins__view {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.skins__turn {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.skins__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  min-height: 0;
+  padding: var(--page-y) var(--page-x) var(--space-8);
+  overflow-y: auto;
+}
+
+.skins__panel > * {
+  width: 100%;
+  max-width: 760px;
+}
+
+.skins__import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.skins__hint {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.skins__status {
+  min-height: 18px;
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 13px;
+}
+
+.skins__status--ok {
+  color: var(--success);
+}
+
+.skins__status--error {
+  color: var(--danger);
+}
+
+.ui-panel.skins__apply {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.skins__apply-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.skins__apply-text strong {
+  overflow-wrap: anywhere;
+}
+
+.skins__apply-text span {
+  color: var(--dim);
+  line-height: 1.45;
+}
+
+.skins__apply-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.skins__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+@keyframes skins-turn {
+  from {
+    transform: scaleX(0.3);
+    opacity: 0.4;
+  }
+}
+
+@container content (max-width: 959px) {
+  .ui-page.skins {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .skins__figure {
+    height: min(320px, 50vh);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skins__canvas {
+    animation: none;
+  }
+}

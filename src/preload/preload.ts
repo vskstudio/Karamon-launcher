@@ -44,7 +44,12 @@ const api: LauncherApi = {
   listBackups: () => ipcRenderer.invoke(Channels.backupList),
   deleteBackup: (name) => ipcRenderer.invoke(Channels.backupDelete, name),
 
-  listShopOffers: () => ipcRenderer.invoke(Channels.shopOffers),
+  shopCatalog: () => ipcRenderer.invoke(Channels.shopOffers),
+  shopCheckout: (offerId) => ipcRenderer.invoke(Channels.shopCheckout, offerId),
+  shopPortal: () => ipcRenderer.invoke(Channels.shopPortal),
+  wikiIndex: () => ipcRenderer.invoke(Channels.wikiIndex),
+  wikiPage: (slug) => ipcRenderer.invoke(Channels.wikiPage, slug),
+  packInfo: () => ipcRenderer.invoke(Channels.packInfo),
   skinUrl: (profile) => ipcRenderer.invoke(Channels.skinUrl, profile),
   skinOfflineSet: (request) => ipcRenderer.invoke(Channels.skinOfflineSet, request),
   skinOfflineReset: (name) => ipcRenderer.invoke(Channels.skinOfflineReset, name),

@@ -44,7 +44,10 @@ import { Screenshots } from './features/screenshots/Screenshots';
 import { DiscordRpc } from './features/discord/DiscordRpc';
 import { CrashReports } from './features/crashes/CrashReports';
 import { Backup } from './features/backup/Backup';
-import { ShopCatalog } from './features/shop/ShopCatalog';
+import { Shop } from './features/shop/Shop';
+import { openCheckoutWindow } from './features/shop/CheckoutWindow';
+import { Wiki } from './features/wiki/Wiki';
+import { PackManifest, type RemotePack } from './features/modpack/PackManifest';
 import { SkinLookup } from './features/auth/SkinLookup';
 import { AuthSession } from './features/auth/AuthSession';
 import { MicrosoftSessionExpired } from './features/auth/MicrosoftAuth';
@@ -98,7 +101,14 @@ export class KaramonApp {
   private readonly screenshots = new Screenshots();
   private readonly crashes = new CrashReports();
   private readonly backup = new Backup(this.paths.dataDir);
-  private readonly shop = new ShopCatalog(this.http);
+  private readonly shop = new Shop({
+    http: this.http,
+    activeProfile: () => this.auth.state().active,
+    openCheckout: (checkoutUrl) => openCheckoutWindow(this.window.current(), checkoutUrl),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  private readonly wiki = new Wiki(this.http, path.join(this.paths.cacheDir, 'wiki'));
+  private readonly packManifest: PackManifest;
   private readonly skins = new SkinLookup(this.http);
   private readonly discord: DiscordRpc;
   private readonly reports: ReportManager;
@@ -107,6 +117,12 @@ export class KaramonApp {
 
   constructor(distDir: string, assetsDir: string) {
     this.pack = loadPackProfile(distDir);
+    this.packManifest = new PackManifest({
+      http: this.http,
+      manifestUrl: new URL('pack.json', this.pack.cdnBaseUrl).toString(),
+      stateFile: path.join(this.paths.dataDir, 'pack-versions.json'),
+      bundled: { minecraft: this.pack.minecraft, fabricVersion: this.pack.fabricVersion },
+    });
     this.fabric = new FabricInstaller({
       mcVersion: this.pack.minecraft,
       fabricVersion: this.pack.fabricVersion,
@@ -157,7 +173,7 @@ export class KaramonApp {
       // No installed pack version is stored locally: the published one is what the sync installs.
       getPackVersion: () =>
         Promise.race([
-          this.http.getJson<{ version?: string }>(new URL('pack.json', this.pack.cdnBaseUrl).toString()).then((pack) => pack.version),
+          this.packManifest.latest().then((pack) => pack?.version),
           new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000).unref()),
         ]),
       getJavaVersion: async () => {
@@ -344,7 +360,12 @@ export class KaramonApp {
     ipcMain.handle(Channels.backupList, () => this.backup.list());
     ipcMain.handle(Channels.backupDelete, (_e, name: string) => this.backup.delete(name));
 
-    ipcMain.handle(Channels.shopOffers, () => this.shop.offers());
+    ipcMain.handle(Channels.shopOffers, () => this.shop.catalog());
+    ipcMain.handle(Channels.shopCheckout, (_e, offerId: unknown) => this.shop.checkout(typeof offerId === 'string' ? offerId : ''));
+    ipcMain.handle(Channels.shopPortal, () => this.shop.openPortal());
+    ipcMain.handle(Channels.wikiIndex, () => this.wiki.index());
+    ipcMain.handle(Channels.wikiPage, (_e, slug: unknown) => (typeof slug === 'string' ? this.wiki.page(slug) : null));
+    ipcMain.handle(Channels.packInfo, () => this.packManifest.info(this.currentInstanceDir()));
     ipcMain.handle(Channels.skinUrl, (_e, profile: MinecraftProfile) =>
       (profile.kind === 'offline' && savedSkinDataUrl(this.currentInstanceDir(), profile.name)) || this.skins.skinFor(profile),
     );
@@ -464,7 +485,9 @@ export class KaramonApp {
     try {
       onProgress(0);
       onStatus("Réparation de l'installation : vérification complète...");
+      const publishedPack = this.packManifest.latest();
       const report = await this.minecraft.repair(cfg, onStatus, onProgress);
+      void this.recordInstalledPack(this.minecraft.instanceDir(cfg), publishedPack);
       const damaged = report.damaged.length;
       const configs = report.configs.repaired.length;
       const summary = repairSummary(damaged, configs);
@@ -538,6 +561,7 @@ export class KaramonApp {
     const onProgress = this.progressEmitter();
     const wasRunning = this.minecraft.isRunning();
     const gameDir = this.minecraft.instanceDir(cfg);
+    const publishedPack = this.packManifest.latest();
     try {
       onProgress(0);
       await this.minecraft.launch(cfg, {
@@ -563,7 +587,10 @@ export class KaramonApp {
           }
         },
       });
-      if (!wasRunning) this.stats.startSession();
+      if (!wasRunning) {
+        this.stats.startSession();
+        void this.recordInstalledPack(gameDir, publishedPack);
+      }
       this.discord.setPlaying();
       this.setGameRunning(true);
       this.window.send(Channels.eventGameState, { running: true });
@@ -595,9 +622,11 @@ export class KaramonApp {
     const cfg = this.config.get();
     const onStatus = this.statusEmitter();
     const onProgress = this.progressEmitter();
+    const publishedPack = this.packManifest.latest();
     try {
       onProgress(0);
       await this.minecraft.syncOnly(cfg, onStatus, onProgress);
+      void this.recordInstalledPack(this.minecraft.instanceDir(cfg), publishedPack);
       onProgress(1);
       return { ok: true };
     } catch (e) {
@@ -607,6 +636,11 @@ export class KaramonApp {
       this.reportProblem('sync_failed', ['Synchronisation du pack', msg], startedAt);
       return { ok: false, error: msg };
     }
+  }
+
+  private async recordInstalledPack(gameDir: string, publishedPack: Promise<RemotePack | null>): Promise<void> {
+    const pack = await publishedPack;
+    if (pack) this.packManifest.markInstalled(gameDir, pack.version);
   }
 
   private async pingServer(): Promise<PingResult> {

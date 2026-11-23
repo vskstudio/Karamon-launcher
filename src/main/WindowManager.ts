@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
 import type { IpcEventContract } from '../ipc/contract';
-import { ASPECT_RATIO, initialWindowSize, minimumWindowSize } from './shared/WindowSize';
+import { ASPECT_RATIO, initialWindowSize, interfaceScale, minimumWindowSize } from './shared/WindowSize';
 
 export class WindowManager {
   private window: BrowserWindow | null = null;
@@ -13,6 +13,7 @@ export class WindowManager {
     const workArea = screen.getPrimaryDisplay().workAreaSize;
     const size = initialWindowSize(workArea);
     const min = minimumWindowSize(workArea);
+    const zoom = interfaceScale(workArea);
     this.window = new BrowserWindow({
       width: size.width,
       height: size.height,
@@ -33,9 +34,8 @@ export class WindowManager {
 
     this.window.setAspectRatio(ASPECT_RATIO);
     WindowManager.lockNavigation(this.window);
-    // Chromium remembers a zoom level per origin, so reset any zoom a previous version left behind.
     const window = this.window;
-    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(1));
+    window.webContents.on('did-finish-load', () => window.webContents.setZoomFactor(zoom));
     this.window.loadFile(path.join(this.distDir, 'index.html'));
     this.window.once('ready-to-show', () => this.window?.show());
     this.window.on('closed', () => {

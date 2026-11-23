@@ -1,0 +1,107 @@
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 54px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-row:last-child {
+  border-bottom: 0;
+}
+
+.account-row__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.account-row__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-row__check {
+  flex: none;
+  color: var(--success);
+}
+
+.account-row__kind {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.account-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.accounts-dialog__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.accounts-dialog__intro {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.accounts-dialog__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.accounts-dialog__note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+  text-align: center;
+}
+
+.accounts-name--ok .ui-field__hint {
+  color: var(--success);
+}
+
+.accounts-name--warn .ui-field__hint {
+  color: var(--warning);
+}
+
+.accounts-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-3) 14px;
+  list-style: none;
+  border: 1px solid var(--border);
+  background: var(--sunk);
+  font-size: 13px;
+  line-height: 1.45;
+  border-radius: var(--radius-md);
+}
+
+.accounts-explain li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.accounts-explain img {
+  flex: none;
+  margin-top: 1px;
+}

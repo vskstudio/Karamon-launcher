@@ -6,14 +6,25 @@ import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('every image index.html loads exists under assets/ui, which the installer ships', () => {
+function shippedFiles() {
+  const config = fs.readFileSync(path.join(ROOT, 'electron-builder.yml'), 'utf8');
+  return [...config.matchAll(/^\s*-\s*"([^"!][^"]*)"/gm)].map((m) => m[1]);
+}
+
+test('every file index.html loads ships with the installer', () => {
   const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
-  const refs = [...html.matchAll(/src="\.\.\/(assets\/[^"]+)"/g)].map((m) => m[1]);
+  const refs = [...html.matchAll(/(?:src|href)="(?![a-z]+:)([^"]+)"/g)].map((m) => `dist/${m[1]}`);
   assert.ok(refs.length > 0);
+  const shipped = shippedFiles();
   for (const ref of refs) {
-    assert.ok(ref.startsWith('assets/ui/'), `${ref} hors de assets/ui/, absent de l'installeur`);
-    assert.ok(fs.existsSync(path.join(ROOT, ref)), `${ref} introuvable`);
+    assert.ok(shipped.includes(ref), `${ref} absent de l'installeur`);
   }
+});
+
+test('the images the renderer bundle emits ship with the installer', () => {
+  const build = fs.readFileSync(path.join(ROOT, 'build.mjs'), 'utf8');
+  assert.match(build, /assetNames: 'assets\//);
+  assert.ok(shippedFiles().includes('dist/assets/**/*'));
 });
 
 test('the window icon ships with the installer', () => {

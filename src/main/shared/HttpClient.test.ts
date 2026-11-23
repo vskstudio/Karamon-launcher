@@ -87,3 +87,28 @@ test('parseTotalSize reads Content-Range from a 206 probe', () => {
   assert.equal(parseTotalSize({ 'content-length': '123' }, 200), 123);
   assert.equal(parseTotalSize({}, 206), 0);
 });
+
+test('postJson sends the JSON body with its UTF-8 length and returns error statuses without throwing', async () => {
+  tls.setDefaultCACertificates([...tls.getCACertificates('default'), LOCALHOST_CERT]);
+  const received: { method?: string; type?: string; body?: string }[] = [];
+  const server = https.createServer({ cert: LOCALHOST_CERT, key: LOCALHOST_KEY }, (req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      received.push({ method: req.method, type: req.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') });
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end('{"error":"player_changed"}');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const response = await new HttpClient().postJson(`https://127.0.0.1:${port}/api/shop/checkout`, { username: 'Élodie', accept_terms: true });
+    assert.equal(response.status, 409);
+    assert.equal(response.body.toString('utf8'), '{"error":"player_changed"}');
+    assert.deepEqual(received, [{ method: 'POST', type: 'application/json', body: '{"username":"Élodie","accept_terms":true}' }]);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});

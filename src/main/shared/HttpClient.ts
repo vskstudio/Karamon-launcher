@@ -255,6 +255,35 @@ export class HttpClient {
     return { body, start: opened.start, total: opened.total, etag: opened.etag };
   }
 
+  postJson(url: string, payload: unknown, { timeoutMs = 20000 }: { timeoutMs?: number } = {}): Promise<HttpResponse> {
+    return new Promise((resolve, reject) => {
+      try {
+        HttpClient.assertHttps(url);
+      } catch (e) {
+        return reject(e);
+      }
+      const body = Buffer.from(JSON.stringify(payload), 'utf8');
+      const headers = {
+        ...DEFAULT_HEADERS,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'Content-Length': String(body.length),
+      };
+      const req = https.request(url, { method: 'POST', agent: AGENT, headers }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) }));
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(timeoutMs, () => {
+        req.destroy();
+        reject(new Error('Request timeout: ' + url));
+      });
+      req.end(body);
+    });
+  }
+
   async getJson<T = unknown>(url: string): Promise<T> {
     return JSON.parse(await this.getText(url)) as T;
   }

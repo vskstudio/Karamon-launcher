@@ -1,0 +1,26 @@
+.ui-skin-face {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--face);
+  height: var(--face);
+  overflow: hidden;
+  background-repeat: no-repeat;
+  background-size: calc(var(--face) * 8) auto;
+  background-position: calc(var(--face) * -5) calc(var(--face) * -1), calc(var(--face) * -1) calc(var(--face) * -1);
+  image-rendering: pixelated;
+}
+
+.ui-skin-face--empty {
+  background: var(--surface-3);
+  color: var(--dim);
+}
+
+.ui-skin-face--empty img {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.ui-skin-face--ring {
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--lumis), 0 12px 30px rgba(0, 0, 0, 0.5);
+}

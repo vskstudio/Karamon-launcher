@@ -1,0 +1,39 @@
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-3) 0 14px;
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.ui-select:hover {
+  border-color: var(--border-hover);
+}
+
+.ui-select[aria-expanded='true'] {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ui-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select__chevron {
+  flex: none;
+  color: var(--dim);
+}
+
+.ui-select__check {
+  flex: none;
+  color: var(--accent-light);
+}

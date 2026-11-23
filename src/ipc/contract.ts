@@ -175,8 +175,11 @@ export interface BackupListResult {
   backups: BackupEntry[];
 }
 
+export type ShopOfferKind = 'pack' | 'subscription';
+
 export interface ShopOffer {
   id: string;
+  kind: ShopOfferKind;
   name: string;
   description: string;
   image: string;
@@ -184,6 +187,66 @@ export interface ShopOffer {
   bonus: number;
   priceCents: number;
   currency: string;
+  taxExclusive: boolean;
+  features: string[];
+}
+
+export interface ShopCatalog {
+  offers: ShopOffer[];
+  portalUrl: string | null;
+}
+
+export type ShopCheckoutResult =
+  | { status: 'paid' }
+  | { status: 'cancelled' }
+  | { status: 'error'; error: string };
+
+export type WikiInline =
+  | { kind: 'text'; text: string }
+  | { kind: 'strong'; children: WikiInline[] }
+  | { kind: 'em'; children: WikiInline[] }
+  | { kind: 'code'; text: string }
+  | { kind: 'link'; href: string; wikiSlug: string | null; children: WikiInline[] }
+  | { kind: 'image'; src: string; alt: string };
+
+export type WikiCalloutTone = 'note' | 'tip' | 'warning' | 'important';
+
+export type WikiBlock =
+  | { kind: 'heading'; level: 2 | 3; id: string; text: string }
+  | { kind: 'paragraph'; content: WikiInline[] }
+  | { kind: 'list'; ordered: boolean; items: WikiInline[][] }
+  | { kind: 'callout'; tone: WikiCalloutTone; title: string; blocks: WikiBlock[] }
+  | { kind: 'table'; head: WikiInline[][]; rows: WikiInline[][][] }
+  | { kind: 'image'; src: string; alt: string };
+
+export interface WikiPageRef {
+  slug: string;
+  title: string;
+  icon: string;
+}
+
+export interface WikiGroup {
+  name: string;
+  pages: WikiPageRef[];
+}
+
+export interface WikiPage {
+  slug: string;
+  title: string;
+  group: string;
+  lede: string;
+  icon: string;
+  cover: string | null;
+  blocks: WikiBlock[];
+}
+
+export interface PackInfo {
+  version: string | null;
+  minecraft: string;
+  loader: string;
+  loaderVersion: string;
+  baseName: string | null;
+  upToDate: boolean | null;
 }
 
 /** A skin for an offline account: the PNG in base64 (64×64 or 64×32, 32 KB at most) and its arm width. */
@@ -264,6 +327,11 @@ export const Channels = {
   backupDelete: 'backup:delete',
 
   shopOffers: 'shop:offers',
+  shopCheckout: 'shop:checkout',
+  shopPortal: 'shop:portal',
+  wikiIndex: 'wiki:index',
+  wikiPage: 'wiki:page',
+  packInfo: 'pack:info',
   skinUrl: 'skin:url',
   skinOfflineSet: 'skin:offline-set',
   skinOfflineReset: 'skin:offline-reset',
@@ -315,7 +383,12 @@ export interface IpcInvokeContract {
   [Channels.backupCreate]: { req: void; res: BackupEntry };
   [Channels.backupList]: { req: void; res: BackupListResult };
   [Channels.backupDelete]: { req: string; res: BackupListResult };
-  [Channels.shopOffers]: { req: void; res: ShopOffer[] };
+  [Channels.shopOffers]: { req: void; res: ShopCatalog };
+  [Channels.shopCheckout]: { req: string; res: ShopCheckoutResult };
+  [Channels.shopPortal]: { req: void; res: void };
+  [Channels.wikiIndex]: { req: void; res: WikiGroup[] };
+  [Channels.wikiPage]: { req: string; res: WikiPage | null };
+  [Channels.packInfo]: { req: void; res: PackInfo };
   [Channels.skinUrl]: { req: MinecraftProfile; res: string | null };
   [Channels.skinOfflineSet]: { req: OfflineSkinRequest; res: OfflineSkinResult };
   [Channels.skinOfflineReset]: { req: string; res: OfflineSkinResult };
@@ -386,7 +459,12 @@ export interface LauncherApi {
   listBackups(): Promise<BackupListResult>;
   deleteBackup(name: string): Promise<BackupListResult>;
 
-  listShopOffers(): Promise<ShopOffer[]>;
+  shopCatalog(): Promise<ShopCatalog>;
+  shopCheckout(offerId: string): Promise<ShopCheckoutResult>;
+  shopPortal(): Promise<void>;
+  wikiIndex(): Promise<WikiGroup[]>;
+  wikiPage(slug: string): Promise<WikiPage | null>;
+  packInfo(): Promise<PackInfo>;
   skinUrl(profile: MinecraftProfile): Promise<string | null>;
   /** The skin of an offline account, sent by the game with its next Karamon login. */
   skinOfflineSet(request: OfflineSkinRequest): Promise<OfflineSkinResult>;
