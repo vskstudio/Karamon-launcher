@@ -12,52 +12,52 @@ import {
   skinPng,
   wikiSlug,
 } from './RequestDecoders.ts';
-import type { AppConfig, AppConfigUpdate } from '../main/features/config/Config';
-import type { SetupResult } from '../main/features/minecraft/MinecraftSetup';
-import type { GameState, RepairDone, RepairOffer } from '../main/features/play/PlayActions';
-import type { PingResult } from '../main/features/server/ServerPing';
-import type { UpdateCheckResult, UpdateInfo } from '../main/features/updater/AutoUpdater';
-import type { ModsListResult } from '../main/shared/GameInstance';
-import type { PackInfo } from '../main/features/modpack/PackManifest';
-import type { SystemInfo } from '../main/features/system/SystemInfo';
-import type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime';
-import type { PlayStatsData } from '../main/features/stats/PlayStats';
-import type { ScreenshotsListResult } from '../main/features/screenshots/Screenshots';
-import type { CrashReportsListResult } from '../main/features/crashes/CrashReports';
-import type { ReportConsentAnswer, ReportConsentRequest, ReportSendResult } from '../main/features/reports/ReportTypes';
-import type { BackupEntry, BackupListResult } from '../main/features/backup/Backup';
-import type { ShopCatalog, ShopCheckoutResult } from '../main/features/shop/Shop';
-import type { WikiGroup, WikiPage } from '../main/features/wiki/WikiTypes';
-import type { MinecraftProfile } from '../main/features/auth/MinecraftProfile';
-import type { OfflineSkinRequest } from '../main/features/auth/OfflineSkin';
-import type { AuthSessionResult } from '../main/features/auth/AuthSession';
-import type { NameStatus } from '../main/features/auth/OfflineAccount';
+import type { AppConfig, AppConfigUpdate } from '../main/features/config/Config.ts';
+import type { SetupResult } from '../main/features/minecraft/MinecraftSetup.ts';
+import type { GameState, RepairDone, RepairOffer } from '../main/features/play/PlayActions.ts';
+import type { PingResult } from '../main/features/server/ServerPing.ts';
+import type { UpdateCheckResult, UpdateInfo } from '../main/features/updater/AutoUpdater.ts';
+import type { ModsListResult } from '../main/shared/GameInstance.ts';
+import type { PackInfo } from '../main/features/modpack/PackManifest.ts';
+import type { SystemInfo } from '../main/features/system/SystemInfo.ts';
+import type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime.ts';
+import type { PlayStatsData } from '../main/features/stats/PlayStats.ts';
+import type { ScreenshotsListResult } from '../main/features/screenshots/Screenshots.ts';
+import type { CrashReportsListResult } from '../main/features/crashes/CrashReports.ts';
+import type { ReportConsentAnswer, ReportConsentRequest, ReportSendResult } from '../main/features/reports/ReportTypes.ts';
+import type { BackupEntry, BackupListResult } from '../main/features/backup/Backup.ts';
+import type { ShopCatalog, ShopCheckoutResult } from '../main/features/shop/Shop.ts';
+import type { WikiGroup, WikiPage } from '../main/features/wiki/WikiTypes.ts';
+import type { MinecraftProfile } from '../main/features/auth/MinecraftProfile.ts';
+import type { OfflineSkinRequest } from '../main/features/auth/OfflineSkin.ts';
+import type { AuthSessionResult } from '../main/features/auth/AuthSession.ts';
+import type { NameStatus } from '../main/features/auth/OfflineAccount.ts';
 
-export type { AppConfig, AppConfigUpdate, ServerInfo } from '../main/features/config/Config';
-export type { SetupResult } from '../main/features/minecraft/MinecraftSetup';
-export type { GameState, RepairDone, RepairOffer, RepairResult } from '../main/features/play/PlayActions';
-export type { PingResult, SamplePlayer } from '../main/features/server/ServerPing';
-export type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../main/features/updater/AutoUpdater';
-export type { InstalledMod as ModEntry, ModsListResult } from '../main/shared/GameInstance';
-export type { PackInfo } from '../main/features/modpack/PackManifest';
-export type { SystemInfo } from '../main/features/system/SystemInfo';
-export type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime';
-export type { PlayStatsData as PlayStats } from '../main/features/stats/PlayStats';
-export type { ScreenshotEntry, ScreenshotsListResult } from '../main/features/screenshots/Screenshots';
-export type { CrashReport, CrashReportsListResult } from '../main/features/crashes/CrashReports';
+export type { AppConfig, AppConfigUpdate, ServerInfo } from '../main/features/config/Config.ts';
+export type { SetupResult } from '../main/features/minecraft/MinecraftSetup.ts';
+export type { GameState, RepairDone, RepairOffer, RepairResult } from '../main/features/play/PlayActions.ts';
+export type { PingResult, SamplePlayer } from '../main/features/server/ServerPing.ts';
+export type { UpdateCheckResult, UpdateInfo, UpdateInstall } from '../main/features/updater/AutoUpdater.ts';
+export type { InstalledMod as ModEntry, ModsListResult } from '../main/shared/GameInstance.ts';
+export type { PackInfo } from '../main/features/modpack/PackManifest.ts';
+export type { SystemInfo } from '../main/features/system/SystemInfo.ts';
+export type { JavaInstall as JavaCandidate } from '../main/features/java/JavaRuntime.ts';
+export type { PlayStatsData as PlayStats } from '../main/features/stats/PlayStats.ts';
+export type { ScreenshotEntry, ScreenshotsListResult } from '../main/features/screenshots/Screenshots.ts';
+export type { CrashReport, CrashReportsListResult } from '../main/features/crashes/CrashReports.ts';
 export type {
   ReportConsentAnswer,
   ReportConsentRequest,
   ReportSendResult,
   ReportTrigger,
-} from '../main/features/reports/ReportTypes';
-export type { BackupEntry, BackupListResult } from '../main/features/backup/Backup';
-export type { ShopCatalog, ShopCheckoutResult, ShopOffer, ShopOfferKind } from '../main/features/shop/Shop';
-export type { WikiBlock, WikiCalloutTone, WikiGroup, WikiInline, WikiPage, WikiPageRef } from '../main/features/wiki/WikiTypes';
-export type { AccountKind, MinecraftProfile } from '../main/features/auth/MinecraftProfile';
-export type { OfflineSkinRequest, SkinModel } from '../main/features/auth/OfflineSkin';
-export type { AuthSessionResult } from '../main/features/auth/AuthSession';
-export type { NameStatus } from '../main/features/auth/OfflineAccount';
+} from '../main/features/reports/ReportTypes.ts';
+export type { BackupEntry, BackupListResult } from '../main/features/backup/Backup.ts';
+export type { ShopCatalog, ShopCheckoutResult, ShopOffer, ShopOfferKind } from '../main/features/shop/Shop.ts';
+export type { WikiBlock, WikiCalloutTone, WikiGroup, WikiInline, WikiPage, WikiPageRef } from '../main/features/wiki/WikiTypes.ts';
+export type { AccountKind, MinecraftProfile } from '../main/features/auth/MinecraftProfile.ts';
+export type { OfflineSkinRequest, SkinModel } from '../main/features/auth/OfflineSkin.ts';
+export type { AuthSessionResult } from '../main/features/auth/AuthSession.ts';
+export type { NameStatus } from '../main/features/auth/OfflineAccount.ts';
 
 const reportConsentAnswer = object<ReportConsentAnswer>('une réponse au rapport', {
   reportId: identifier,

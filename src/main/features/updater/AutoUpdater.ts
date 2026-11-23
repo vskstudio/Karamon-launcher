@@ -15,7 +15,7 @@ export type UpdateCheckResult =
   | { status: 'downloaded'; version: string }
   | { status: 'available'; version: string }
   | { status: 'unsupported' };
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export interface AutoUpdaterOptions {
   onReady: (info: UpdateInfo) => void;

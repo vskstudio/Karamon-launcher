@@ -1,16 +1,16 @@
-import type { Config } from '../config/Config';
-import { SessionEvidence } from '../crashes/SessionEvidence';
-import type { DiscordRpc } from '../discord/DiscordRpc';
-import { repairSummary } from '../integrity/RepairSummary';
-import { GameRunningError } from '../minecraft/InstanceSession';
-import type { MinecraftLauncher } from '../minecraft/MinecraftLauncher';
-import type { ProgressEmitter, StatusEmitter } from '../modpack/ModpackSync';
-import type { PackManifest, RemotePack } from '../modpack/PackManifest';
-import type { ReportManager } from '../reports/ReportManager';
-import { failureSummary, failureTrigger } from '../reports/ReportTriggers';
-import type { PlayStats } from '../stats/PlayStats';
-import type { AutoUpdater } from '../updater/AutoUpdater';
-import type { GameKeepAlive } from '../../GameKeepAlive';
+import type { Config } from '../config/Config.ts';
+import { SessionEvidence } from '../crashes/SessionEvidence.ts';
+import type { DiscordRpc } from '../discord/DiscordRpc.ts';
+import { repairSummary } from '../integrity/RepairSummary.ts';
+import { GameRunningError } from '../minecraft/InstanceSession.ts';
+import type { MinecraftLauncher } from '../minecraft/MinecraftLauncher.ts';
+import type { ProgressEmitter, StatusEmitter } from '../modpack/ModpackSync.ts';
+import type { PackManifest, RemotePack } from '../modpack/PackManifest.ts';
+import type { ReportManager } from '../reports/ReportManager.ts';
+import { failureSummary, failureTrigger } from '../reports/ReportTriggers.ts';
+import type { PlayStats } from '../stats/PlayStats.ts';
+import type { AutoUpdater } from '../updater/AutoUpdater.ts';
+import type { GameKeepAlive } from '../../GameKeepAlive.ts';
 
 export interface GameState {
   running: boolean;
@@ -62,7 +62,7 @@ export class PlayActions {
     const startedAt = Date.now();
     const cfg = config.get();
     const wasRunning = minecraft.isRunning();
-    const gameDir = minecraft.instanceDir(cfg);
+    const instance = minecraft.session(cfg).instance;
     const publishedPack = packManifest.latest();
     try {
       progress(0);
@@ -84,7 +84,7 @@ export class PlayActions {
           if (trigger) {
             reports.reportInBackground(
               trigger,
-              [`Code de sortie ${code}`, ...corruption, ...new SessionEvidence(gameDir, startedAt).crashSummary()],
+              [`Code de sortie ${code}`, ...corruption, ...new SessionEvidence(instance, startedAt).crashSummary()],
               startedAt,
             );
           }
@@ -92,7 +92,7 @@ export class PlayActions {
       });
       if (!wasRunning) {
         stats.startSession();
-        void this.recordInstalledPack(gameDir, publishedPack);
+        void this.recordInstalledPack(instance.dir, publishedPack);
       }
       discord.setPlaying();
       this.setGameRunning(true);
@@ -116,7 +116,7 @@ export class PlayActions {
     try {
       progress(0);
       await minecraft.syncOnly(cfg, status, progress);
-      void this.recordInstalledPack(minecraft.instanceDir(cfg), publishedPack);
+      void this.recordInstalledPack(minecraft.session(cfg).instance.dir, publishedPack);
       progress(1);
     } catch (e) {
       const message = (e as Error).message;
@@ -137,7 +137,7 @@ export class PlayActions {
       status("Réparation de l'installation : vérification complète...");
       const publishedPack = packManifest.latest();
       const report = await minecraft.repair(cfg, status, progress);
-      void this.recordInstalledPack(minecraft.instanceDir(cfg), publishedPack);
+      void this.recordInstalledPack(minecraft.session(cfg).instance.dir, publishedPack);
       const damaged = report.damaged.length;
       const configs = report.configs.repaired.length;
       const summary = repairSummary(damaged, configs);

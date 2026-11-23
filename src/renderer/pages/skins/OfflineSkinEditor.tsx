@@ -6,8 +6,7 @@ import { forgetSkin } from '../../state/skins';
 import { Button, cx, PageHeader, Panel, Segmented, SettingRow, type SegmentedItem } from '../../ui';
 import { detectModel, loadSkinImage, type SkinModel } from './skinRender';
 import { SkinPreview } from './SkinPreview';
-
-const SKIN_MAX_BYTES = 32 * 1024;
+import { SKIN_MAX_BYTES_ACCEPTED_BY_KARAMON_MOD } from '../../../shared/Karamon';
 
 const modelItems: readonly SegmentedItem<SkinModel>[] = [
   { value: 'classic', label: 'Classique' },
@@ -78,7 +77,7 @@ export function OfflineSkinEditor({ profile, current, currentLoading }: OfflineS
   const importFile = async (file: File) => {
     setImported(null);
     setStatus(null);
-    if (file.size > SKIN_MAX_BYTES) {
+    if (file.size > SKIN_MAX_BYTES_ACCEPTED_BY_KARAMON_MOD) {
       fail('Image trop lourde : 32 Ko au plus.');
       return;
     }

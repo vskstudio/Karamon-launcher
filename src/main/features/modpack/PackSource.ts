@@ -13,7 +13,7 @@ import {
   type PackDescription,
 } from './PackDescription.ts';
 
-const ARCHIVE_DOWNLOAD_IDLE_TIMEOUT_MS = 1200000;
+const ARCHIVE_RESPONSE_TIMEOUT_MS = 20 * 60 * 1000;
 const PARALLEL_LOOSE_DOWNLOADS = 8;
 const PARALLEL_RANGED_READS = 4;
 
@@ -296,7 +296,7 @@ export class DownloadedSource implements PackSource {
       download = this.http
         .download(this.baseUrl + archiveFileName(name), archive.file, {
           label: archiveFileName(name),
-          timeoutMs: ARCHIVE_DOWNLOAD_IDLE_TIMEOUT_MS,
+          responseTimeoutMs: ARCHIVE_RESPONSE_TIMEOUT_MS,
           onProgress,
         })
         .then(() => archive.open());

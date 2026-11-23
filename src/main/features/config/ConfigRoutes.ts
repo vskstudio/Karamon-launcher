@@ -1,6 +1,6 @@
-import { routes } from '../../../ipc/contract';
-import type { RouteRegistry } from '../../ipc/IpcRouter';
-import type { AppConfig, Config } from './Config';
+import { routes } from '../../../ipc/contract.ts';
+import type { RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { AppConfig, Config } from './Config.ts';
 
 export interface ConfigRoutesDeps {
   config: Config;

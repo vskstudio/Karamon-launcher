@@ -1,11 +1,11 @@
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { pipeline } from 'stream/promises';
 import type { IncomingHttpHeaders, IncomingMessage } from 'http';
 import { fsyncFile } from './AtomicWrite.ts';
-import { KARAMON } from './KaramonProfile.ts';
+import { fileDigest, type DigestAlgorithm } from './FileDigest.ts';
+import { KARAMON } from '../../shared/Karamon.ts';
 
 const REDIRECT_STATUS = new Set([301, 302, 307, 308]);
 const MAX_REDIRECTS = 10;
@@ -58,16 +58,11 @@ export interface RequestOptions extends Deadlines {
   headers?: Record<string, string>;
 }
 
-export interface GetOptions extends RequestOptions {
-  timeoutMs?: number;
-}
-
 export interface DownloadOptions extends Deadlines {
   expectedSha1?: string;
   expectedSha256?: string;
   label?: string;
   onProgress?: (fraction: number) => void;
-  timeoutMs?: number;
 }
 
 export interface RangeRequest {
@@ -175,14 +170,6 @@ export async function withNetworkRetries<T>(run: () => Promise<T>, onFailedAttem
     }
   }
   throw lastError;
-}
-
-type DigestAlgorithm = 'sha1' | 'sha256';
-
-async function fileDigest(filePath: string, algorithm: DigestAlgorithm): Promise<string> {
-  const hash = crypto.createHash(algorithm);
-  await pipeline(fs.createReadStream(filePath), hash);
-  return hash.digest('hex');
 }
 
 async function hasDigest(filePath: string, algorithm: DigestAlgorithm, expected: string): Promise<boolean> {
@@ -308,12 +295,8 @@ export class HttpClient {
     return { status: res.statusCode ?? 0, body: await readBody(res, url) };
   }
 
-  get(url: string, { timeoutMs, ...options }: GetOptions = {}): Promise<HttpResponse> {
-    return this.request(url, {
-      ...options,
-      idleTimeoutMs: options.idleTimeoutMs ?? timeoutMs,
-      method: 'GET',
-    });
+  get(url: string, options: RequestOptions = {}): Promise<HttpResponse> {
+    return this.request(url, { ...options, method: 'GET' });
   }
 
   async getText(url: string, options: RequestOptions = {}): Promise<string> {
@@ -383,11 +366,11 @@ export class HttpClient {
   }
 
   async download(url: string, dest: string, options: DownloadOptions = {}): Promise<void> {
-    const { expectedSha1 = '', expectedSha256 = '', label = '', onProgress, timeoutMs, ...deadlines } = options;
+    const { expectedSha1 = '', expectedSha256 = '', label = '', onProgress, ...deadlines } = options;
     const named = label || dest;
     const transfer: Deadlines = {
       ...deadlines,
-      responseTimeoutMs: deadlines.responseTimeoutMs ?? timeoutMs ?? DOWNLOAD_RESPONSE_TIMEOUT_MS,
+      responseTimeoutMs: deadlines.responseTimeoutMs ?? DOWNLOAD_RESPONSE_TIMEOUT_MS,
     };
     fs.mkdirSync(path.dirname(dest), { recursive: true });
 

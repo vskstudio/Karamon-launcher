@@ -4,6 +4,7 @@ import path from 'path';
 import { SessionEvidence, readFileTail, trimToTail } from '../crashes/SessionEvidence.ts';
 import { redactReportText } from './ReportRedactor.ts';
 import type { LauncherReport, ReportFile, ReportTrigger } from './ReportTypes.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const KIB = 1024;
 const MIB = 1024 * KIB;
@@ -12,7 +13,7 @@ const SUMMARY_MAX_TAGS = 20;
 const SUMMARY_TAG_LENGTH = 200;
 const PANEL_FILE_NAME_MAX = 128;
 
-export function panelFileLimit(name: string): number | undefined {
+function panelFileLimit(name: string): number | undefined {
   if (name.length > PANEL_FILE_NAME_MAX || name.includes('..') || !/^[A-Za-z0-9._-]+$/.test(name)) return undefined;
   if (name === 'launcher.log') return 256 * KIB;
   if (name === 'latest.log') return 512 * KIB;
@@ -21,7 +22,7 @@ export function panelFileLimit(name: string): number | undefined {
 }
 
 export interface ReportCollectorOptions {
-  dataDir: string;
+  launcherLog: string;
   launcherVersion: string;
   bundledPackVersion: string;
   getPackVersion?: () => Promise<string | undefined>;
@@ -38,7 +39,7 @@ export interface ReportCollectorOptions {
 export interface CollectReportInput {
   trigger: ReportTrigger;
   summary: string[];
-  gameDir: string;
+  instance: GameInstance;
   ramMb: number;
   since?: number;
 }
@@ -57,7 +58,7 @@ export class ReportCollector {
       this.optional(this.options.getGpu, undefined),
     ]);
     const redact = this.redactor();
-    const files = this.collectFiles(input.gameDir, redact, input.since ?? 0);
+    const files = this.collectFiles(input.instance, redact, input.since ?? 0);
     const playerName = this.options.getPlayerName?.();
     const report: LauncherReport = {
       reportId: (this.options.uuid ?? crypto.randomUUID)(),
@@ -79,11 +80,11 @@ export class ReportCollector {
     return fitReport(report);
   }
 
-  private collectFiles(gameDir: string, redact: (text: string) => string, since: number): ReportFile[] {
-    const evidence = new SessionEvidence(gameDir, since);
+  private collectFiles(instance: GameInstance, redact: (text: string) => string, since: number): ReportFile[] {
+    const evidence = new SessionEvidence(instance, since);
     const acceptedByPanel = (file: string): boolean => panelFileLimit(path.basename(file)) !== undefined;
     const candidates = [
-      path.join(this.options.dataDir, 'logs', 'launcher.log'),
+      this.options.launcherLog,
       evidence.latestLog(),
       evidence.crashReports().find(acceptedByPanel),
       evidence.hsErrLogs().find(acceptedByPanel),

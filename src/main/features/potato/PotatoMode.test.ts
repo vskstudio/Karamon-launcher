@@ -4,9 +4,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { potatoModFor } from './PotatoMods.ts';
+import { POTATO_MODS } from './PotatoMods.ts';
+import { toggledModFor } from '../modtoggles/ModToggles.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
 import { reconcilePlayerToggles } from '../minecraft/PlayerToggles.ts';
+
+const potatoModFor = (fileName: string) => toggledModFor(POTATO_MODS, fileName);
 
 function jar(id: string): Buffer {
   const zip = new AdmZip();

@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import zlib from 'zlib';
 import { writeFileAtomic } from '../../shared/AtomicWrite.ts';
+import { fileDigest } from '../../shared/FileDigest.ts';
 import { hasValidZipEnd, isArchiveName } from './ZipTail.ts';
 import type { GameInstance } from '../../shared/GameInstance.ts';
 
@@ -111,7 +111,7 @@ export class FileVerifier {
     if (!this.force && !rehash && fresh && known.sha1) {
       return known.sha1;
     }
-    const sha1 = await sha1File(filePath);
+    const sha1 = await fileDigest(filePath, 'sha1');
     records[key] = { ...(fresh && !rehash ? known : {}), size: stat.size, mtimeMs: stat.mtimeMs, sha1 };
     this.dirty = true;
     return sha1;
@@ -134,16 +134,6 @@ export class FileVerifier {
     const rel = path.relative(this.root, path.resolve(filePath));
     return (rel.startsWith('..') || path.isAbsolute(rel) ? path.resolve(filePath) : rel).replace(/\\/g, '/');
   }
-}
-
-export function sha1File(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha1');
-    const stream = fs.createReadStream(filePath, { highWaterMark: 1 << 20 });
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('error', reject);
-    stream.on('end', () => resolve(hash.digest('hex')));
-  });
 }
 
 export function crc32File(filePath: string): Promise<number> {

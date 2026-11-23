@@ -2,7 +2,7 @@ import { HTMLElement, NodeType, parse, type Node } from 'node-html-parser';
 import { WIKI_SLUG_PATTERN } from '../../../shared/WikiSlug.ts';
 import type { WikiBlock, WikiCalloutTone, WikiGroup, WikiInline, WikiPage, WikiPageRef } from './WikiTypes.ts';
 
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export const WIKI_ORIGIN = KARAMON.websiteUrl;
 const WIKI_HOST = KARAMON.websiteHost;

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { crashReportsDir, isCrashReportName, summarizeCrash } from './CrashReports.ts';
+import { isCrashReportName, summarizeCrash } from './CrashReports.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const FILE_CLOCK_SLACK_MS = 5000;
 const HS_ERR_LOG = /^hs_err_pid\d+\.log$/;
@@ -8,16 +9,16 @@ const TRUNCATED_MARKER = '[début tronqué]\n';
 const TRUNCATED_MARKER_BYTES = Buffer.byteLength(TRUNCATED_MARKER);
 
 export class SessionEvidence {
-  private readonly gameDir: string;
+  private readonly instance: GameInstance;
   private readonly writtenSince: number;
 
-  constructor(gameDir: string, sessionStartedAt: number) {
-    this.gameDir = gameDir;
+  constructor(instance: GameInstance, sessionStartedAt: number) {
+    this.instance = instance;
     this.writtenSince = sessionStartedAt - FILE_CLOCK_SLACK_MS;
   }
 
   crashReports(): string[] {
-    return this.filesOfSession(crashReportsDir(this.gameDir), isCrashReportName);
+    return this.filesOfSession(this.instance.crashReportsDir, isCrashReportName);
   }
 
   newestCrashReport(): string | null {
@@ -25,11 +26,11 @@ export class SessionEvidence {
   }
 
   hsErrLogs(): string[] {
-    return this.filesOfSession(this.gameDir, (name) => HS_ERR_LOG.test(name));
+    return this.filesOfSession(this.instance.dir, (name) => HS_ERR_LOG.test(name));
   }
 
   latestLog(): string | null {
-    const log = path.join(this.gameDir, 'logs', 'latest.log');
+    const log = this.instance.latestLog;
     try {
       return fs.statSync(log).mtimeMs >= this.writtenSince ? log : null;
     } catch {

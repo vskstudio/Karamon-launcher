@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron/main';
-import type { MinecraftProfile } from './MinecraftProfile';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
 import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 interface StoredSession {

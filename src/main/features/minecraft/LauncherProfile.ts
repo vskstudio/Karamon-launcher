@@ -1,7 +1,7 @@
 import path from 'path';
 import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
-const DEFAULT_MEMORY_MB = 12288;
 const PROFILE_FILE_VERSION = 3;
 const BASE_JVM_FLAGS = '-Xms512m -XX:+UseG1GC -XX:MaxGCPauseMillis=50';
 
@@ -78,7 +78,7 @@ export class LauncherProfile {
   }
 
   private static buildJavaArgs(memoryMb: number, extra: string): string {
-    const heap = `-Xmx${memoryMb || DEFAULT_MEMORY_MB}m`;
+    const heap = `-Xmx${memoryMb || KARAMON.defaultMemoryMb}m`;
     const base = `${heap} ${BASE_JVM_FLAGS}`;
     return extra ? `${base} ${extra}` : base;
   }

@@ -6,18 +6,19 @@ import type { ShaderPolicy } from './ShaderChoice.ts';
 
 export function applyPackClientSettings(
   instance: GameInstance,
+  minecraftVersion: string,
   options: ClientOptions | null,
   shaders: ShaderPolicy,
   onStatus: (message: string) => void,
 ): void {
   try {
     if (options) {
-      const writer = new OptionsWriter(instance.dir);
+      const writer = new OptionsWriter(instance);
       writer.forceResourcePacks(options.resourcePacks);
       const applied = shaders.applyChoice(writer, options.shaderPack, options.enableShaders, options.shaderRevision);
       if (applied && shaders.bumped) onStatus(`Shader du pack appliqué : ${options.shaderPack}.`);
     }
-    applyKaramonBranding(instance, options?.resourcePacks);
+    applyKaramonBranding(instance, { minecraftVersion, resourcePacks: options?.resourcePacks });
   } catch (e) {
     onStatus(`Réglages du pack non appliqués : ${(e as Error).message}`);
   }

@@ -11,7 +11,7 @@ function tmp(): string {
 
 test('écrit une ligne horodatée par message, même sur plusieurs lignes', () => {
   const dir = tmp();
-  const log = new FileLog(path.join(dir, 'logs'));
+  const log = new FileLog(path.join(dir, 'logs', 'launcher.log'));
   log.info('Synchronisation du pack');
   log.error('Mise à jour', new Error('réseau\ncoupé'));
   const lines = fs.readFileSync(log.file, 'utf8').trim().split('\n');
@@ -23,7 +23,7 @@ test('écrit une ligne horodatée par message, même sur plusieurs lignes', () =
 
 test('garde une seule copie tournée quand le fichier dépasse la limite', () => {
   const dir = tmp();
-  const log = new FileLog(dir, 200);
+  const log = new FileLog(path.join(dir, 'launcher.log'), 200);
   for (let i = 0; i < 20; i++) log.info(`message numéro ${i}`);
   const current = fs.readFileSync(path.join(dir, 'launcher.log'), 'utf8');
   const old = fs.readFileSync(path.join(dir, 'launcher.old.log'), 'utf8');
@@ -36,7 +36,7 @@ test('garde une seule copie tournée quand le fichier dépasse la limite', () =>
 
 test('masque les jetons', () => {
   const dir = tmp();
-  const log = new FileLog(dir);
+  const log = new FileLog(path.join(dir, 'launcher.log'));
   log.warn('réponse {"access_token":"eyJhbGciOiJIUzI1NiJ9.abcdefghijkl"} Bearer abcdefghijklmnop1234');
   const text = fs.readFileSync(log.file, 'utf8');
   assert.ok(!text.includes('eyJhbGciOiJIUzI1NiJ9'));
@@ -49,7 +49,7 @@ test('ne lève jamais d\'erreur si le dossier est inutilisable', () => {
   const dir = tmp();
   const blocker = path.join(dir, 'pas-un-dossier');
   fs.writeFileSync(blocker, 'x');
-  const log = new FileLog(blocker);
+  const log = new FileLog(path.join(blocker, 'launcher.log'));
   assert.doesNotThrow(() => log.info('rien'));
   fs.rmSync(dir, { recursive: true, force: true });
 });

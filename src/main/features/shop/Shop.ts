@@ -2,7 +2,7 @@ import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpClient, HttpResponse } from '../../shared/HttpClient.ts';
 import { isStripeCheckoutPage } from './CheckoutNavigation.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export type ShopOfferKind = 'pack' | 'subscription';
 
@@ -83,7 +83,7 @@ function portalUrl(value: unknown): string | null {
   return PORTAL_ORIGINS.some((origin) => url.startsWith(origin)) ? url : null;
 }
 
-export function parseOffers(raw: unknown): ShopCatalog {
+function parseOffers(raw: unknown): ShopCatalog {
   const payload = raw as { offers?: unknown; portal_url?: unknown } | null;
   const list = payload?.offers;
   if (!Array.isArray(list)) return { offers: [], portalUrl: null };

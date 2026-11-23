@@ -1,5 +1,5 @@
 import { app } from 'electron/main';
-import type { GpuDevice } from '../potato/PotatoSettings';
+import type { GpuDevice } from '../potato/PotatoSettings.ts';
 
 export async function gpuDevices(): Promise<GpuDevice[]> {
   try {

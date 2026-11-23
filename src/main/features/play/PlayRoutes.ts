@@ -1,6 +1,6 @@
-import { routes } from '../../../ipc/contract';
-import type { EventSink, RouteRegistry } from '../../ipc/IpcRouter';
-import type { PlayActions, PlayEvents } from './PlayActions';
+import { routes } from '../../../ipc/contract.ts';
+import type { EventSink, RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { PlayActions, PlayEvents } from './PlayActions.ts';
 
 export function registerPlayRoutes(router: RouteRegistry, actions: PlayActions): void {
   router.handle(routes.play, () => actions.play());

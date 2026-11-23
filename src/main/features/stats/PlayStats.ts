@@ -1,4 +1,3 @@
-import path from 'path';
 import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
 
 export interface PlayStatsData {
@@ -19,8 +18,8 @@ export class PlayStats {
   private readonly file: JsonFile<PlayStatsData>;
   private sessionStart: number | null = null;
 
-  constructor(dataDir: string) {
-    this.file = new JsonFile(path.join(dataDir, 'stats.json'), PlayStats.decode, {
+  constructor(statsFile: string) {
+    this.file = new JsonFile(statsFile, PlayStats.decode, {
       whenUnreadable: 'set-aside',
       indented: false,
     });

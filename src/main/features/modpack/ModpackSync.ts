@@ -6,7 +6,8 @@ import { RangeUnsupportedError, type HttpClient } from '../../shared/HttpClient.
 import { githubAssetFreshness } from '../../shared/GitHubPack.ts';
 import type { ClientOptions } from '../../shared/ClientOptions.ts';
 import { GameInstance } from '../../shared/GameInstance.ts';
-import { FileVerifier, sha1File } from '../integrity/FileVerifier.ts';
+import { FileVerifier } from '../integrity/FileVerifier.ts';
+import { fileDigest } from '../../shared/FileDigest.ts';
 import { installOverrides } from './OverridesInstaller.ts';
 import {
   ASSETS_ZIP,
@@ -63,12 +64,14 @@ export interface SyncResult {
 export interface ModpackSyncOptions {
   http: HttpClient;
   disabledJarPrefixes?: string[];
+  disabledJarReason?: string;
   fallbackClientOptions?: ClientOptions | null;
 }
 
 interface SyncDeps {
   http: HttpClient;
   disabledJarPrefixes: string[];
+  disabledJarLabel: string;
   fallbackClientOptions: ClientOptions | null;
 }
 
@@ -111,10 +114,11 @@ interface OverridesPlan {
 export class ModpackSync {
   private readonly deps: SyncDeps;
 
-  constructor({ http, disabledJarPrefixes, fallbackClientOptions }: ModpackSyncOptions) {
+  constructor({ http, disabledJarPrefixes, disabledJarReason, fallbackClientOptions }: ModpackSyncOptions) {
     this.deps = {
       http,
       disabledJarPrefixes: (disabledJarPrefixes ?? []).map((prefix) => prefix.toLowerCase()),
+      disabledJarLabel: disabledJarReason ? `Mod client désactivé (${disabledJarReason})` : 'Mod client désactivé',
       fallbackClientOptions: fallbackClientOptions ?? null,
     };
   }
@@ -355,7 +359,7 @@ class SyncRun {
         keptBytes += jar.entry.size;
         continue;
       }
-      const label = modsKnown ? `Mod réparé: ${jar.name}` : jar.disabled ? `Mod client désactivé (Java 21): ${jar.name}` : `+ ${jar.name}`;
+      const label = modsKnown ? `Mod réparé: ${jar.name}` : jar.disabled ? `${this.deps.disabledJarLabel}: ${jar.name}` : `+ ${jar.name}`;
       items.push(this.entryItem({ kind: 'entry', archive: 'mods', entry: jar.entry }, jar.target, label));
     }
     return { names: targets.filter((j) => !j.disabled).map((j) => j.name), items, refreshed: true, keptBytes };
@@ -543,7 +547,7 @@ class SyncRun {
 async function assertMatchesManifest(file: string, manifest: OverridesManifest): Promise<void> {
   const actual = fs.statSync(file).size;
   if (actual !== manifest.size) throw new Error(`${manifest.name}: taille ${actual} au lieu de ${manifest.size}`);
-  if (manifest.sha1 && (await sha1File(file)) !== manifest.sha1) throw new Error(`${manifest.name}: empreinte SHA-1 invalide`);
+  if (manifest.sha1 && (await fileDigest(file, 'sha1')) !== manifest.sha1) throw new Error(`${manifest.name}: empreinte SHA-1 invalide`);
 }
 
 function headerKey(headers: Record<string, string | string[] | undefined>): string | null {

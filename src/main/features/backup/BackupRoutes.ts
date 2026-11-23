@@ -1,6 +1,6 @@
-import { routes } from '../../../ipc/contract';
-import type { RouteRegistry } from '../../ipc/IpcRouter';
-import type { Backup } from './Backup';
+import { routes } from '../../../ipc/contract.ts';
+import type { RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { Backup } from './Backup.ts';
 
 export type ExclusiveOnGame = <T>(operation: (gameDir: string) => Promise<T>) => Promise<T>;
 

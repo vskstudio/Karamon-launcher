@@ -1,16 +1,17 @@
 import fs from 'fs';
 import path from 'path';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export class OptionsWriter {
-  private readonly mcDir: string;
+  private readonly instance: GameInstance;
 
-  constructor(mcDir: string) {
-    this.mcDir = mcDir;
+  constructor(instance: GameInstance) {
+    this.instance = instance;
   }
 
   forceResourcePacks(packs: string[]): void {
-    this.writeResourcePacks(path.join(this.mcDir, 'options.txt'), packs, true);
-    const defaults = path.join(this.mcDir, 'config', 'defaultoptions', 'options.txt');
+    this.writeResourcePacks(this.instance.optionsFile, packs, true);
+    const defaults = path.join(this.instance.configDir, 'defaultoptions', 'options.txt');
     if (fs.existsSync(defaults)) this.writeResourcePacks(defaults, packs, false);
   }
 
@@ -43,7 +44,7 @@ export class OptionsWriter {
   }
 
   ensureShader(shaderFileName: string, enableShaders = true): void {
-    const iris = path.join(this.mcDir, 'config', 'iris.properties');
+    const iris = this.instance.irisProperties;
     this.upsertLine(iris, `shaderPack=${shaderFileName}`, /^shaderPack=.*$/m, {
       createIfMissing: true,
     });
@@ -51,7 +52,7 @@ export class OptionsWriter {
       createIfMissing: true,
     });
 
-    const optifineFile = path.join(this.mcDir, 'optionsshaders.txt');
+    const optifineFile = path.join(this.instance.dir, 'optionsshaders.txt');
     if (fs.existsSync(optifineFile)) {
       this.upsertLine(optifineFile, `shaderPack=${shaderFileName}`, /^shaderPack=.*$/m, {
         createIfMissing: false,

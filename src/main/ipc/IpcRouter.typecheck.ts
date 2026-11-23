@@ -1,6 +1,6 @@
-import { routes } from '../../ipc/contract';
-import type { LauncherApi } from '../../ipc/contract';
-import type { EventSink, RouteRegistry } from './IpcRouter';
+import { routes } from '../../ipc/contract.ts';
+import type { LauncherApi } from '../../ipc/contract.ts';
+import type { EventSink, RouteRegistry } from './IpcRouter.ts';
 
 export function mistypedRoutesDoNotCompile(router: RouteRegistry, window: EventSink, api: LauncherApi): void {
   router.handle(routes.readCrash, (name: string) => name);

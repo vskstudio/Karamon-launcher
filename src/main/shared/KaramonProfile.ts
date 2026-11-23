@@ -1,22 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { loadClientOptions, type ClientOptions } from './ClientOptions.ts';
-
-export const KARAMON = {
-  launcherName: 'KaramonLauncher',
-  profileName: 'Karamon',
-  websiteUrl: 'https://karamon.fr',
-  websiteHost: 'karamon.fr',
-  publicServerHost: 'karamon.fr',
-  server: { host: 'play.karamon.fr', port: 25565 },
-  statusFallbackHost: 'play.karamon.fr',
-  panelUrl: 'https://karamon.fr/panel',
-  shopApiUrl: 'https://karamon.fr/api/shop',
-  reportsUrl: 'https://karamon.fr/panel/api/launcher/reports',
-  githubRepo: 'vskstudio/Karamon-launcher',
-  javaMajor: 21,
-  defaultMemoryMb: 12288,
-} as const;
+import { KARAMON, type KaramonIdentity } from '../../shared/Karamon.ts';
 
 const MINECRAFT_PROTOCOL_VERSIONS: Readonly<Record<string, number>> = {
   '1.21': 767,
@@ -27,11 +12,9 @@ const PACK_DEFAULTS = {
   version: 'inconnu',
   minecraft: '1.21.1',
   fabricVersion: '0.18.4',
-  cdnBaseUrl: 'https://karamon.fr/downloads/',
+  cdnBaseUrl: `${KARAMON.websiteUrl}/downloads/`,
   clientDisabledJarPrefixes: ['c2me-fabric'],
 };
-
-export type KaramonIdentity = typeof KARAMON;
 
 export interface KaramonProfile extends KaramonIdentity {
   version: string;

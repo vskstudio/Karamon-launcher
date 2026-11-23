@@ -18,7 +18,7 @@ export interface SettingsDoc {
   serialize(): string;
 }
 
-export function atMost(target: string, fallback: number): Lower {
+function atMost(target: string, fallback: number): Lower {
   const limit = Number(target);
   return (current) => {
     const value = current === undefined ? fallback : Number(current.trim());
@@ -26,7 +26,7 @@ export function atMost(target: string, fallback: number): Lower {
   };
 }
 
-export function atLeast(target: string, fallback: number): Lower {
+function atLeast(target: string, fallback: number): Lower {
   const limit = Number(target);
   return (current) => {
     const value = current === undefined ? fallback : Number(current.trim());
@@ -34,7 +34,7 @@ export function atLeast(target: string, fallback: number): Lower {
   };
 }
 
-export function cheapest(order: string[], target: string, fallback: string): Lower {
+function cheapest(order: string[], target: string, fallback: string): Lower {
   const rank = (value: string): number => order.indexOf(value);
   return (current) => {
     const value = current === undefined ? fallback : current.trim();

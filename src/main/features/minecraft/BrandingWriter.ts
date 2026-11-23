@@ -1,13 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import type { GameInstance } from '../../shared/GameInstance.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
-export const LUMYMON_WELCOME_VERSION = 3;
-export const KARAMON_DISCORD = 'https://discord.gg/karamon';
-export const KARAMON_WIKI = 'https://karamon.fr';
+const LUMYMON_WELCOME_VERSION = 3;
 
-const KARAMON_VERSION =
-  '%#E0556C%**KARA%#%%#ECE8F3%MON**%#% %#D3D3D3%[%#%%#00E64D%1.21.1%#%%#D3D3D3%]%#%';
+export interface BrandingOptions {
+  minecraftVersion: string;
+  resourcePacks?: string[];
+}
+
+function minecraftVersionTag(minecraftVersion: string): string {
+  return `%#D3D3D3%[%#%%#00E64D%${minecraftVersion}%#%%#D3D3D3%]%#%`;
+}
+
+function karamonVersionLine(minecraftVersion: string): string {
+  return `%#E0556C%**KARA%#%%#ECE8F3%MON**%#% ${minecraftVersionTag(minecraftVersion)}`;
+}
 
 const HIDDEN_ELEMENT_IDS = [
   '704201f8-ff60-4ad9-a501-abf8dbe179e9-1743328958871',
@@ -18,8 +27,10 @@ const SHOWN_ELEMENT_IDS = [
   '069855b2-1b02-4412-aba8-7123339d8afb-1746103697603',
 ];
 
-const COBBLEVERSE_VERSION_LINE =
-  /%#FF5500%\*\*COBBLE%#%VERSE\*\* \[[^\]\n]+\]\(click:open_changelogs\) %#D3D3D3%\[%#%%#00E64D%1\.21\.1%#%%#D3D3D3%\]%#%/g;
+function cobbleverseVersionLine(minecraftVersion: string): RegExp {
+  const tag = minecraftVersionTag(minecraftVersion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`%#FF5500%\\*\\*COBBLE%#%VERSE\\*\\* \\[[^\\]\\n]+\\]\\(click:open_changelogs\\) ${tag}`, 'g');
+}
 
 const TITLE_FITS: { id: string; height: number; y: number }[] = [
   { id: '8b2f987c-d9c8-4a38-a0db-0d79261ce265-1734823207699', height: 64, y: -86 },
@@ -27,16 +38,18 @@ const TITLE_FITS: { id: string; height: number; y: number }[] = [
   { id: 'bde11e74-ca8c-4e37-b183-faf2de2bc48a-1783541933564', height: 26, y: -245 },
 ];
 
-const FANCY_REPLACEMENTS: [string, string][] = [
-  ['[source:local]/config/fancymenu/assets/cobbleverse_title.png', '[source:local]/config/fancymenu/assets/karamon_title.png'],
-  ['[source:local]/config/fancymenu/assets/latias_latios_background.png', '[source:local]/config/fancymenu/assets/karamon_background.png'],
-  ['https://discord.lumy.fun', KARAMON_DISCORD],
-  ['https://www.lumyverse.com/cobbleverse', KARAMON_WIKI],
-  ['%#FF5500%**KARAMON 1.0.0**%#% %#D3D3D3%[%#%%#00E64D%1.21.1%#%%#D3D3D3%]%#%', KARAMON_VERSION],
-  ['source = &eby &c&lLUMY&b&lVERSE', 'source = '],
-  ['official %#FFAA00%**COBBLEVERSE**%#% modpack', 'official %#FFAA00%**KARAMON**%#% modpack'],
-  ['official %#FFAA00%**KARAMON 1.0.0**%#% modpack', 'official %#FFAA00%**KARAMON**%#% modpack'],
-];
+function fancyReplacements(minecraftVersion: string): [string, string][] {
+  return [
+    ['[source:local]/config/fancymenu/assets/cobbleverse_title.png', '[source:local]/config/fancymenu/assets/karamon_title.png'],
+    ['[source:local]/config/fancymenu/assets/latias_latios_background.png', '[source:local]/config/fancymenu/assets/karamon_background.png'],
+    ['https://discord.lumy.fun', KARAMON.gameMenuDiscordUrl],
+    ['https://www.lumyverse.com/cobbleverse', KARAMON.websiteUrl],
+    [`%#FF5500%**KARAMON 1.0.0**%#% ${minecraftVersionTag(minecraftVersion)}`, karamonVersionLine(minecraftVersion)],
+    ['source = &eby &c&lLUMY&b&lVERSE', 'source = '],
+    ['official %#FFAA00%**COBBLEVERSE**%#% modpack', 'official %#FFAA00%**KARAMON**%#% modpack'],
+    ['official %#FFAA00%**KARAMON 1.0.0**%#% modpack', 'official %#FFAA00%**KARAMON**%#% modpack'],
+  ];
+}
 
 function forEachLayoutBlock(
   text: string,
@@ -122,9 +135,9 @@ function setVanillaButtonHidden(text: string, id: string, hidden: boolean): stri
   });
 }
 
-function patchFancyMenu(text: string): string {
-  let next = text.replace(COBBLEVERSE_VERSION_LINE, KARAMON_VERSION);
-  for (const [from, to] of FANCY_REPLACEMENTS) next = next.split(from).join(to);
+function patchFancyMenu(text: string, minecraftVersion: string): string {
+  let next = text.replace(cobbleverseVersionLine(minecraftVersion), karamonVersionLine(minecraftVersion));
+  for (const [from, to] of fancyReplacements(minecraftVersion)) next = next.split(from).join(to);
   for (const id of HIDDEN_ELEMENT_IDS) next = hideFancyElement(next, id);
   for (const id of SHOWN_ELEMENT_IDS) next = showFancyElement(next, id);
   for (const fit of TITLE_FITS) next = fitFancyElement(next, fit.id, fit.height, fit.y);
@@ -280,7 +293,7 @@ function copyFancyAssetsFromUiPack(resourcePacksDir: string, configDir: string):
   }
 }
 
-export function applyKaramonBranding(instance: GameInstance, resourcePacks?: string[]): void {
+export function applyKaramonBranding(instance: GameInstance, { minecraftVersion, resourcePacks }: BrandingOptions): void {
   const { configDir } = instance;
   copyFancyAssetsFromUiPack(instance.resourcePacksDir, configDir);
 
@@ -290,7 +303,7 @@ export function applyKaramonBranding(instance: GameInstance, resourcePacks?: str
       if (!name.endsWith('.txt')) continue;
       const file = path.join(fancyDir, name);
       const previous = fs.readFileSync(file, 'utf8');
-      const next = patchFancyMenu(previous);
+      const next = patchFancyMenu(previous, minecraftVersion);
       if (next !== previous) fs.writeFileSync(file, next, 'utf8');
     }
   }
@@ -306,7 +319,7 @@ export function applyKaramonBranding(instance: GameInstance, resourcePacks?: str
   const listeners = path.join(fancyRoot, 'listener_instances.txt');
   if (fs.existsSync(listeners)) {
     const previous = fs.readFileSync(listeners, 'utf8');
-    const next = previous.split('https://www.lumyverse.com/wiki/changelog/').join(KARAMON_DISCORD);
+    const next = previous.split('https://www.lumyverse.com/wiki/changelog/').join(KARAMON.gameMenuDiscordUrl);
     if (next !== previous) fs.writeFileSync(listeners, next, 'utf8');
   }
 

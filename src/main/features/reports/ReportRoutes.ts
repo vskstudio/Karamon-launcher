@@ -1,6 +1,6 @@
-import { routes } from '../../../ipc/contract';
-import type { RouteRegistry } from '../../ipc/IpcRouter';
-import type { ReportManager } from './ReportManager';
+import { routes } from '../../../ipc/contract.ts';
+import type { RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { ReportManager } from './ReportManager.ts';
 
 export function registerReportRoutes(router: RouteRegistry, reports: ReportManager): void {
   router.handle(routes.sendManualReport, () => reports.sendManual());

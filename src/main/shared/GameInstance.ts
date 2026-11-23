@@ -4,8 +4,6 @@ import { resolveInside } from './ZipExtract.ts';
 
 export const PARKED_JAR_SUFFIX = '.disabled';
 
-export type PlayerFolder = 'screenshots' | 'crash-reports' | 'logs' | 'mods';
-
 export interface InstalledMod {
   name: string;
   size: number;
@@ -62,13 +60,6 @@ export class GameInstance {
     this.potatoState = path.join(dir, '.karamon-potato-state.json');
     this.modTogglesState = path.join(dir, '.karamon-mod-toggles.json');
     this.legacySodiumState = path.join(dir, '.karamon-sodium-state.json');
-  }
-
-  fileIn(folder: PlayerFolder, name: string): string {
-    if (!name || name !== path.basename(name) || name === '.' || name === '..') {
-      throw new Error('Nom invalide');
-    }
-    return resolveInside(path.join(this.dir, folder), name);
   }
 
   relative(file: string): string {

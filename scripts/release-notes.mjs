@@ -2,6 +2,7 @@ import { execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { KARAMON } from '../src/shared/Karamon.ts';
 
 const MAX_CHANGES = 8;
 const PACK_JSON = join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'pack.json');
@@ -35,7 +36,7 @@ export function releaseNotes(version, changes = [], pack = bundledPack()) {
     '## Linux',
     `Télécharge \`Karamon-Launcher-${version}.AppImage\`, rends-le exécutable (\`chmod +x\`) puis lance-le.`,
     '',
-    `Java 21 est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis ${pack.cdnBaseUrl}.`,
+    `Java ${KARAMON.javaMajor} est détecté ou, s'il manque, installé automatiquement sur Windows, macOS et Linux. Le pack se synchronise depuis ${pack.cdnBaseUrl}.`,
   );
   return notes.join('\n') + '\n';
 }

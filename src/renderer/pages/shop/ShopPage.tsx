@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { ShopOffer } from '../../../ipc/contract';
 import { api } from '../../state/api';
 import { links } from '../../state/links';
+import { KARAMON } from '../../../shared/Karamon';
 import { activeAccount, openAccounts } from '../../state/session';
 import { bestOfferId, catalog, checkoutPending, loadCatalog, packOffers, passOffer, portalUrl } from '../../state/shop';
 import { Banner, Button, EmptyState, Page, PageHeader } from '../../ui';
@@ -92,7 +93,7 @@ function UnavailableCatalog({ failed }: { failed: boolean }) {
         </>
       }
     >
-      {failed ? 'Vérifie ta connexion, ou retrouve-la directement sur karamon.fr.' : 'Reviens un peu plus tard, ou passe par karamon.fr.'}
+      {failed ? `Vérifie ta connexion, ou retrouve-la directement sur ${KARAMON.websiteHost}.` : `Reviens un peu plus tard, ou passe par ${KARAMON.websiteHost}.`}
     </EmptyState>
   );
 }
@@ -151,7 +152,7 @@ export function ShopPage({ param }: { param: string | null }) {
         description={<HeaderDescription />}
         actions={
           <Button variant="ghost" size="sm" glyph="external" onClick={openSiteShop}>
-            karamon.fr/boutique
+            {KARAMON.shopUrl.replace(/^https:\/\//, '')}
           </Button>
         }
       />

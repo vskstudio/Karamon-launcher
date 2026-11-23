@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import type { HttpClient } from '../../shared/HttpClient.ts';
 import type { Paths } from '../../shared/Paths.ts';
 import { extractZipToDir } from '../../shared/ZipExtract.ts';
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 import type { JavaDetector } from './JavaDetector.ts';
 import { javaExecutableName, javaExecutablesUnder, probeJava } from './JavaRuntime.ts';
 
@@ -48,7 +48,7 @@ export type StatusEmitter = (msg: string) => void;
 export type ProgressEmitter = (fraction: number) => void;
 
 export function managedJavaRuntimeRoot(paths: Paths): string {
-  return path.join(paths.dataDir, 'runtime', `jre-${REQUIRED_MAJOR}`);
+  return paths.javaRuntimeDir(REQUIRED_MAJOR);
 }
 
 async function majorOf(javaPath: string): Promise<number | null> {

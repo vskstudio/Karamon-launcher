@@ -1,71 +1,71 @@
 import { app, ipcMain } from 'electron/main';
 import { shell } from 'electron/common';
-import path from 'path';
-import { routes } from '../ipc/contract';
-import { IpcRouter } from './ipc/IpcRouter';
-import { WindowManager } from './WindowManager';
-import { registerWindowRoutes } from './WindowRoutes';
-import { Paths } from './shared/Paths';
-import { HttpClient } from './shared/HttpClient';
-import { FileLog } from './shared/FileLog';
-import { GameKeepAlive } from './GameKeepAlive';
-import { SystemCertificates } from './shared/SystemCertificates';
-import { loadKaramonProfile, type KaramonProfile } from './shared/KaramonProfile';
-import { Config } from './features/config/Config';
-import { registerConfigRoutes } from './features/config/ConfigRoutes';
-import { ServerPing } from './features/server/ServerPing';
-import { ServerStatus } from './features/server/ServerStatus';
-import { registerServerRoutes } from './features/server/ServerRoutes';
-import { FabricInstaller } from './features/minecraft/FabricInstaller';
-import { LauncherProfile } from './features/minecraft/LauncherProfile';
-import { GameLauncher } from './features/minecraft/GameLauncher';
-import { MinecraftLauncher } from './features/minecraft/MinecraftLauncher';
-import { MinecraftSetup } from './features/minecraft/MinecraftSetup';
-import { registerMinecraftRoutes } from './features/minecraft/MinecraftRoutes';
-import { ModpackSync } from './features/modpack/ModpackSync';
-import { PackManifest } from './features/modpack/PackManifest';
-import { registerModpackRoutes } from './features/modpack/ModpackRoutes';
-import { AutoUpdater } from './features/updater/AutoUpdater';
-import { registerUpdaterRoutes } from './features/updater/UpdaterRoutes';
-import { JavaDetector } from './features/java/JavaDetector';
-import { managedJavaRuntimeRoot } from './features/java/JavaProvisioner';
-import { javaInstallRoots } from './features/java/JavaRuntime';
-import { JavaProvisioner } from './features/java/JavaProvisioner';
-import { registerJavaRoutes } from './features/java/JavaRoutes';
-import { PlayStats } from './features/stats/PlayStats';
-import { registerStatsRoutes } from './features/stats/StatsRoutes';
-import { Screenshots } from './features/screenshots/Screenshots';
-import { registerScreenshotRoutes } from './features/screenshots/ScreenshotRoutes';
-import { DiscordRpc } from './features/discord/DiscordRpc';
-import { CrashReports } from './features/crashes/CrashReports';
-import { registerCrashRoutes } from './features/crashes/CrashRoutes';
-import { Backup } from './features/backup/Backup';
-import { registerBackupRoutes } from './features/backup/BackupRoutes';
-import { Shop } from './features/shop/Shop';
-import { openCheckoutWindow } from './features/shop/CheckoutWindow';
-import { registerShopRoutes } from './features/shop/ShopRoutes';
-import { Wiki } from './features/wiki/Wiki';
-import { registerWikiRoutes } from './features/wiki/WikiRoutes';
-import { AuthSession } from './features/auth/AuthSession';
-import { TokenStore } from './features/auth/TokenStore';
-import { AccountStore } from './features/auth/AccountStore';
-import { SkinLookup } from './features/auth/SkinLookup';
-import { registerAuthRoutes } from './features/auth/AuthRoutes';
-import type { ReportManager } from './features/reports/ReportManager';
-import { createLauncherReports } from './features/reports/LauncherReports';
-import { registerReportRoutes } from './features/reports/ReportRoutes';
-import { PlayActions } from './features/play/PlayActions';
-import { playEventsTo, registerPlayRoutes } from './features/play/PlayRoutes';
-import { gpuLabel } from './features/system/Gpu';
-import { registerSystemRoutes } from './features/system/SystemRoutes';
+import { routes } from '../ipc/contract.ts';
+import { IpcRouter } from './ipc/IpcRouter.ts';
+import { WindowManager } from './WindowManager.ts';
+import { registerWindowRoutes } from './WindowRoutes.ts';
+import { Paths } from './shared/Paths.ts';
+import type { GameInstance } from './shared/GameInstance.ts';
+import { HttpClient } from './shared/HttpClient.ts';
+import { FileLog } from './shared/FileLog.ts';
+import { GameKeepAlive } from './GameKeepAlive.ts';
+import { SystemCertificates } from './shared/SystemCertificates.ts';
+import { loadKaramonProfile, type KaramonProfile } from './shared/KaramonProfile.ts';
+import { Config } from './features/config/Config.ts';
+import { registerConfigRoutes } from './features/config/ConfigRoutes.ts';
+import { ServerPing } from './features/server/ServerPing.ts';
+import { ServerStatus } from './features/server/ServerStatus.ts';
+import { registerServerRoutes } from './features/server/ServerRoutes.ts';
+import { FabricInstaller } from './features/minecraft/FabricInstaller.ts';
+import { LauncherProfile } from './features/minecraft/LauncherProfile.ts';
+import { GameLauncher } from './features/minecraft/GameLauncher.ts';
+import { MinecraftLauncher } from './features/minecraft/MinecraftLauncher.ts';
+import { MinecraftSetup } from './features/minecraft/MinecraftSetup.ts';
+import { registerMinecraftRoutes } from './features/minecraft/MinecraftRoutes.ts';
+import { ModpackSync } from './features/modpack/ModpackSync.ts';
+import { PackManifest } from './features/modpack/PackManifest.ts';
+import { registerModpackRoutes } from './features/modpack/ModpackRoutes.ts';
+import { AutoUpdater } from './features/updater/AutoUpdater.ts';
+import { registerUpdaterRoutes } from './features/updater/UpdaterRoutes.ts';
+import { JavaDetector } from './features/java/JavaDetector.ts';
+import { managedJavaRuntimeRoot } from './features/java/JavaProvisioner.ts';
+import { javaInstallRoots } from './features/java/JavaRuntime.ts';
+import { JavaProvisioner } from './features/java/JavaProvisioner.ts';
+import { registerJavaRoutes } from './features/java/JavaRoutes.ts';
+import { PlayStats } from './features/stats/PlayStats.ts';
+import { registerStatsRoutes } from './features/stats/StatsRoutes.ts';
+import { Screenshots } from './features/screenshots/Screenshots.ts';
+import { registerScreenshotRoutes } from './features/screenshots/ScreenshotRoutes.ts';
+import { DiscordRpc } from './features/discord/DiscordRpc.ts';
+import { CrashReports } from './features/crashes/CrashReports.ts';
+import { registerCrashRoutes } from './features/crashes/CrashRoutes.ts';
+import { Backup } from './features/backup/Backup.ts';
+import { registerBackupRoutes } from './features/backup/BackupRoutes.ts';
+import { Shop } from './features/shop/Shop.ts';
+import { openCheckoutWindow } from './features/shop/CheckoutWindow.ts';
+import { registerShopRoutes } from './features/shop/ShopRoutes.ts';
+import { Wiki } from './features/wiki/Wiki.ts';
+import { registerWikiRoutes } from './features/wiki/WikiRoutes.ts';
+import { AuthSession } from './features/auth/AuthSession.ts';
+import { TokenStore } from './features/auth/TokenStore.ts';
+import { AccountStore } from './features/auth/AccountStore.ts';
+import { SkinLookup } from './features/auth/SkinLookup.ts';
+import { registerAuthRoutes } from './features/auth/AuthRoutes.ts';
+import type { ReportManager } from './features/reports/ReportManager.ts';
+import { createLauncherReports } from './features/reports/LauncherReports.ts';
+import { registerReportRoutes } from './features/reports/ReportRoutes.ts';
+import { PlayActions } from './features/play/PlayActions.ts';
+import { playEventsTo, registerPlayRoutes } from './features/play/PlayRoutes.ts';
+import { gpuLabel } from './features/system/Gpu.ts';
+import { registerSystemRoutes } from './features/system/SystemRoutes.ts';
 
 export class KaramonApp {
   private readonly paths = Paths.default();
-  private readonly fileLog = new FileLog(this.paths.logsDir);
+  private readonly fileLog = new FileLog(this.paths.launcherLog);
   private readonly config = new Config(this.paths.configFile, (message) => this.fileLog.warn(message)).load();
   private readonly http = new HttpClient({ appVersion: app.getVersion() });
   private readonly auth = new AuthSession(new TokenStore(this.paths.authCache), new AccountStore(this.paths.accountsFile), this.http);
-  private readonly stats = new PlayStats(this.paths.dataDir);
+  private readonly stats = new PlayStats(this.paths.statsFile);
   private readonly crashes = new CrashReports();
   private readonly javaDetector = new JavaDetector([...javaInstallRoots(), managedJavaRuntimeRoot(this.paths)]);
   private readonly window: WindowManager;
@@ -90,7 +90,7 @@ export class KaramonApp {
     this.packManifest = new PackManifest({
       http: this.http,
       manifestUrl: new URL('pack.json', this.pack.cdnBaseUrl).toString(),
-      stateFile: path.join(this.paths.dataDir, 'pack-versions.json'),
+      stateFile: this.paths.packVersionsFile,
       bundled: { minecraft: this.pack.minecraft, fabricVersion: this.pack.fabricVersion },
     });
     this.minecraft = new MinecraftLauncher({
@@ -99,9 +99,11 @@ export class KaramonApp {
       downloadsBaseUrl: this.pack.cdnBaseUrl,
       defaultHost: this.pack.statusFallbackHost,
       profileName: this.pack.profileName,
+      minecraftVersion: this.pack.minecraft,
       modpackSync: new ModpackSync({
         http: this.http,
         disabledJarPrefixes: this.pack.clientDisabledJarPrefixes,
+        disabledJarReason: this.pack.clientDisabledJarReason,
         fallbackClientOptions: this.pack.clientOptions,
       }),
       gameLauncher: new GameLauncher({
@@ -128,7 +130,8 @@ export class KaramonApp {
       log: (msg) => this.fileLog.info(`[Discord] ${msg}`),
     });
     this.reports = createLauncherReports({
-      dataDir: this.paths.dataDir,
+      launcherLog: this.paths.launcherLog,
+      reportsDir: this.paths.reportsDir,
       http: this.http,
       launcherVersion: app.getVersion(),
       bundledPackVersion: this.pack.version,
@@ -137,7 +140,7 @@ export class KaramonApp {
       javas: this.javaDetector,
       gpuLabel,
       playerName: () => this.auth.state().active?.name,
-      instanceDir: () => this.instanceDir(),
+      instance: () => this.instance(),
       requestConsent: (request) => this.window.emit(routes.onReportConsent, request),
       announce: (message) => this.window.emit(routes.onStatus, message),
       log: (msg) => this.fileLog.info(`[Rapports] ${msg}`),
@@ -172,7 +175,7 @@ export class KaramonApp {
       }
     });
     app.whenReady().then(() => {
-      Screenshots.registerProtocol(() => Screenshots.dirFor(this.instanceDir()));
+      Screenshots.registerProtocol(() => this.instance().screenshotsDir);
       this.registerRoutes();
       const win = this.window.create();
       win.webContents.once('did-finish-load', () => {
@@ -191,7 +194,7 @@ export class KaramonApp {
 
   private registerRoutes(): void {
     const router = new IpcRouter(ipcMain);
-    const instanceDir = (): string => this.instanceDir();
+    const instance = (): GameInstance => this.instance();
     registerWindowRoutes(router, this.window);
     registerUpdaterRoutes(router, this.updater);
     registerConfigRoutes(router, {
@@ -214,20 +217,20 @@ export class KaramonApp {
     registerSystemRoutes(router, {
       appVersion: app.getVersion(),
       dataDir: this.paths.dataDir,
-      instanceDir,
+      instance,
       window: () => this.window.current(),
     });
     registerModpackRoutes(router, {
       packManifest: this.packManifest,
-      instanceDir,
+      instance,
       listMods: () => this.minecraft.listMods(this.config.get()),
     });
     registerJavaRoutes(router, this.javaDetector);
     registerStatsRoutes(router, this.stats);
-    registerScreenshotRoutes(router, instanceDir);
-    registerCrashRoutes(router, this.crashes, instanceDir);
+    registerScreenshotRoutes(router, instance);
+    registerCrashRoutes(router, this.crashes, instance);
     registerReportRoutes(router, this.reports);
-    registerBackupRoutes(router, new Backup(this.paths.dataDir, () => this.minecraft.isRunning()), (operation) => {
+    registerBackupRoutes(router, new Backup(this.paths.backupsDir, () => this.minecraft.isRunning()), (operation) => {
       const session = this.minecraft.session(this.config.get());
       return session.exclusive(() => operation(session.instance.dir));
     });
@@ -240,11 +243,11 @@ export class KaramonApp {
         openExternal: (url) => shell.openExternal(url),
       }),
     );
-    registerWikiRoutes(router, new Wiki(this.http, path.join(this.paths.cacheDir, 'wiki')));
+    registerWikiRoutes(router, new Wiki(this.http, this.paths.wikiCacheDir));
     registerAuthRoutes(router, {
       auth: this.auth,
       skins: new SkinLookup(this.http),
-      instanceDir,
+      instance,
       log: (msg) => this.fileLog.info(msg),
     });
     const unhandled = router.unhandled(routes);
@@ -262,8 +265,8 @@ export class KaramonApp {
     else this.fileLog.info(summary);
   }
 
-  private instanceDir(): string {
-    return this.minecraft.instanceDir(this.config.get());
+  private instance(): GameInstance {
+    return this.minecraft.session(this.config.get()).instance;
   }
 
   private status(message: string): void {

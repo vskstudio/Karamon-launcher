@@ -15,7 +15,8 @@ export type PingResult =
       sample?: SamplePlayer[];
     }
   | { online: false };
-import { KARAMON, KARAMON_DEFAULT_PROFILE } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
+import { KARAMON_DEFAULT_PROFILE } from '../../shared/KaramonProfile.ts';
 
 class VarInt {
   static write(value: number): Buffer {

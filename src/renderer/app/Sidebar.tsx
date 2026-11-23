@@ -5,13 +5,14 @@ import { consoleOpen, toggleConsole } from '../state/console';
 import { location, navigate } from '../state/navigation';
 import { serverPing, serverState } from '../state/server';
 import { links } from '../state/links';
+import { KARAMON } from '../../shared/Karamon';
 import { Badge, cx, Glyph, PixelIcon, StatusDot } from '../ui';
 import { routes, sections } from './routes';
 
 function ServerCard() {
   const ping = serverPing.value;
   const state = serverState.value;
-  const host = config.value?.server.host ?? 'play.karamon.fr';
+  const host = config.value?.server.host ?? KARAMON.server.host;
   return (
     <div class="sidebar__server surface">
       <div class="sidebar__server-row">

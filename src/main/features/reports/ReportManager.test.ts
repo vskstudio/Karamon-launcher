@@ -6,6 +6,7 @@ import path from 'path';
 import { ReportManager } from './ReportManager.ts';
 import { MAX_FAILED_DELIVERIES, ReportQueue } from './ReportQueue.ts';
 import type { LauncherReport, ReportTrigger } from './ReportTypes.ts';
+import { GameInstance } from '../../shared/GameInstance.ts';
 
 function setup() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-manager-'));
@@ -26,7 +27,7 @@ function setup() {
     },
     queue,
     transport: { send: async (report) => { duringSend(report); return transport; } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => automatic,
     setAutoSend: (value) => { automatic = value; },
     requestConsent: (request) => { consent.push(request); },
@@ -85,7 +86,7 @@ test('un même rapport n’est jamais envoyé deux fois en parallèle', async ()
     collector: { collect: async () => { throw new Error('inutile'); } },
     queue,
     transport: { send: async () => { posts++; await gate; return 'sent'; } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => true,
     setAutoSend: () => {},
     requestConsent: () => {},
@@ -113,7 +114,7 @@ test('une erreur du transport reste silencieuse et garde le rapport', async () =
     }) },
     queue,
     transport: { send: async () => { throw new Error('boum'); } },
-    context: () => ({ gameDir: '/game', ramMb: 8192 }),
+    context: () => ({ instance: new GameInstance('/game'), ramMb: 8192 }),
     autoSend: () => true,
     setAutoSend: () => {},
     requestConsent: () => {},

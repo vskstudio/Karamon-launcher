@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE_MODULE="${SCRIPT_DIR}/../src/main/shared/KaramonProfile.ts"
+PROFILE_MODULE="${SCRIPT_DIR}/../src/shared/Karamon.ts"
 REPO="${REPO:-$(node --no-warnings --input-type=module -e "const { KARAMON } = await import(process.argv[1]); console.log(KARAMON.githubRepo);" "$PROFILE_MODULE")}"
 VERSION="${1:-}"
 if [[ -z "$VERSION" || $# -lt 2 ]]; then

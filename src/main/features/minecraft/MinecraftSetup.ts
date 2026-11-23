@@ -1,9 +1,9 @@
-import { DevMode } from '../../shared/DevMode';
-import type { PackProfile } from '../../shared/PackProfile';
-import type { Config } from '../config/Config';
-import type { FabricInstaller } from './FabricInstaller';
-import type { LauncherProfile } from './LauncherProfile';
-import type { MinecraftLauncher, ServerListSetupResult } from './MinecraftLauncher';
+import { DevMode } from '../../shared/DevMode.ts';
+import type { KaramonProfile } from '../../shared/KaramonProfile.ts';
+import type { Config } from '../config/Config.ts';
+import type { FabricInstaller } from './FabricInstaller.ts';
+import type { LauncherProfile } from './LauncherProfile.ts';
+import type { MinecraftLauncher, ServerListSetupResult } from './MinecraftLauncher.ts';
 
 export interface SetupResult {
   ok: boolean;
@@ -17,7 +17,7 @@ export interface MinecraftSetupOptions {
   fabric: FabricInstaller;
   launcherProfile: LauncherProfile;
   launcherDir: string;
-  pack: Pick<PackProfile, 'statusFallbackHost' | 'profileName'>;
+  pack: Pick<KaramonProfile, 'statusFallbackHost' | 'profileName'>;
 }
 
 export class MinecraftSetup {

@@ -24,8 +24,8 @@ export class Backup {
   private readonly isGameRunning: () => boolean;
   private creating = false;
 
-  constructor(dataDir: string, isGameRunning: () => boolean) {
-    this.backupDir = path.join(dataDir, 'backups');
+  constructor(backupsDir: string, isGameRunning: () => boolean) {
+    this.backupDir = backupsDir;
     this.isGameRunning = isGameRunning;
   }
 

@@ -1,6 +1,6 @@
 import zlib from 'zlib';
 import { HttpClient } from '../../shared/HttpClient.ts';
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 import { MAX_REPORT_JSON_BYTES } from './ReportCollector.ts';
 import type { LauncherReport } from './ReportTypes.ts';
 

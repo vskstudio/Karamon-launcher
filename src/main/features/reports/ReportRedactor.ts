@@ -78,7 +78,7 @@ function maskLocalNames(text: string, localNames: readonly string[]): string {
   return result;
 }
 
-export function isGenericName(name: string): boolean {
+function isGenericName(name: string): boolean {
   return GENERIC_NAMES.has(name.trim().toLowerCase());
 }
 

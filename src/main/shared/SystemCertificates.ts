@@ -8,6 +8,10 @@ export interface TrustReport {
   failure?: unknown;
 }
 
+function isExpiredSoBoringSslCouldPreferItOverTheValidChain(cert: { validTo: string }): boolean {
+  return Date.parse(cert.validTo) < Date.now();
+}
+
 export class SystemCertificates {
   static trust(): TrustReport {
     try {
@@ -20,8 +24,7 @@ export class SystemCertificates {
       for (const pem of system) {
         const cert = SystemCertificates.read(pem);
         if (cert === null) rejected++;
-        // Electron's BoringSSL picks a trusted expired cross-sign (old ISRG Root X2) over the valid chain.
-        else if (Date.parse(cert.validTo) < Date.now()) expired++;
+        else if (isExpiredSoBoringSslCouldPreferItOverTheValidChain(cert)) expired++;
         else if (!known.has(cert.fingerprint256)) {
           known.add(cert.fingerprint256);
           added.push(pem);

@@ -2,13 +2,14 @@ import { useState } from 'preact/hooks';
 import { config } from '../../state/config';
 import { peakPlayers, playerHistory, serverPing, serverState } from '../../state/server';
 import { Panel, Sparkline, Tag } from '../../ui';
+import { KARAMON, serverAddress } from '../../../shared/Karamon';
 
 export function ServerCard() {
   const [copied, setCopied] = useState(false);
   const ping = serverPing.value;
   const state = serverState.value;
   const server = config.value?.server;
-  const address = server ? (server.port === 25565 ? server.host : `${server.host}:${server.port}`) : 'play.karamon.fr';
+  const address = serverAddress(server ?? KARAMON.server);
 
   const copyAddress = async () => {
     await navigator.clipboard.writeText(address);

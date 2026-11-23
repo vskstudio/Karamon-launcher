@@ -1,6 +1,6 @@
 import { Client } from '@xhayper/discord-rpc';
-import type { ServerStatus } from '../server/ServerStatus';
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import type { ServerStatus } from '../server/ServerStatus.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 const APP_ID = '1550981242508410994';
 const LARGE_IMAGE_KEY = 'karamon';

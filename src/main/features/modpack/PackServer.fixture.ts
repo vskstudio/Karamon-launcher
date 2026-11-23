@@ -229,6 +229,7 @@ export function launcherHarness(server: PackServer, { disabledJarPrefixes }: { d
     downloadsBaseUrl: server.base,
     defaultHost: 'play.karamon.fr',
     profileName: 'Karamon',
+    minecraftVersion: '1.21.1',
     modpackSync: new ModpackSync({ http: server.http, disabledJarPrefixes }),
     javaProvisioner: { ensure: async () => '/usr/bin/java' },
     gameLauncher: {

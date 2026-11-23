@@ -1,18 +1,20 @@
-import type { Config } from '../config/Config';
-import type { HttpClient } from '../../shared/HttpClient';
-import type { JavaDetector } from '../java/JavaDetector';
-import { KARAMON } from '../../shared/KaramonProfile';
-import type { PackManifest } from '../modpack/PackManifest';
-import { ReportCollector } from './ReportCollector';
-import { ReportManager } from './ReportManager';
-import { ReportQueue } from './ReportQueue';
-import { ReportTransport } from './ReportTransport';
-import type { ReportConsentRequest } from './ReportTypes';
+import type { Config } from '../config/Config.ts';
+import type { HttpClient } from '../../shared/HttpClient.ts';
+import type { JavaDetector } from '../java/JavaDetector.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
+import type { PackManifest } from '../modpack/PackManifest.ts';
+import { ReportCollector } from './ReportCollector.ts';
+import { ReportManager } from './ReportManager.ts';
+import { ReportQueue } from './ReportQueue.ts';
+import { ReportTransport } from './ReportTransport.ts';
+import type { ReportConsentRequest } from './ReportTypes.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const PACK_VERSION_WAIT_MS = 3000;
 
 export interface LauncherReportsOptions {
-  dataDir: string;
+  launcherLog: string;
+  reportsDir: string;
   http: Pick<HttpClient, 'post'>;
   launcherVersion: string;
   bundledPackVersion: string;
@@ -21,7 +23,7 @@ export interface LauncherReportsOptions {
   javas: Pick<JavaDetector, 'versionInUse'>;
   gpuLabel: () => Promise<string | undefined>;
   playerName: () => string | undefined;
-  instanceDir: () => string;
+  instance: () => GameInstance;
   requestConsent: (request: ReportConsentRequest) => void;
   announce: (message: string) => void;
   log: (message: string) => void;
@@ -30,23 +32,19 @@ export interface LauncherReportsOptions {
 export function createLauncherReports(options: LauncherReportsOptions): ReportManager {
   const { config, packManifest } = options;
   const collector = new ReportCollector({
-    dataDir: options.dataDir,
+    launcherLog: options.launcherLog,
     launcherVersion: options.launcherVersion,
     bundledPackVersion: options.bundledPackVersion,
-    getPackVersion: () =>
-      Promise.race([
-        packManifest.latest().then((pack) => pack?.version),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), PACK_VERSION_WAIT_MS).unref()),
-      ]),
+    getPackVersion: () => packManifest.latest({ totalTimeoutMs: PACK_VERSION_WAIT_MS }).then((pack) => pack?.version),
     getJavaVersion: () => options.javas.versionInUse(config.get().javaPath, KARAMON.javaMajor),
     getGpu: options.gpuLabel,
     getPlayerName: options.playerName,
   });
   return new ReportManager({
     collector,
-    queue: new ReportQueue(options.dataDir),
+    queue: new ReportQueue(options.reportsDir),
     transport: new ReportTransport(options.http),
-    context: () => ({ gameDir: options.instanceDir(), ramMb: config.get().memoryMb }),
+    context: () => ({ instance: options.instance(), ramMb: config.get().memoryMb }),
     autoSend: () => config.get().autoSendReports,
     setAutoSend: (value) => config.set({ autoSendReports: value }),
     requestConsent: options.requestConsent,

@@ -1,4 +1,4 @@
-import { KARAMON } from '../../shared/KaramonProfile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export type CheckoutNavigation = 'paid' | 'cancelled' | 'allowed' | 'blocked';
 

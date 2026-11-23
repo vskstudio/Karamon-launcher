@@ -40,17 +40,17 @@ export function repairMessage(count: number): string {
   return repairSummary(0, count);
 }
 
-function findNulFiles(gameDir: string): string[] {
+function findNulFiles(instance: GameInstance): string[] {
   const found: string[] = [];
-  for (const rel of listCandidates(gameDir)) {
-    if (fileIsAllNul(path.join(gameDir, rel))) found.push(rel);
+  for (const rel of listCandidates(instance)) {
+    if (fileIsAllNul(path.join(instance.dir, rel))) found.push(rel);
   }
   return found.sort();
 }
 
 export function repairCorruptConfigs(instance: GameInstance, now: Date = new Date()): ConfigRepairResult {
   const gameDir = instance.dir;
-  const broken = findNulFiles(gameDir);
+  const broken = findNulFiles(instance);
   if (broken.length === 0) return { repaired: [], restored: [], backupDir: null };
 
   const backupDir = path.join(gameDir, backupDirName(now));
@@ -81,15 +81,15 @@ function restoreFromPack(file: string, packData: Buffer): boolean {
   }
 }
 
-function listCandidates(gameDir: string): string[] {
+function listCandidates(instance: GameInstance): string[] {
   const out: string[] = [];
-  walk(path.join(gameDir, 'config'), 'config', out);
+  walk(instance.configDir, 'config', out);
   for (const name of ROOT_FILES) {
-    if (isRegularFile(path.join(gameDir, name))) out.push(name);
+    if (isRegularFile(path.join(instance.dir, name))) out.push(name);
   }
-  for (const name of namesIn(path.join(gameDir, 'resourcepacks'))) {
+  for (const name of namesIn(instance.resourcePacksDir)) {
     const rel = `resourcepacks/${name}`;
-    if (isScannedPath(rel) && isRegularFile(path.join(gameDir, rel))) out.push(rel);
+    if (isScannedPath(rel) && isRegularFile(path.join(instance.dir, rel))) out.push(rel);
   }
   return out;
 }

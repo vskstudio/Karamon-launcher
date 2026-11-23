@@ -27,6 +27,7 @@ export interface MinecraftLauncherOptions {
   downloadsBaseUrl: string;
   defaultHost: string;
   profileName: string;
+  minecraftVersion: string;
   modpackSync: ModpackSync;
   gameLauncher: Pick<GameLauncher, 'launch'>;
   javaProvisioner: Pick<JavaProvisioner, 'ensure'>;
@@ -195,9 +196,9 @@ export class MinecraftLauncher {
             gameEnded();
             const endedAt = Date.now();
             const corruption = isEarlyCrash(code, spawnedAt, endedAt)
-              ? detectCorruption(readCrashEvidence(instance.dir, spawnedAt))
+              ? detectCorruption(readCrashEvidence(instance, spawnedAt))
               : [];
-            const clean = code !== 0 && stoppedCleanly(instance.dir, spawnedAt);
+            const clean = code !== 0 && stoppedCleanly(instance, spawnedAt);
             events.onExit(code, corruption, exitTrigger(code, spawnedAt, endedAt, clean));
           },
         },
@@ -230,7 +231,7 @@ export class MinecraftLauncher {
       });
       packJars = result.packJars;
       report = { damaged: result.damaged, configs: this.repairConfigs(instance, onStatus) };
-      applyPackClientSettings(instance, result.clientOptions, shaders, onStatus);
+      applyPackClientSettings(instance, this.opts.minecraftVersion, result.clientOptions, shaders, onStatus);
     } finally {
       const failure = shaders.save();
       if (failure) onStatus(`Choix de shader non enregistré : ${failure}`);

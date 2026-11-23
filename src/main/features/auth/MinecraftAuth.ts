@@ -1,4 +1,4 @@
-import type { MinecraftProfile } from './MinecraftProfile';
+import type { MinecraftProfile } from './MinecraftProfile.ts';
 import { HttpClient, isSuccess, jsonBody } from '../../shared/HttpClient.ts';
 
 const LOGIN_URL = 'https://api.minecraftservices.com/authentication/login_with_xbox';

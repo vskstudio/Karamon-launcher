@@ -1,6 +1,7 @@
-import type { HttpClient } from '../../shared/HttpClient';
+import type { HttpClient } from '../../shared/HttpClient.ts';
 import type { MinecraftProfile } from './MinecraftProfile.ts';
 import { savedSkinDataUrl } from './OfflineSkin.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const SESSION_PROFILE_URL = 'https://sessionserver.mojang.com/session/minecraft/profile/';
 const ELY_TEXTURES_URL = 'https://skinsystem.ely.by/textures/';
@@ -12,7 +13,7 @@ interface SessionProfile {
   properties?: { name?: string; value?: string }[];
 }
 
-export function skinUrlFromProfile(raw: unknown): string | null {
+function skinUrlFromProfile(raw: unknown): string | null {
   const property = (raw as SessionProfile | null)?.properties?.find((p) => p.name === 'textures');
   if (!property?.value) return null;
   try {
@@ -25,7 +26,7 @@ export function skinUrlFromProfile(raw: unknown): string | null {
   }
 }
 
-export function skinUrlFromElyTextures(raw: unknown): string | null {
+function skinUrlFromElyTextures(raw: unknown): string | null {
   const url = (raw as { SKIN?: { url?: unknown } } | null)?.SKIN?.url;
   if (typeof url !== 'string' || !ELY_SKIN_URL.test(url)) return null;
   return url.replace(/^http:/i, 'https:');
@@ -39,9 +40,9 @@ export class SkinLookup {
     this.http = http;
   }
 
-  async skinFor(profile: MinecraftProfile, gameDir: string): Promise<string | null> {
+  async skinFor(profile: MinecraftProfile, instance: GameInstance): Promise<string | null> {
     if (profile.kind === 'microsoft') return await this.skinUrl(profile.id);
-    return savedSkinDataUrl(gameDir, profile.name) ?? (await this.elySkinUrl(profile.name));
+    return savedSkinDataUrl(instance, profile.name) ?? (await this.elySkinUrl(profile.name));
   }
 
   skinUrl(profileId: string): Promise<string | null> {

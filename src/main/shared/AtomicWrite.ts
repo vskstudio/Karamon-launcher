@@ -19,19 +19,6 @@ export function writeFileAtomic(target: string, data: Buffer | string): void {
   }
 }
 
-export function copyFileAtomic(source: string, target: string): void {
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = tempPathFor(target);
-  try {
-    fs.copyFileSync(source, tmp);
-    fsyncFile(tmp);
-    fs.renameSync(tmp, target);
-  } catch (e) {
-    fs.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-
 export function fsyncFile(filePath: string): void {
   const fd = fs.openSync(filePath, 'r+');
   try {

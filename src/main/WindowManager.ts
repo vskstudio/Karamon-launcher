@@ -1,9 +1,9 @@
 import { BrowserWindow, screen } from 'electron/main';
 import { shell } from 'electron/common';
 import path from 'path';
-import type { EventRoute } from '../ipc/Route';
-import type { EventSink } from './ipc/IpcRouter';
-import { ASPECT_RATIO, initialWindowSize, interfaceScale, minimumWindowSize } from './shared/WindowSize';
+import type { EventRoute } from '../ipc/Route.ts';
+import type { EventSink } from './ipc/IpcRouter.ts';
+import { ASPECT_RATIO, initialWindowSize, interfaceScale, minimumWindowSize } from './shared/WindowSize.ts';
 
 export class WindowManager implements EventSink {
   private window: BrowserWindow | null = null;

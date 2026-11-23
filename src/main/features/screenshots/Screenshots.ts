@@ -3,6 +3,7 @@ import path from 'path';
 import { protocol, net } from 'electron';
 import { pathToFileURL } from 'url';
 import { playerFileIn } from '../../shared/PlayerFileName.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export interface ScreenshotEntry {
   name: string;
@@ -50,12 +51,8 @@ export class Screenshots {
     ]);
   }
 
-  static dirFor(gameDir: string): string {
-    return path.join(gameDir, 'screenshots');
-  }
-
-  list(gameDir: string): ScreenshotsListResult {
-    const dir = Screenshots.dirFor(gameDir);
+  list(instance: GameInstance): ScreenshotsListResult {
+    const dir = instance.screenshotsDir;
     if (!fs.existsSync(dir)) return { dir, screenshots: [] };
 
     const entries: ScreenshotEntry[] = [];
@@ -80,8 +77,8 @@ export class Screenshots {
     return { dir, screenshots: entries };
   }
 
-  delete(gameDir: string, name: string): ScreenshotsListResult {
-    fs.rmSync(playerFileIn(Screenshots.dirFor(gameDir), name), { force: true });
-    return this.list(gameDir);
+  delete(instance: GameInstance, name: string): ScreenshotsListResult {
+    fs.rmSync(playerFileIn(instance.screenshotsDir, name), { force: true });
+    return this.list(instance);
   }
 }

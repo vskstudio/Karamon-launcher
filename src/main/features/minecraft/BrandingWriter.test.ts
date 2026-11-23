@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { applyKaramonBranding, LUMYMON_WELCOME_VERSION, KARAMON_DISCORD, KARAMON_WIKI } from './BrandingWriter.ts';
+import { applyKaramonBranding } from './BrandingWriter.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
+
+const LUMYMON_VERSION_THAT_SKIPS_ITS_WELCOME_SCREEN = 3;
 import { GameInstance } from '../../shared/GameInstance.ts';
 
 const FANCY_MENU = 'config/fancymenu/customization/title_screen.txt';
@@ -16,7 +19,7 @@ function brandedFile(rel: string, text: string, resourcePacks?: string[]): strin
   const file = path.join(dir, rel);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text);
-  applyKaramonBranding(new GameInstance(dir), resourcePacks);
+  applyKaramonBranding(new GameInstance(dir), { minecraftVersion: '1.21.1', resourcePacks });
   const next = fs.readFileSync(file, 'utf8');
   fs.rmSync(dir, { recursive: true, force: true });
   return next;
@@ -47,7 +50,7 @@ test('the title screen menu swaps logo, discord, version and hides Apex', () => 
   const next = brandedFile(FANCY_MENU, src);
   assert.match(next, /karamon_title\.png/);
   assert.doesNotMatch(next, /cobbleverse_title\.png/);
-  assert.match(next, new RegExp(KARAMON_DISCORD.replace(/\./g, '\\.')));
+  assert.match(next, new RegExp(KARAMON.gameMenuDiscordUrl.replace(/\./g, '\\.')));
   assert.doesNotMatch(next, /discord\.lumy\.fun/);
   assert.doesNotMatch(next, /open_changelogs/);
   assert.doesNotMatch(next, /COBBLE%#%VERSE/);
@@ -116,7 +119,7 @@ test('the title screen menu keeps Wiki visible and retargets it off Lumyverse', 
   assert.match(next, /069855b2[\s\S]*stay_on_screen = true/);
   assert.match(next, /069855b2[\s\S]*navigatable = true/);
   assert.match(next, /069855b2[\s\S]*is_hidden = false/);
-  assert.match(next, new RegExp(KARAMON_WIKI.replace(/\./g, '\\.')));
+  assert.match(next, new RegExp(KARAMON.websiteUrl.replace(/\./g, '\\.')));
   assert.doesNotMatch(next, /lumyverse\.com\/cobbleverse/);
 });
 
@@ -124,13 +127,13 @@ test('the LumyMon welcome screen bumps version and keeps other keys', () => {
   const next = brandedFile(LUMYMON, '{\n  "remotePcEnabled": true,\n  "initialScreenVersion": 0\n}\n');
   const data = JSON.parse(next) as { remotePcEnabled: boolean; initialScreenVersion: number };
   assert.equal(data.remotePcEnabled, true);
-  assert.equal(data.initialScreenVersion, LUMYMON_WELCOME_VERSION);
+  assert.equal(data.initialScreenVersion, LUMYMON_VERSION_THAT_SKIPS_ITS_WELCOME_SCREEN);
 });
 
 test('the LumyMon welcome screen recovers from empty or zeroed files', () => {
   const next = brandedFile(LUMYMON, '\u0000\u0000');
   const data = JSON.parse(next) as { initialScreenVersion: number };
-  assert.equal(data.initialScreenVersion, LUMYMON_WELCOME_VERSION);
+  assert.equal(data.initialScreenVersion, LUMYMON_VERSION_THAT_SKIPS_ITS_WELCOME_SCREEN);
 });
 
 test('resource pack overrides drops Cobbleverse pack titles', () => {
@@ -192,7 +195,7 @@ test('applyKaramonBranding copies title assets from the Karamon UI pack', () => 
   fs.writeFileSync(path.join(src, 'icon_16.png'), 'i16');
   fs.writeFileSync(path.join(src, 'icon_32.png'), 'i32');
   fs.writeFileSync(path.join(src, 'icon_32.icns'), 'icns');
-  applyKaramonBranding(new GameInstance(dir));
+  applyKaramonBranding(new GameInstance(dir), { minecraftVersion: '1.21.1' });
   const assets = path.join(dir, 'config', 'fancymenu', 'assets');
   assert.equal(fs.readFileSync(path.join(assets, 'karamon_title.png'), 'utf8'), 'title');
   assert.equal(fs.readFileSync(path.join(assets, 'karamon_icon_16.png'), 'utf8'), 'i16');
@@ -203,11 +206,11 @@ test('applyKaramonBranding writes lumymon skip into a game dir', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'karamon-brand-'));
   fs.mkdirSync(path.join(dir, 'config'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'config', 'lumymon.json'), '{"initialScreenVersion":0}\n', 'utf8');
-  applyKaramonBranding(new GameInstance(dir));
+  applyKaramonBranding(new GameInstance(dir), { minecraftVersion: '1.21.1' });
   const data = JSON.parse(fs.readFileSync(path.join(dir, 'config', 'lumymon.json'), 'utf8')) as {
     initialScreenVersion: number;
   };
-  assert.equal(data.initialScreenVersion, LUMYMON_WELCOME_VERSION);
+  assert.equal(data.initialScreenVersion, LUMYMON_VERSION_THAT_SKIPS_ITS_WELCOME_SCREEN);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -224,7 +227,7 @@ test('applyKaramonBranding pins the Xaero minimap to the top-right', () => {
     'minimap:true\nmodule;id=xaerominimap:minimap;active=true;x=12;y=4;centered=false;fromRight=false;fromBottom=false;flippedVer=false;flippedHor=false;\n',
     'utf8',
   );
-  applyKaramonBranding(new GameInstance(dir));
+  applyKaramonBranding(new GameInstance(dir), { minecraftVersion: '1.21.1' });
   const hud = fs.readFileSync(path.join(dir, 'config', 'xaerohud.txt'), 'utf8');
   const defaults = fs.readFileSync(path.join(dir, 'config', 'defaultoptions', 'xaerohud.txt'), 'utf8');
   const yosbr = fs.readFileSync(path.join(dir, 'config', 'yosbr', 'config', 'xaerohud.txt'), 'utf8');

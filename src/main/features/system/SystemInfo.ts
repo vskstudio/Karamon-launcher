@@ -1,6 +1,6 @@
 import os from 'os';
-import { lowEndReasons, potatoMemoryCapMb } from '../potato/PotatoSettings';
-import { gpuDevices } from './Gpu';
+import { lowEndReasons, potatoMemoryCapMb } from '../potato/PotatoSettings.ts';
+import { gpuDevices } from './Gpu.ts';
 
 export interface SystemInfo {
   totalMemMb: number;

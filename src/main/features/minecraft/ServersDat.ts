@@ -1,6 +1,7 @@
 import path from 'path';
 import zlib from 'zlib';
 import { DurableFile, type FileCodec } from '../../shared/DurableFile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 const TAG_END = 0;
 const TAG_BYTE = 1;
@@ -11,7 +12,7 @@ const FIXED_PAYLOAD_BYTES: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 8, 5:
 const ARRAY_ELEMENT_BYTES: Record<number, number> = { 7: 1, 11: 4, 12: 8 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
-const KARAMON_FORMER_HOST = 'karamon.fr';
+const KARAMON_FORMER_HOST = KARAMON.publicServerHost;
 const PLAYIT_TUNNEL_USED_BEFORE_OVH_SUFFIX = '.ply.gg';
 
 interface ServerEntry {

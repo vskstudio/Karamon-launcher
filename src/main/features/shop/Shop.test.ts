@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { MinecraftProfile } from '../auth/MinecraftProfile.ts';
 import type { HttpResponse } from '../../shared/HttpClient.ts';
-import { parseOffers, Shop } from './Shop.ts';
+import { Shop } from './Shop.ts';
 import type { CheckoutOutcome } from './CheckoutWindow.ts';
 
 const offer = (over: Record<string, unknown>) => ({
@@ -19,8 +19,13 @@ const offer = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-test('parseOffers maps the karamon.fr catalogue, sorts it by rank, keeps the billing portal and the Pass perks and tax mode', () => {
-  const catalog = parseOffers({
+function catalogServed(body: unknown) {
+  const http = { getJson: async () => body, get: async () => ({ status: 500, body: Buffer.alloc(0) }), postJson: async () => ({ status: 500, body: Buffer.alloc(0) }) };
+  return new Shop({ http, activeProfile: () => null, openCheckout: async () => 'cancelled', openExternal: async () => undefined }).catalog();
+}
+
+test('the catalogue maps the karamon.fr offers, sorts it by rank, keeps the billing portal and the Pass perks and tax mode', async () => {
+  const catalog = await catalogServed({
     offers: [
       offer({
         id: 'pass',
@@ -83,32 +88,32 @@ test('parseOffers maps the karamon.fr catalogue, sorts it by rank, keeps the bil
   });
 });
 
-test('an offer without a kind is a pack', () => {
+test('an offer without a kind is a pack', async () => {
   const { kind: _kind, ...withoutKind } = offer({});
-  assert.equal(parseOffers({ offers: [withoutKind] }).offers[0].kind, 'pack');
+  assert.equal((await catalogServed({ offers: [withoutKind] })).offers[0].kind, 'pack');
 });
 
-test('offers without a price, a name or a valid currency are dropped', () => {
-  const { offers } = parseOffers({
+test('offers without a price, a name or a valid currency are dropped', async () => {
+  const { offers } = await catalogServed({
     offers: [offer({ unit_amount: 0 }), offer({ name: '' }), offer({ currency: 'euro' }), offer({ id: 'ok' })],
   });
   assert.deepEqual(offers.map((o) => o.id), ['ok']);
 });
 
-test('an image hosted outside karamon.fr is not shown', () => {
-  assert.equal(parseOffers({ offers: [offer({ image: 'https://evil.example/x.png' })] }).offers[0].image, '');
+test('an image hosted outside karamon.fr is not shown', async () => {
+  assert.equal((await catalogServed({ offers: [offer({ image: 'https://evil.example/x.png' })] })).offers[0].image, '');
 });
 
-test('a portal outside karamon.fr and Stripe billing is not offered', () => {
+test('a portal outside karamon.fr and Stripe billing is not offered', async () => {
   for (const portal_url of ['https://evil.example/portal', 'http://billing.stripe.com/p/login/abc', 'https://billing.stripe.com.evil.example/', 42]) {
-    assert.equal(parseOffers({ offers: [offer({})], portal_url }).portalUrl, null, String(portal_url));
+    assert.equal((await catalogServed({ offers: [offer({})], portal_url })).portalUrl, null, String(portal_url));
   }
-  assert.equal(parseOffers({ offers: [], portal_url: 'https://karamon.fr/compte' }).portalUrl, 'https://karamon.fr/compte');
+  assert.equal((await catalogServed({ offers: [], portal_url: 'https://karamon.fr/compte' })).portalUrl, 'https://karamon.fr/compte');
 });
 
-test('an error payload yields an empty catalogue', () => {
-  assert.deepEqual(parseOffers({ error: 'shop_disabled' }), { offers: [], portalUrl: null });
-  assert.deepEqual(parseOffers(null), { offers: [], portalUrl: null });
+test('an error payload yields an empty catalogue', async () => {
+  assert.deepEqual(await catalogServed({ error: 'shop_disabled' }), { offers: [], portalUrl: null });
+  assert.deepEqual(await catalogServed(null), { offers: [], portalUrl: null });
 });
 
 const STRIPE_PAGE = 'https://checkout.stripe.com/c/pay/cs_live_abc';

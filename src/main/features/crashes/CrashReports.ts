@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { playerFileIn } from '../../shared/PlayerFileName.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 export interface CrashReport {
   name: string;
@@ -15,7 +16,6 @@ export interface CrashReportsListResult {
   reports: CrashReport[];
 }
 
-
 const CAUSE_PATTERNS: Array<{ regex: RegExp; tag: string }> = [
   { regex: /java\.lang\.OutOfMemoryError/i, tag: 'Mémoire insuffisante (OOM)' },
   { regex: /java\.lang\.NoSuchMethodError/i, tag: 'Mod incompatible (NoSuchMethod)' },
@@ -26,10 +26,6 @@ const CAUSE_PATTERNS: Array<{ regex: RegExp; tag: string }> = [
   { regex: /OpenGL/i, tag: 'Erreur GPU/OpenGL' },
   { regex: /Pixel format not accelerated/i, tag: 'Driver GPU' },
 ];
-
-export function crashReportsDir(gameDir: string): string {
-  return path.join(gameDir, 'crash-reports');
-}
 
 export function isCrashReportName(name: string): boolean {
   return name.endsWith('.txt');
@@ -45,8 +41,8 @@ export function summarizeCrash(content: string): string {
 }
 
 export class CrashReports {
-  list(gameDir: string): CrashReportsListResult {
-    const dir = crashReportsDir(gameDir);
+  list(instance: GameInstance): CrashReportsListResult {
+    const dir = instance.crashReportsDir;
     if (!fs.existsSync(dir)) return { dir, reports: [] };
 
     const reports: CrashReport[] = [];
@@ -72,17 +68,17 @@ export class CrashReports {
     return { dir, reports };
   }
 
-  read(gameDir: string, name: string): string {
-    return fs.readFileSync(this.reportPath(gameDir, name), 'utf8');
+  read(instance: GameInstance, name: string): string {
+    return fs.readFileSync(this.reportPath(instance, name), 'utf8');
   }
 
-  delete(gameDir: string, name: string): CrashReportsListResult {
-    fs.rmSync(this.reportPath(gameDir, name), { force: true });
-    return this.list(gameDir);
+  delete(instance: GameInstance, name: string): CrashReportsListResult {
+    fs.rmSync(this.reportPath(instance, name), { force: true });
+    return this.list(instance);
   }
 
-  reportPath(gameDir: string, name: string): string {
-    return playerFileIn(crashReportsDir(gameDir), name);
+  reportPath(instance: GameInstance, name: string): string {
+    return playerFileIn(instance.crashReportsDir, name);
   }
 
   private static excerpt(content: string): string {

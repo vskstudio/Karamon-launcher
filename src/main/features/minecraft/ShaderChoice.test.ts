@@ -26,7 +26,7 @@ function setIris(dir: string, pack: string, enabled: boolean): void {
 
 function launch(dir: string, revision: number): boolean {
   const policy = new ShaderPolicy(new GameInstance(dir));
-  const applied = policy.applyChoice(new OptionsWriter(dir), 'KARAMON - Shader', true, revision);
+  const applied = policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, revision);
   policy.save();
   return applied;
 }
@@ -97,7 +97,7 @@ test('réglages .txt : modifiés par le joueur = gardés, intacts = mis à jour,
   policy.setRevision(1);
   assert.equal(await policy.keepSettings(txt, crc('v1')), false);
   fs.writeFileSync(txt, 'v1');
-  policy.applyChoice(new OptionsWriter(dir), 'KARAMON - Shader', true, 1);
+  policy.applyChoice(new OptionsWriter(new GameInstance(dir)), 'KARAMON - Shader', true, 1);
   policy.save();
   policy = new ShaderPolicy(new GameInstance(dir));
   policy.setRevision(1);

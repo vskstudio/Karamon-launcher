@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import type { JavaCandidate, SystemInfo } from '../../../ipc/contract';
+import { KARAMON } from '../../../shared/Karamon';
 import { api } from '../../state/api';
 import {
   formatGo,
@@ -317,7 +318,7 @@ function JavaField({ draft, edit }: FieldContext) {
         <span class="settings__block-title">Java</span>
       </div>
       <p id={descriptionId} class="settings__hint">
-        Java 21 est installé automatiquement s’il manque.
+        Java {KARAMON.javaMajor} est installé automatiquement s’il manque.
       </p>
       <div class="settings__java">
         <Select items={items} value={choice} onChange={pick} label="Java" describedBy={descriptionId} class="settings__java-select" />

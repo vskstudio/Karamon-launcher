@@ -13,6 +13,7 @@ import { ArgumentResolver } from './ArgumentResolver.ts';
 import { launchIdentity } from './LaunchIdentity.ts';
 import { FabricInstaller } from './FabricInstaller.ts';
 import { forEachOutputLine } from './OutputLines.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export interface GameLauncherOptions {
   paths: Paths;
@@ -152,7 +153,7 @@ export class GameLauncher {
 
     const heapArgs = [`-Xmx${spec.memoryMb}m`, '-Xms512m'];
     const userJvm = (spec.jvmArgs || '').split(/\s+/).filter(Boolean);
-    if (spec.devMode) userJvm.push(DevMode.JVM_FLAG);
+    if (spec.devMode) userJvm.push(DevMode.KARAMON_MOD_SERVER_BROWSER_JVM_FLAG);
 
     const vars = {
       ...launchIdentity(session),
@@ -163,7 +164,7 @@ export class GameLauncher {
       assetsIndexName: version.assets ?? version.assetIndex?.id ?? 'legacy',
       classpath,
       nativesDir: this.opts.paths.nativesDir(version.id),
-      launcherName: 'KaramonLauncher',
+      launcherName: KARAMON.launcherName,
       launcherVersion: app.getVersion(),
     };
 

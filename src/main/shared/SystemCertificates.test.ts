@@ -7,8 +7,7 @@ import { LOCALHOST_CERT, LOCALHOST_KEY } from './LocalhostCertificate.fixture.ts
 import { SystemCertificates } from './SystemCertificates.ts';
 
 const UNREADABLE_PEM = '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----';
-// ISRG Root X2 cross-signed by X1, expired 2025-09-15, still cached in many Windows stores.
-const EXPIRED_X2_CROSS_SIGN = `-----BEGIN CERTIFICATE-----
+const EXPIRED_ISRG_X2_CROSS_SIGN_STILL_IN_WINDOWS_STORES = `-----BEGIN CERTIFICATE-----
 MIIEYDCCAkigAwIBAgIQB55JKIY3b9QISMI/xjHkYzANBgkqhkiG9w0BAQsFADBP
 MQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFy
 Y2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMTAeFw0yMDA5MDQwMDAwMDBa
@@ -108,7 +107,7 @@ test('un magasin système illisible laisse les certificats de Node en place', as
 });
 
 test('un certificat expiré du système est ignoré', async () => {
-  systemStoreHolding([EXPIRED_X2_CROSS_SIGN, LOCALHOST_CERT]);
+  systemStoreHolding([EXPIRED_ISRG_X2_CROSS_SIGN_STILL_IN_WINDOWS_STORES, LOCALHOST_CERT]);
 
   const report = SystemCertificates.trust();
 

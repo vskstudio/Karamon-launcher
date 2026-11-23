@@ -1,17 +1,18 @@
-import { routes } from '../../../ipc/contract';
-import type { RouteRegistry } from '../../ipc/IpcRouter';
-import type { AuthSession } from './AuthSession';
-import { resetSkin, saveSkin } from './OfflineSkin';
-import type { SkinLookup } from './SkinLookup';
+import { routes } from '../../../ipc/contract.ts';
+import type { RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
+import type { AuthSession } from './AuthSession.ts';
+import { resetSkin, saveSkin } from './OfflineSkin.ts';
+import type { SkinLookup } from './SkinLookup.ts';
 
 export interface AuthRoutesDeps {
   auth: AuthSession;
   skins: SkinLookup;
-  instanceDir: () => string;
+  instance: () => GameInstance;
   log: (message: string) => void;
 }
 
-export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instanceDir, log }: AuthRoutesDeps): void {
+export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instance, log }: AuthRoutesDeps): void {
   router.handle(routes.authLogin, () => auth.login());
   router.handle(routes.authLoginOffline, async (name) => {
     const profile = await auth.loginOffline(name);
@@ -23,9 +24,9 @@ export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instanc
   router.handle(routes.authLogout, () => auth.logout());
   router.handle(routes.authGetSession, () => auth.state());
 
-  router.handle(routes.skinUrl, (profile) => skins.skinFor(profile, instanceDir()));
+  router.handle(routes.skinUrl, (profile) => skins.skinFor(profile, instance()));
   router.handle(routes.skinOfflineSet, ({ name, png, model }) =>
-    saveSkin(instanceDir(), name, Buffer.from(png, 'base64'), model),
+    saveSkin(instance(), name, Buffer.from(png, 'base64'), model),
   );
-  router.handle(routes.skinOfflineReset, (name) => resetSkin(instanceDir(), name));
+  router.handle(routes.skinOfflineReset, (name) => resetSkin(instance(), name));
 }

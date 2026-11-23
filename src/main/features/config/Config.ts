@@ -1,4 +1,5 @@
 import { JsonFile, jsonObject } from '../../shared/DurableFile.ts';
+import { KARAMON } from '../../../shared/Karamon.ts';
 
 export interface ServerInfo {
   host: string;
@@ -31,7 +32,7 @@ const MAX_PORT = 65535;
 
 const DEFAULTS: AppConfig = Object.freeze({
   mcGameDir: '',
-  memoryMb: 12288,
+  memoryMb: KARAMON.defaultMemoryMb,
   secondInstanceMemoryMb: 6144,
   javaPath: '',
   jvmArgs: '',
@@ -41,7 +42,7 @@ const DEFAULTS: AppConfig = Object.freeze({
   potatoHintDismissed: false,
   disableSodium: false,
   autoSendReports: false,
-  server: { host: 'play.karamon.fr', port: 25565 },
+  server: { ...KARAMON.server },
 }) as AppConfig;
 
 export type ConfigLog = (message: string) => void;

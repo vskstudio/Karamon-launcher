@@ -1,6 +1,6 @@
-import { routes } from '../../../ipc/contract';
-import type { RouteRegistry } from '../../ipc/IpcRouter';
-import type { Shop } from './Shop';
+import { routes } from '../../../ipc/contract.ts';
+import type { RouteRegistry } from '../../ipc/IpcRouter.ts';
+import type { Shop } from './Shop.ts';
 
 export function registerShopRoutes(router: RouteRegistry, shop: Shop): void {
   router.handle(routes.shopCatalog, () => shop.catalog());

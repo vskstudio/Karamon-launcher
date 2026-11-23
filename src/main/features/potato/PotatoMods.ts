@@ -1,4 +1,4 @@
-import { toggledModFor, type ToggleReason, type ToggledMod } from '../modtoggles/ModToggles.ts';
+import type { ToggleReason, ToggledMod } from '../modtoggles/ModToggles.ts';
 
 export const POTATO_MODS: ToggledMod[] = [
   { id: 'voxy', label: 'Voxy (vue lointaine)', file: /^voxy-\d/i },
@@ -8,7 +8,3 @@ export const POTATO_MODS: ToggledMod[] = [
 ];
 
 export const POTATO_REASON: ToggleReason = { key: 'potato', mods: POTATO_MODS };
-
-export function potatoModFor(fileName: string): ToggledMod | null {
-  return toggledModFor(POTATO_MODS, fileName);
-}

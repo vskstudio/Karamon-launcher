@@ -1,4 +1,5 @@
 import { SessionEvidence, readFileTail } from '../crashes/SessionEvidence.ts';
+import type { GameInstance } from '../../shared/GameInstance.ts';
 
 const EARLY_CRASH_WINDOW_MS = 2 * 60 * 1000;
 const LOG_TAIL_BYTES = 256 * 1024;
@@ -35,16 +36,16 @@ function nulNearJsonError(text: string): boolean {
   return false;
 }
 
-export function readCrashEvidence(gameDir: string, sinceMs: number): string {
-  const evidence = new SessionEvidence(gameDir, sinceMs);
+export function readCrashEvidence(instance: GameInstance, sinceMs: number): string {
+  const evidence = new SessionEvidence(instance, sinceMs);
   const log = evidence.latestLog();
   return [evidence.newestCrashReportText(), log && readFileTail(log, LOG_TAIL_BYTES)]
     .filter((part): part is string => !!part)
     .join('\n');
 }
 
-export function stoppedCleanly(gameDir: string, sinceMs: number): boolean {
-  const evidence = new SessionEvidence(gameDir, sinceMs);
+export function stoppedCleanly(instance: GameInstance, sinceMs: number): boolean {
+  const evidence = new SessionEvidence(instance, sinceMs);
   if (evidence.newestCrashReport()) return false;
   const log = evidence.latestLog();
   return !!log && NORMAL_SHUTDOWN_LINE.test(readFileTail(log, LOG_TAIL_BYTES));

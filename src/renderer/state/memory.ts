@@ -1,11 +1,12 @@
 import type { AppConfig, SystemInfo } from '../../ipc/contract';
+import { KARAMON } from '../../shared/Karamon';
 
-export const DEFAULT_MEMORY_MB = 12288;
+export const DEFAULT_MEMORY_MB = KARAMON.defaultMemoryMb;
 export const DEFAULT_SECOND_MEMORY_MB = 6144;
 export const MIN_MEMORY_MB = 2048;
 export const MEMORY_STEP_MB = 512;
 export const MIN_COMFORTABLE_MEMORY_MB = 8192;
-export const RECOMMENDED_MAX_MB = 12288;
+export const RECOMMENDED_MAX_MB = KARAMON.defaultMemoryMb;
 export const PACK_MIN_MEMORY_MB = 4096;
 
 export type MemoryTone = 'success' | 'warning' | 'danger';

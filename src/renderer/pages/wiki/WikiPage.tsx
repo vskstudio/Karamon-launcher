@@ -6,6 +6,7 @@ import { WikiArticle } from './WikiArticle';
 import { WikiHome } from './WikiHome';
 import { WikiNav } from './WikiNav';
 import { headingDomId, parseWikiParam } from './wikiLinks';
+import { KARAMON } from '../../../shared/Karamon';
 import './wiki.css';
 
 function WikiLoading({ label }: { label: string }) {
@@ -33,7 +34,7 @@ function WikiBody({ slug }: { slug: string | null }) {
               </Button>
             }
           >
-            Le launcher n’a pas pu joindre karamon.fr et le wiki n’est pas encore en cache. Vérifie ta connexion puis réessaie.
+            Le launcher n’a pas pu joindre {KARAMON.websiteHost} et le wiki n’est pas encore en cache. Vérifie ta connexion puis réessaie.
           </EmptyState>
         </div>
       );
@@ -66,7 +67,7 @@ function WikiBody({ slug }: { slug: string | null }) {
             </Button>
           }
         >
-          Cette page n’est pas encore en cache et karamon.fr ne répond pas. Vérifie ta connexion puis réessaie.
+          Cette page n’est pas encore en cache et {KARAMON.websiteHost} ne répond pas. Vérifie ta connexion puis réessaie.
         </EmptyState>
       </div>
     );
