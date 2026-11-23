@@ -127,7 +127,7 @@ export class KaramonApp {
     });
     this.discord = new DiscordRpc({
       status: this.serverStatus,
-      log: (msg) => this.fileLog.info(`[Discord] ${msg}`),
+      log: (msg) => this.fileLog.info(msg),
     });
     this.reports = createLauncherReports({
       launcherLog: this.paths.launcherLog,
