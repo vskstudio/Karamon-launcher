@@ -41,7 +41,7 @@ import { DiscordRpc } from './features/discord/DiscordRpc.ts';
 import { CrashReports } from './features/crashes/CrashReports.ts';
 import { registerCrashRoutes } from './features/crashes/CrashRoutes.ts';
 import { Backup } from './features/backup/Backup.ts';
-import { registerBackupRoutes } from './features/backup/BackupRoutes.ts';
+import { exclusiveOnReadGameDir, registerBackupRoutes } from './features/backup/BackupRoutes.ts';
 import { Shop } from './features/shop/Shop.ts';
 import { openCheckoutWindow } from './features/shop/CheckoutWindow.ts';
 import { registerShopRoutes } from './features/shop/ShopRoutes.ts';
@@ -201,7 +201,7 @@ export class KaramonApp {
     registerUpdaterRoutes(router, this.updater);
     registerConfigRoutes(router, {
       config: this.config,
-      onChange: (before, after) => this.minecraft.applyModToggles(before, after, (msg) => this.status(msg), () => this.config.get()),
+      onChange: (before, after) => this.minecraft.applyModToggles(before, after, (msg) => this.status(msg), () => this.config.getRead()),
       onChangeFailed: (message) => {
         this.fileLog.warn(message);
         this.window.emit(routes.onStatus, message);
@@ -236,10 +236,11 @@ export class KaramonApp {
     registerScreenshotRoutes(router, instance);
     registerCrashRoutes(router, this.crashes, instance);
     registerReportRoutes(router, this.reports);
-    registerBackupRoutes(router, new Backup(this.paths.backupsDir, () => this.minecraft.isRunning()), (operation) => {
-      const session = this.minecraft.session(this.config.get());
-      return session.exclusive(() => operation(session.instance.dir));
-    });
+    registerBackupRoutes(
+      router,
+      new Backup(this.paths.backupsDir, () => this.minecraft.isRunning()),
+      exclusiveOnReadGameDir(this.config, this.minecraft),
+    );
     registerShopRoutes(
       router,
       new Shop({
@@ -254,6 +255,7 @@ export class KaramonApp {
       auth: this.auth,
       skins: new SkinLookup(this.http),
       instance,
+      instanceToWrite: () => this.minecraft.session(this.config.getRead()).instance,
       log: (msg) => this.fileLog.info(msg),
     });
     const unhandled = router.unhandled(routes);

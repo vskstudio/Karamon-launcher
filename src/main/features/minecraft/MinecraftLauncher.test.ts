@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { setTimeout as sleep } from 'timers/promises';
 import { GameRunningError } from './MinecraftLauncher.ts';
+import { ConfigNotReadYetError } from '../config/Config.ts';
 import { PackServer, jarOf, launcherHarness, publishPack, zipOf } from '../modpack/PackServer.fixture.ts';
 
 const quiet = (): void => undefined;
@@ -90,5 +91,24 @@ test('deux enregistrements rapprochés des bascules finissent sur l’état de l
   assert.ok(mods.includes('sodium-fabric-0.8.jar'));
   assert.ok(!mods.includes('sodium-fabric-0.8.jar.disabled'));
   assert.ok(mods.includes('voxy-0.2.jar.disabled'));
+  h.cleanup();
+});
+
+test('une bascule des mods ne touche pas au dossier tant que la config n’a pas été lue', async () => {
+  const server = new PackServer();
+  publishPack(server, { jars: { 'sodium-fabric-0.8.jar': jarOf('sodium'), 'lib-1.jar': jarOf('lib') } });
+  const h = launcherHarness(server);
+  await h.sync();
+  const before = { ...h.config };
+  const after = { ...before, disableSodium: true };
+
+  await assert.rejects(
+    h.launcher.applyModToggles(before, after, quiet, () => {
+      throw new ConfigNotReadYetError();
+    }),
+    ConfigNotReadYetError,
+  );
+
+  assert.ok(fs.existsSync(path.join(h.game, 'mods', 'sodium-fabric-0.8.jar')));
   h.cleanup();
 });

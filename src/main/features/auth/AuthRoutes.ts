@@ -9,10 +9,11 @@ export interface AuthRoutesDeps {
   auth: AuthSession;
   skins: SkinLookup;
   instance: () => GameInstance;
+  instanceToWrite: () => GameInstance;
   log: (message: string) => void;
 }
 
-export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instance, log }: AuthRoutesDeps): void {
+export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instance, instanceToWrite, log }: AuthRoutesDeps): void {
   router.handle(routes.authLogin, () => auth.login());
   router.handle(routes.authLoginOffline, async (name) => {
     const profile = await auth.loginOffline(name);
@@ -26,7 +27,7 @@ export function registerAuthRoutes(router: RouteRegistry, { auth, skins, instanc
 
   router.handle(routes.skinUrl, (profile) => skins.skinFor(profile, instance()));
   router.handle(routes.skinOfflineSet, ({ name, png, model }) =>
-    saveSkin(instance(), name, Buffer.from(png, 'base64'), model),
+    saveSkin(instanceToWrite(), name, Buffer.from(png, 'base64'), model),
   );
-  router.handle(routes.skinOfflineReset, (name) => resetSkin(instance(), name));
+  router.handle(routes.skinOfflineReset, (name) => resetSkin(instanceToWrite(), name));
 }

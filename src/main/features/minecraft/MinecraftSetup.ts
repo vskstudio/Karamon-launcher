@@ -1,6 +1,6 @@
 import { DevMode } from '../../shared/DevMode.ts';
 import type { KaramonProfile } from '../../shared/KaramonProfile.ts';
-import type { Config } from '../config/Config.ts';
+import { ConfigNotReadYetError, type AppConfig, type Config } from '../config/Config.ts';
 import type { FabricInstaller } from './FabricInstaller.ts';
 import type { LauncherProfile } from './LauncherProfile.ts';
 import type { MinecraftLauncher, ServerListSetupResult } from './MinecraftLauncher.ts';
@@ -12,7 +12,7 @@ export interface SetupResult {
 }
 
 export interface MinecraftSetupOptions {
-  config: Pick<Config, 'get'>;
+  config: Pick<Config, 'getRead'>;
   minecraft: MinecraftLauncher;
   fabric: FabricInstaller;
   launcherProfile: LauncherProfile;
@@ -29,7 +29,13 @@ export class MinecraftSetup {
 
   async run(): Promise<SetupResult> {
     const { config, minecraft, fabric, launcherProfile, launcherDir, pack } = this.options;
-    const cfg = config.get();
+    let cfg: AppConfig;
+    try {
+      cfg = config.getRead();
+    } catch (e) {
+      if (!(e instanceof ConfigNotReadYetError)) throw e;
+      return { ok: false, details: `${e.message} Rien n'a été écrit.`, path: '' };
+    }
     const gameDir = minecraft.instanceDir(cfg);
     const host = cfg.server?.host || pack.statusFallbackHost;
     const results: string[] = [];
