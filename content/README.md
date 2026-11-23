@@ -10,7 +10,7 @@ https://karamon.fr/downloads/
 
 C'est là que le launcher synchronise le pack (`cdnBaseUrl` dans `pack.json`). Ici, seuls `pack.json` et `client-options.json` servent: ils sont embarqués dans le launcher au build comme valeurs par défaut (version de Minecraft et de Fabric, CDN, ordre des resource packs, shader). Les binaires (`.jar`, `.zip`) ne sont pas commités.
 
-Le tag `pack-latest`, lu par les launchers jusqu'à 2.0.10, n'existe plus.
+Depuis 2.0.11, le launcher ne lit plus le tag `pack-latest` : il synchronise depuis `cdnBaseUrl`. Seuls les launchers jusqu'à 2.0.10 lisaient `releases/download/pack-latest/`. La release `pack-latest` n'existe plus sur ce dépôt (vérifié le 2026-11-23), mais `scripts/publish-pack.sh` sait encore la publier (section plus bas), et le launcher sait toujours lire un pack hébergé sur une release GitHub si `cdnBaseUrl` y pointe.
 
 ## Structure
 
