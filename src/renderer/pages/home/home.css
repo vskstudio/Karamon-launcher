@@ -89,6 +89,7 @@
 }
 
 .home__aside {
+  container: home-aside / size;
   display: flex;
   flex-direction: column;
   justify-content: safe center;
@@ -442,11 +443,13 @@
   }
 }
 
-@media (max-height: 640px) {
+@container home-aside (height < 478px) {
   .home__guides-card {
     display: none;
   }
+}
 
+@media (max-height: 640px) {
   .home__pitch {
     font-size: 14px;
   }
